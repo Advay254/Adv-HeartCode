@@ -33,13 +33,19 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 // Kept as a separate block from SCHEMA on purpose: future versions append
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` statements here without
-// ever touching the base CREATE TABLE statements above.
+// ever touching the base CREATE TABLE statements above. New standalone
+// tables (like admin_sessions below) are also fine to land here rather
+// than in SCHEMA, since SCHEMA is meant to stay as the original bootstrap set.
 const MIGRATIONS = `
--- No migrations yet. Placeholder for v1.0.1+.
--- Example (future): ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS category TEXT;
+-- v1.0.1: admin auth session storage
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token TEXT PRIMARY KEY,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
-const CURRENT_VERSION = '1.0.0';
+const CURRENT_VERSION = '1.0.1';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
