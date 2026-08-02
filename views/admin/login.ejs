@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>HeartCode Admin Login</title>
+</head>
+<body>
+<div class="admin-main" style="max-width:360px; margin:4rem auto;">
+  <h1>Admin Login</h1>
+  <form id="loginForm">
+    <label>Username
+      <input type="text" name="username" autocomplete="username" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" style="margin-top:1rem;">Log in</button>
+  </form>
+  <p id="error" class="msg msg-error" style="display:none;"></p>
+</div>
+<script>
+  // No CSRF token on this form, deliberately: CSRF protection exists to
+  // stop a forged request from riding on an EXISTING session's cookie.
+  // Before login there is no session to bind a token to, and a forged
+  // login request just logs the attacker's own browser in as admin --
+  // which requires the attacker to already know the real credentials,
+  // the one thing CSRF can't hand them. CSRF is enforced on every
+  // state-changing request from the dashboard onward, once a session
+  // (and therefore a token) exists.
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const body = { username: form.username.value, password: form.password.value };
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    const errorEl = document.getElementById('error');
+    if (res.ok && data.success) {
+      window.location.href = '/<%= slug %>/';
+    } else {
+      errorEl.textContent = data.error || 'Login failed';
+      errorEl.style.display = 'block';
+    }
+  });
+</script>
+</body>
+</html>

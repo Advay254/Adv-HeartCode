@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Overview — HeartCode Admin</title>
+</head>
+<body>
+<div class="admin-layout">
+  <%- include('../partials/nav', { activePage: 'overview' }) %>
+  <main class="admin-main">
+    <h1>Overview</h1>
+
+    <div class="card">
+      <h2>Payments</h2>
+      <% if (paystackConfigured) { %>
+        <p>Mode: <span class="badge <%= paystackMode === 'live' ? 'badge-live' : 'badge-test' %>"><%= paystackMode %></span></p>
+      <% } else { %>
+        <p class="msg msg-warning">Paystack is not configured yet.</p>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <h2>AI Provider</h2>
+      <% if (activeProvider) { %>
+        <p><%= activeProvider.label %> — model: <%= activeProvider.selectedModel || 'not selected' %></p>
+      <% } else { %>
+        <p class="msg msg-warning">No active AI provider configured.</p>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <h2>Website Types</h2>
+      <p><%= activeTypeCount %> active, <%= inactiveTypeCount %> inactive</p>
+    </div>
+
+    <p class="msg msg-warning">Everything below this line is placeholder until later versions populate it — visits, submissions, and revenue stats don't exist yet.</p>
+  </main>
+</div>
+</body>
+</html>
