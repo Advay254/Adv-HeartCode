@@ -8,6 +8,7 @@ const {
   sessionCookieOptions
 } = require('../lib/auth');
 const { requireAdminSession, COOKIE_NAME, getSessionCookie } = require('../middleware/requireAdminSession');
+const { requireCsrf } = require('../middleware/requireCsrf');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
@@ -63,62 +64,20 @@ function clearFailures(ip) {
 
 // ---- page router ----
 // Only ever reached via adminSlugMiddleware — never mounted with app.use(),
-// so these routes have no public entry point of their own.
+// so this route has no public entry point of its own. Unauthenticated by
+// design: this IS the login page.
 const pageRouter = express.Router();
 
 pageRouter.get(`${INTERNAL_ADMIN_PREFIX}/login`, (req, res) => {
-  res.set('Content-Type', 'text/html').send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HeartCode Admin Login</title>
-</head>
-<body>
-  <h1>Admin Login</h1>
-  <form id="loginForm">
-    <label>Username <input type="text" name="username" autocomplete="username" required></label><br>
-    <label>Password <input type="password" name="password" autocomplete="current-password" required></label><br>
-    <button type="submit">Log in</button>
-  </form>
-  <p id="error" style="color:red;"></p>
-  <script>
-    // No CSRF token on this form, deliberately: CSRF protection exists to
-    // stop a forged request from riding on an EXISTING session's cookie.
-    // Before login there is no session to bind a token to, and a forged
-    // login request just logs the attacker's own browser in as admin --
-    // which requires the attacker to already know the real credentials,
-    // the one thing CSRF can't hand them. CSRF is enforced starting with
-    // the first session-bound state-changing route added in v1.0.2.
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-      const body = {
-        username: form.username.value,
-        password: form.password.value
-      };
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        window.location.reload();
-      } else {
-        document.getElementById('error').textContent = data.error || 'Login failed';
-      }
-    });
-  </script>
-</body>
-</html>`);
+  res.render('admin/login', { slug: process.env.ADMIN_PATH_SLUG });
 });
 
 // ---- API router ----
 // Mounted normally at /api/admin (not slug-gated). Every route except
-// /login is session-gated by requireAdminSession.
+// /login is session-gated by requireAdminSession; every state-changing
+// route except /login is also CSRF-gated (login has no session yet to
+// bind a CSRF token to — see the comment in views/admin/login.ejs).
 const apiRouter = express.Router();
-apiRouter.use(express.json());
 
 apiRouter.post('/login', async (req, res) => {
   const ip = req.ip;
@@ -159,7 +118,7 @@ apiRouter.post('/login', async (req, res) => {
   res.json({ success: true });
 });
 
-apiRouter.post('/logout', requireAdminSession, async (req, res) => {
+apiRouter.post('/logout', requireAdminSession, requireCsrf, async (req, res) => {
   const pool = getPool();
   const cookieValue = getSessionCookie(req);
   await destroySession(pool, cookieValue);
