@@ -1,0 +1,14 @@
+<nav class="admin-nav" id="adminNav">
+  <div class="nav-top">
+    <div class="nav-brand">HeartCode Admin</div>
+    <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+  </div>
+  <ul class="nav-links" id="navLinks">
+    <li><a href="/<%= slug %>/" class="<%= activePage === 'overview' ? 'active' : '' %>">Overview</a></li>
+    <li><a href="/<%= slug %>/payments" class="<%= activePage === 'payments' ? 'active' : '' %>">Payments</a></li>
+    <li><a href="/<%= slug %>/ai-provider" class="<%= activePage === 'ai-provider' ? 'active' : '' %>">AI Provider</a></li>
+    <li><a href="/<%= slug %>/website-types" class="<%= activePage === 'website-types' ? 'active' : '' %>">Website Types</a></li>
+    <li><a href="/<%= slug %>/submissions" class="<%= activePage === 'submissions' ? 'active' : '' %>">Submissions</a></li>
+    <li><button type="button" id="logoutBtn">Logout</button></li>
+  </ul>
+</nav>

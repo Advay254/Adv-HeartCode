@@ -1,0 +1,7 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+<meta name="csrf-token" content="<%= csrfToken %>">
+<% } %>
+<link rel="stylesheet" href="/dashboard-assets/admin.css">
+<script src="/dashboard-assets/admin.js" defer></script>
