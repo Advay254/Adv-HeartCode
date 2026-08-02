@@ -43,9 +43,71 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v1.0.2: Paystack config, AI provider config, website types/fields/templates
+CREATE TABLE IF NOT EXISTS paystack_config (
+  id SERIAL PRIMARY KEY,
+  mode TEXT NOT NULL DEFAULT 'test' CHECK (mode IN ('test', 'live')),
+  public_key_test TEXT DEFAULT '',
+  secret_key_test_encrypted TEXT DEFAULT '',
+  public_key_live TEXT DEFAULT '',
+  secret_key_live_encrypted TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_providers (
+  id SERIAL PRIMARY KEY,
+  label TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT false,
+  selected_model TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_provider_keys (
+  id SERIAL PRIMARY KEY,
+  provider_id INTEGER NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+  key_encrypted TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS website_types (
+  id SERIAL PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  is_active BOOLEAN DEFAULT true,
+  display_order INTEGER DEFAULT 0,
+  price_kes INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS template_fields (
+  id SERIAL PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  field_key TEXT NOT NULL,
+  field_label TEXT NOT NULL,
+  field_type TEXT NOT NULL DEFAULT 'text' CHECK (field_type IN ('text', 'textarea', 'email', 'password', 'dropdown')),
+  placeholder_text TEXT DEFAULT '',
+  is_required BOOLEAN DEFAULT true,
+  dropdown_options JSONB DEFAULT NULL,
+  display_order INTEGER DEFAULT 0,
+  UNIQUE(website_type_id, field_key)
+);
+
+CREATE TABLE IF NOT EXISTS templates (
+  id SERIAL PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  html_content TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
-const CURRENT_VERSION = '1.0.1';
+const CURRENT_VERSION = '1.0.2';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
