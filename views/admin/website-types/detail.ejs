@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../../partials/head') %>
+<title><%= websiteType.name %> — HeartCode Admin</title>
+</head>
+<body>
+<div class="admin-layout">
+  <%- include('../../partials/nav', { activePage: 'website-types' }) %>
+  <main class="admin-main">
+    <p><a href="/<%= slug %>/website-types">← All website types</a></p>
+    <h1><%= websiteType.name %></h1>
+
+    <div class="tabs">
+      <button type="button" class="tab-btn active" data-tab="details">Details</button>
+      <button type="button" class="tab-btn" data-tab="fields">Fields</button>
+      <button type="button" class="tab-btn" data-tab="template">Template</button>
+    </div>
+
+    <section id="tab-details" class="tab-panel">
+      <div class="card">
+        <form id="detailsForm">
+          <label>Name <input type="text" name="name" value="<%= websiteType.name %>" required></label>
+          <label>Description <textarea name="description" style="min-height:80px;"><%= websiteType.description %></textarea></label>
+          <label>Price (KES) <input type="number" name="priceKes" value="<%= websiteType.price_kes %>" min="0"></label>
+          <label>Display order <input type="number" name="displayOrder" value="<%= websiteType.display_order %>"></label>
+          <label><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
+          <button type="submit" style="margin-top:0.75rem;">Save details</button>
+        </form>
+        <p id="detailsStatus" class="msg" style="display:none;"></p>
+      </div>
+    </section>
+
+    <section id="tab-fields" class="tab-panel" style="display:none;">
+      <div class="card">
+        <h2>Add field</h2>
+        <form id="addFieldForm">
+          <label>Field key (letters, numbers, underscore only) <input type="text" name="fieldKey" required pattern="[a-z0-9_]+"></label>
+          <label>Label <input type="text" name="fieldLabel" required></label>
+          <label>Type
+            <select name="fieldType" id="fieldTypeSelect">
+              <option value="text">Text</option>
+              <option value="textarea">Textarea</option>
+              <option value="email">Email</option>
+              <option value="password">Password</option>
+              <option value="dropdown">Dropdown</option>
+            </select>
+          </label>
+          <label>Placeholder text <input type="text" name="placeholderText"></label>
+          <label>Dropdown options (comma-separated — only used for the Dropdown type) <input type="text" name="dropdownOptions"></label>
+          <label><input type="checkbox" name="isRequired" checked> Required</label>
+          <button type="submit" style="margin-top:0.75rem;">Add field</button>
+        </form>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
+          <tbody id="fieldsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-template" class="tab-panel" style="display:none;">
+      <div class="card">
+        <p>Available placeholders: <span id="availablePlaceholders">—</span></p>
+        <form id="templateForm">
+          <label>HTML content (current version: <span id="currentVersion">—</span>) <textarea id="htmlContent"></textarea></label>
+          <button type="submit" style="margin-top:0.75rem;">Save new version</button>
+        </form>
+        <p id="templateStatus" class="msg" style="display:none;"></p>
+      </div>
+      <div class="card">
+        <h2>Version history</h2>
+        <table>
+          <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+          <tbody id="historyTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const typeId = <%= websiteType.id %>;
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  // ---- tabs ----
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
+    });
+  });
+
+  // ---- details ----
+  document.getElementById('detailsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const res = await window.adminFetch(`/api/admin/website-types/${typeId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: form.name.value,
+        description: form.description.value,
+        priceKes: Number(form.priceKes.value) || 0,
+        displayOrder: Number(form.displayOrder.value) || 0,
+        isActive: form.isActive.checked
+      })
+    });
+    const statusEl = document.getElementById('detailsStatus');
+    statusEl.style.display = 'block';
+    statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+    statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+  });
+
+  // ---- fields ----
+  async function loadFields() {
+    const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields`);
+    const fields = await res.json();
+    document.getElementById('fieldsTableBody').innerHTML = fields.map(f => `
+      <tr>
+        <td>{{${escapeHtml(f.fieldKey)}}}</td>
+        <td>${escapeHtml(f.fieldLabel)}</td>
+        <td>${escapeHtml(f.fieldType)}</td>
+        <td>${f.isRequired ? 'yes' : 'no'}</td>
+        <td><button type="button" class="btn-danger remove-field" data-id="${f.id}">Remove</button></td>
+      </tr>`).join('') || '<tr><td colspan="5">No fields yet.</td></tr>';
+
+    document.getElementById('availablePlaceholders').textContent =
+      fields.length ? fields.map(f => `{{${f.fieldKey}}}`).join(', ') : 'none defined yet';
+
+    document.querySelectorAll('.remove-field').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields/${btn.dataset.id}`, { method: 'DELETE' });
+        if (res.ok) loadFields();
+      });
+    });
+  }
+
+  document.getElementById('addFieldForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const dropdownOptions = form.dropdownOptions.value
+      ? form.dropdownOptions.value.split(',').map(s => s.trim()).filter(Boolean)
+      : undefined;
+    const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields`, {
+      method: 'POST',
+      body: JSON.stringify({
+        fieldKey: form.fieldKey.value,
+        fieldLabel: form.fieldLabel.value,
+        fieldType: form.fieldType.value,
+        placeholderText: form.placeholderText.value,
+        isRequired: form.isRequired.checked,
+        dropdownOptions
+      })
+    });
+    if (res.ok) {
+      form.reset();
+      loadFields();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to add field.');
+    }
+  });
+
+  // ---- template ----
+  async function loadTemplate() {
+    const res = await window.adminFetch(`/api/admin/website-types/${typeId}/template`);
+    const data = await res.json();
+    document.getElementById('currentVersion').textContent = data.active ? 'v' + data.active.version : 'none yet';
+    document.getElementById('htmlContent').value = data.active ? data.active.htmlContent : '';
+    document.getElementById('historyTableBody').innerHTML = data.history.map(h => `
+      <tr>
+        <td>v${h.version}</td>
+        <td>${new Date(h.createdAt).toLocaleString()}</td>
+        <td>${data.active && data.active.version === h.version ? '' : `<button type="button" class="btn-secondary rollback" data-version="${h.version}">Rollback to this</button>`}</td>
+      </tr>`).join('') || '<tr><td colspan="3">No versions yet.</td></tr>';
+
+    document.querySelectorAll('.rollback').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm(`Roll back to version ${btn.dataset.version}?`)) return;
+        const res = await window.adminFetch(`/api/admin/website-types/${typeId}/template/rollback/${btn.dataset.version}`, { method: 'POST' });
+        if (res.ok) loadTemplate();
+      });
+    });
+  }
+
+  document.getElementById('templateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const res = await window.adminFetch(`/api/admin/website-types/${typeId}/template`, {
+      method: 'PUT',
+      body: JSON.stringify({ htmlContent: document.getElementById('htmlContent').value })
+    });
+    const data = await res.json();
+    const statusEl = document.getElementById('templateStatus');
+    statusEl.style.display = 'block';
+    if (res.ok) {
+      statusEl.className = 'msg ' + (data.undefinedPlaceholders.length ? 'msg-warning' : 'msg-success');
+      statusEl.textContent = data.undefinedPlaceholders.length
+        ? `Saved as v${data.version}, but these placeholders have no matching field: ${data.undefinedPlaceholders.join(', ')}`
+        : `Saved as v${data.version}.`;
+      loadTemplate();
+    } else {
+      statusEl.className = 'msg msg-error';
+      statusEl.textContent = data.error || 'Failed to save template.';
+    }
+  });
+
+  loadFields();
+  loadTemplate();
+});
+</script>
+</body>
+</html>
