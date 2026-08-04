@@ -25,7 +25,7 @@ In Render's dashboard, under the service's **Environment** tab, add the followin
 | `NODE_ENV` | Optional — not read by any of HeartCode's own code, but set it to `production` anyway as standard practice |
 | `PORT` | Optional — Render injects this automatically; don't set it manually |
 
-See the README's environment variables section for what each one does, its failure mode if missing, and the exact `node -e "..."` commands to generate the ones that need generating.
+See the README's environment variables section for what each one does, its failure mode if missing, and how to get each value — no computer or terminal required for any of it.
 
 ## 3. Provision Postgres
 

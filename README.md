@@ -29,13 +29,13 @@ Not every variable is required — two have safe defaults. The table below refle
 | Variable | Required? | Purpose | Where do I get this? |
 |---|---|---|---|
 | `DATABASE_URL` | Required | PostgreSQL connection string | From your Postgres provider (Supabase/Aiven) |
-| `PORT` | Optional | Port the server listens on — defaults to `3000` if unset, and Render overrides it automatically anyway | You choose this value yourself (rarely needed) |
-| `NODE_ENV` | Optional | Runtime mode (`development`/`production`) — not currently read by any of HeartCode's own code, but standard practice to set on Render | You choose this value yourself |
-| `ADMIN_USERNAME` | Required | Admin login username | You choose this value yourself |
-| `ADMIN_PASSWORD_HASH` | Required | bcrypt hash of the admin password | Generate with the one-liner below |
-| `SESSION_SECRET` | Required | Signs session cookies and derives CSRF tokens | Generate with the one-liner below |
-| `ADMIN_PATH_SLUG` | Required | Secret URL segment where the admin dashboard lives | Generate with the one-liner below |
-| `ENCRYPTION_KEY` | Required | Encrypts Paystack/AI provider secrets at rest (AES-256-GCM) | Generate with the one-liner below |
+| `PORT` | Optional | Port the server listens on — defaults to `3000` if unset, and Render overrides it automatically anyway | Leave it unset |
+| `NODE_ENV` | Optional | Runtime mode (`development`/`production`) — not currently read by any of HeartCode's own code, but standard practice to set on Render | Type `production` |
+| `ADMIN_USERNAME` | Required | Admin login username | Type anything you'll remember |
+| `ADMIN_PASSWORD_HASH` | Required | bcrypt hash of the admin password | See below — this is the one that needs a tool |
+| `SESSION_SECRET` | Required | Signs session cookies and derives CSRF tokens | Any long random string — a password generator app works fine |
+| `ADMIN_PATH_SLUG` | Required | Secret URL segment where the admin dashboard lives | Make one up yourself, e.g. `raven-portal-92` |
+| `ENCRYPTION_KEY` | Required | Encrypts Paystack/AI provider secrets at rest | Any string, any length — type a memorable phrase |
 
 A few notes on what "Required" means in practice, since the failure modes differ:
 - Missing `DATABASE_URL` — the app won't boot at all (`initDB()` fails fast, `process.exit(1)`).
@@ -44,21 +44,25 @@ A few notes on what "Required" means in practice, since the failure modes differ
 - Missing `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` — the app boots fine, but login will never succeed.
 - Missing `ENCRYPTION_KEY` — the app boots fine, and read-only admin pages still load, but saving a Paystack key or an AI provider key will fail.
 
-### Generating the required values
+### Getting each value — no computer or terminal needed
 
-```bash
-# ADMIN_PASSWORD_HASH
-node -e "console.log(require('bcrypt').hashSync('your-password', 12))"
+Everything below assumes you're setting these directly in Render's dashboard (Environment tab), on your phone.
 
-# SESSION_SECRET
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+- **`ADMIN_USERNAME`** — type anything, e.g. `advay`.
+- **`ADMIN_PATH_SLUG`** — type any word or short phrase nobody would guess, e.g. `wolfden-42`. No special characters needed beyond letters, numbers, and hyphens.
+- **`SESSION_SECRET`** and **`ENCRYPTION_KEY`** — both just need to be long and unpredictable. Easiest option: open any password generator app (or a site like a password manager's built-in generator), generate a 40+ character password, and paste the same one into both fields (or generate two separately — either is fine, they don't need to match each other). If you ever do have Node/a terminal handy, `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` works too — it's just no longer required.
+- **`ADMIN_PASSWORD_HASH`** — this is the only one that genuinely needs a small tool, because it has to be a specific format (a bcrypt hash), not just any text. Two options:
+  1. **Use the ready-made one below** — a working hash for a randomly generated password, so you can deploy right now and change it later whenever you want.
+  2. **Generate your own** — search for a "bcrypt hash generator" that runs in your browser (many do the hashing entirely on-device, nothing sent anywhere), type your password, set the cost/rounds to `12`, and paste the result — it'll start with `$2a$` or `$2b$`.
 
-# ADMIN_PATH_SLUG
-node -e "console.log(require('crypto').randomBytes(8).toString('hex'))"
+**Ready-to-use starter credentials** (works right now, change it later whenever convenient):
 
-# ENCRYPTION_KEY
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+ADMIN_PASSWORD_HASH=$2b$12$WzAJRciKJ.WYDkXubSwoqeCB.yaXatQ6ikvQdPpzJ5zjrmhpfRUze
+```
+
+Login password for that hash: `vkt3U2ksx2if`
+
 
 ## Local setup (optional — only needed if you're developing with Node installed on a computer; not required to deploy)
 
@@ -69,7 +73,7 @@ npm install
 cp .env.example .env
 ```
 
-Fill in `.env` using the table and one-liners above, then:
+Fill in `.env` using the table and guidance above, then:
 
 ```bash
 npm start
