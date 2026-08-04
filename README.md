@@ -2,6 +2,18 @@
 
 HeartCode is a client-facing website builder platform: a client picks a website type, fills in a short form, gets AI-polished copy dropped into a live preview, and (starting in v1.0.4) pays to have the site deployed for real.
 
+## Deploy this to Render
+
+1. Push this repo to GitHub.
+2. Render dashboard → **New → Web Service** → connect the repo. Build command: `npm install`. Start command: `npm start`.
+3. Add every env var from the table below under the service's **Environment** tab.
+4. Provision a Postgres database on Supabase or Aiven, and paste its pooled connection string into `DATABASE_URL`.
+5. Deploy.
+6. Hit `https://<your-app>.onrender.com/health` — confirm `{ "status": "ok", "db": "connected" }`.
+7. Visit `https://<your-app>.onrender.com/<ADMIN_PATH_SLUG>/login` and log in with `ADMIN_USERNAME` and the password behind `ADMIN_PASSWORD_HASH`.
+
+Full step-by-step walkthrough with more detail and troubleshooting: see `DEPLOYMENT.md`.
+
 ## Tech stack
 
 - Node.js + Express (CommonJS)
@@ -12,32 +24,27 @@ HeartCode is a client-facing website builder platform: a client picks a website 
 
 ## Environment variables
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string (Supabase/Aiven pooled URI) |
-| `PORT` | Port the server listens on. Render sets this automatically; mainly relevant for local dev |
-| `NODE_ENV` | `development` or `production` |
-| `ADMIN_USERNAME` | Admin login username (plain — not a secret by itself, but keep it private) |
-| `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password — the plaintext password is never stored or compared |
-| `SESSION_SECRET` | 32+ byte random string used to HMAC-sign session cookies and derive CSRF tokens |
-| `ADMIN_PATH_SLUG` | Secret URL segment where the admin dashboard lives, e.g. `/mgmt-9f2a/` — there is no `/admin` route; it always 404s by design |
-| `ENCRYPTION_KEY` | 32-byte hex key (AES-256-GCM) used to encrypt Paystack and AI provider secrets at rest in Postgres |
+Not every variable is required — two have safe defaults. The table below reflects what the code actually does with each one, not just what's in `.env.example`.
 
-That's the full list as of v1.0.3 — nothing new was added this version (Paystack and AI provider credentials are stored encrypted in the database via the admin dashboard, not as env vars).
+| Variable | Required? | Purpose | Where do I get this? |
+|---|---|---|---|
+| `DATABASE_URL` | Required | PostgreSQL connection string | From your Postgres provider (Supabase/Aiven) |
+| `PORT` | Optional | Port the server listens on — defaults to `3000` if unset, and Render overrides it automatically anyway | You choose this value yourself (rarely needed) |
+| `NODE_ENV` | Optional | Runtime mode (`development`/`production`) — not currently read by any of HeartCode's own code, but standard practice to set on Render | You choose this value yourself |
+| `ADMIN_USERNAME` | Required | Admin login username | You choose this value yourself |
+| `ADMIN_PASSWORD_HASH` | Required | bcrypt hash of the admin password | Generate with the one-liner below |
+| `SESSION_SECRET` | Required | Signs session cookies and derives CSRF tokens | Generate with the one-liner below |
+| `ADMIN_PATH_SLUG` | Required | Secret URL segment where the admin dashboard lives | Generate with the one-liner below |
+| `ENCRYPTION_KEY` | Required | Encrypts Paystack/AI provider secrets at rest (AES-256-GCM) | Generate with the one-liner below |
 
-## Local setup
+A few notes on what "Required" means in practice, since the failure modes differ:
+- Missing `DATABASE_URL` — the app won't boot at all (`initDB()` fails fast, `process.exit(1)`).
+- Missing `SESSION_SECRET` — the app boots fine, but crashes the request on the first login/session attempt.
+- Missing `ADMIN_PATH_SLUG` — the app boots fine, but the entire admin dashboard becomes silently unreachable (404 everywhere, by design — no fallback to a guessable path).
+- Missing `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH` — the app boots fine, but login will never succeed.
+- Missing `ENCRYPTION_KEY` — the app boots fine, and read-only admin pages still load, but saving a Paystack key or an AI provider key will fail.
 
-```bash
-git clone <repo-url> heartcode
-cd heartcode
-npm install
-cp .env.example .env
-```
-
-Fill in `.env`:
-
-- `DATABASE_URL` — point at a local or hosted Postgres instance
-- Generate the rest with these one-liners (same ones referenced in `.env.example`):
+### Generating the required values
 
 ```bash
 # ADMIN_PASSWORD_HASH
@@ -53,7 +60,16 @@ node -e "console.log(require('crypto').randomBytes(8).toString('hex'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Then:
+## Local setup (optional — only needed if you're developing with Node installed on a computer; not required to deploy)
+
+```bash
+git clone <repo-url> heartcode
+cd heartcode
+npm install
+cp .env.example .env
+```
+
+Fill in `.env` using the table and one-liners above, then:
 
 ```bash
 npm start

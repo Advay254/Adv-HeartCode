@@ -1,5 +1,7 @@
 # Deploying HeartCode to Render
 
+> This is the detailed version of the "Deploy this to Render" checklist in `README.md` — start there for the short version.
+
 ## 1. Create the Web Service
 
 1. Push this repo to GitHub (or GitLab/Bitbucket).
@@ -10,19 +12,20 @@
 
 ## 2. Set environment variables
 
-In Render's dashboard, under the service's **Environment** tab, add every variable listed in the README:
+In Render's dashboard, under the service's **Environment** tab, add the following. Status matches the table in the README exactly:
 
-```
-DATABASE_URL
-NODE_ENV=production
-ADMIN_USERNAME
-ADMIN_PASSWORD_HASH
-SESSION_SECRET
-ADMIN_PATH_SLUG
-ENCRYPTION_KEY
-```
+| Variable | Status |
+|---|---|
+| `DATABASE_URL` | Required |
+| `ADMIN_USERNAME` | Required |
+| `ADMIN_PASSWORD_HASH` | Required |
+| `SESSION_SECRET` | Required |
+| `ADMIN_PATH_SLUG` | Required |
+| `ENCRYPTION_KEY` | Required |
+| `NODE_ENV` | Optional — not read by any of HeartCode's own code, but set it to `production` anyway as standard practice |
+| `PORT` | Optional — Render injects this automatically; don't set it manually |
 
-`PORT` doesn't need to be set manually — Render injects it automatically, and `server.js` already reads `process.env.PORT`.
+See the README's environment variables section for what each one does, its failure mode if missing, and the exact `node -e "..."` commands to generate the ones that need generating.
 
 ## 3. Provision Postgres
 
