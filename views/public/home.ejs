@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+<title>HeartCode — Build your website</title>
+</head>
+<body>
+<div class="site-shell">
+  <header class="site-header">
+    <h1>HeartCode</h1>
+    <p>Pick a website type, fill in a few details, and preview it in minutes.</p>
+  </header>
+  <main class="site-main">
+    <% if (websiteTypes.length === 0) { %>
+      <div class="empty-state">
+        <p>Nothing available right now — check back soon.</p>
+      </div>
+    <% } else { %>
+      <div class="type-grid">
+        <% websiteTypes.forEach(function (t) { %>
+          <div class="type-card">
+            <h2><%= t.name %></h2>
+            <p><%= t.description %></p>
+            <p class="price">KES <%= Number(t.priceKes).toLocaleString() %></p>
+            <a class="btn" href="/build/<%= t.slug %>">Build this</a>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+<title>Build <%= websiteType.name %> — HeartCode</title>
+</head>
+<body data-page="build" data-slug="<%= websiteType.slug %>">
+<div class="site-shell">
+  <header class="site-header">
+    <a href="/">← HeartCode</a>
+    <h1><%= websiteType.name %></h1>
+  </header>
+  <main class="site-main">
+    <form id="buildForm">
+      <!-- Fixed on every website type, regardless of template_fields: this
+           is how the client receives their site later, so it's a permanent
+           part of the form rather than a configurable field. -->
+      <label>Your email <span class="req">*</span>
+        <input type="email" name="client_email" id="client_email" required placeholder="you@example.com">
+      </label>
+
+      <% fields.forEach(function (f) { %>
+        <label>
+          <%= f.fieldLabel %><% if (f.isRequired) { %> <span class="req">*</span><% } %>
+          <% if (f.fieldType === 'textarea') { %>
+            <textarea name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>"></textarea>
+          <% } else if (f.fieldType === 'dropdown') { %>
+            <select name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
+              <option value="">-- select --</option>
+              <% (f.dropdownOptions || []).forEach(function (opt) { %>
+                <option value="<%= opt %>"><%= opt %></option>
+              <% }); %>
+            </select>
+          <% } else { %>
+            <input type="<%= f.fieldType %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>">
+          <% } %>
+        </label>
+      <% }); %>
+
+      <p id="formError" class="msg msg-error" style="display:none;"></p>
+      <button type="submit" id="submitBtn" style="margin-top:1rem;">Generate my site</button>
+    </form>
+  </main>
+</div>
+
+<script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return f.fieldKey; })) %></script>
+<script src="/site.js" defer></script>
+</body>
+</html>

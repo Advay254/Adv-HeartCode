@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+<title>Preview — <%= websiteType.name %> — HeartCode</title>
+</head>
+<body data-page="preview" data-slug="<%= websiteType.slug %>">
+<div class="site-shell">
+  <header class="site-header">
+    <h1>Preview: <%= websiteType.name %></h1>
+  </header>
+  <main class="site-main">
+    <div class="preview-frame-wrap">
+      <!-- sandbox="allow-same-origin" only — no allow-scripts. This is a
+           passive visual preview of generated static markup; nothing here
+           needs to run script inside the frame, so it stays on the more
+           restrictive default rather than loosening it without a reason. -->
+      <iframe id="previewFrame" sandbox="allow-same-origin" title="Site preview"></iframe>
+    </div>
+    <p style="margin-top:1rem;">
+      <button type="button" id="backBtn" class="btn-secondary">Back</button>
+      <a class="btn" href="/build/<%= websiteType.slug %>/checkout">Deploy this site</a>
+    </p>
+  </main>
+</div>
+<script src="/site.js" defer></script>
+</body>
+</html>
