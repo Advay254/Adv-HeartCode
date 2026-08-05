@@ -1,7 +1,6 @@
 const express = require('express');
 const { getPool } = require('../db/init');
 const {
-  verifyPassword,
   timingSafeEqual,
   createSession,
   destroySession,
@@ -93,14 +92,23 @@ apiRouter.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // Both checks always run (no short-circuit on username first) so a
-  // wrong username doesn't skip the bcrypt compare and create a timing
-  // difference between "bad username" and "bad password".
+  // Both checks always run (no short-circuit on username first), and both
+  // use timingSafeEqual — constant-time comparison against a single
+  // ADMIN_PASSWORD env var, no manual hashing step required. bcrypt exists
+  // to protect a *stored* credential (e.g. a database of many users'
+  // hashed passwords) from offline cracking if that storage leaks. There's
+  // no such storage here: this is one admin credential living only in
+  // Render's env vars, never written to a database — if that env var
+  // itself ever leaked, hashing it after the fact wouldn't have protected
+  // the original plaintext sitting in Render's dashboard either way. Rate
+  // limiting below is what actually protects against online brute-forcing,
+  // which is the threat that applies to this shape of credential.
+  //
   // .trim() guards against invisible leading/trailing whitespace ending up
   // in the env var — an easy silent failure mode when values are
   // copy-pasted on mobile (e.g. into Render's dashboard) rather than typed.
   const usernameOk = timingSafeEqual(username, (process.env.ADMIN_USERNAME || '').trim());
-  const passwordOk = await verifyPassword(password, (process.env.ADMIN_PASSWORD_HASH || '').trim());
+  const passwordOk = timingSafeEqual(password, (process.env.ADMIN_PASSWORD || '').trim());
 
   if (!usernameOk || !passwordOk) {
     recordFailure(ip);
