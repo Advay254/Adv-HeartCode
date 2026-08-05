@@ -5,9 +5,9 @@ const COOKIE_NAME = 'heartcode_admin_session';
 
 // Minimal manual cookie parsing so we don't have to pull in the
 // `cookie-parser` package just to read one cookie. The project's dependency
-// list has been kept deliberately short so far (express, pg, dotenv, and
-// now bcrypt) — swap this for cookie-parser later if cookie handling grows
-// beyond this single read.
+// list has been kept deliberately short (express, pg, dotenv, ejs) — swap
+// this for cookie-parser later if cookie handling grows beyond this single
+// read.
 function getSessionCookie(req) {
   const header = req.headers.cookie;
   if (!header) return undefined;
