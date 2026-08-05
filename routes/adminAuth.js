@@ -96,8 +96,11 @@ apiRouter.post('/login', async (req, res) => {
   // Both checks always run (no short-circuit on username first) so a
   // wrong username doesn't skip the bcrypt compare and create a timing
   // difference between "bad username" and "bad password".
-  const usernameOk = timingSafeEqual(username, process.env.ADMIN_USERNAME || '');
-  const passwordOk = await verifyPassword(password, process.env.ADMIN_PASSWORD_HASH || '');
+  // .trim() guards against invisible leading/trailing whitespace ending up
+  // in the env var — an easy silent failure mode when values are
+  // copy-pasted on mobile (e.g. into Render's dashboard) rather than typed.
+  const usernameOk = timingSafeEqual(username, (process.env.ADMIN_USERNAME || '').trim());
+  const passwordOk = await verifyPassword(password, (process.env.ADMIN_PASSWORD_HASH || '').trim());
 
   if (!usernameOk || !passwordOk) {
     recordFailure(ip);
