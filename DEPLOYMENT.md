@@ -18,7 +18,7 @@ In Render's dashboard, under the service's **Environment** tab, add the followin
 |---|---|
 | `DATABASE_URL` | Required |
 | `ADMIN_USERNAME` | Required |
-| `ADMIN_PASSWORD_HASH` | Required |
+| `ADMIN_PASSWORD` | Required |
 | `SESSION_SECRET` | Required |
 | `ADMIN_PATH_SLUG` | Required |
 | `ENCRYPTION_KEY` | Required |
@@ -64,7 +64,7 @@ See the README's environment variables section for what each one does, its failu
 ## 5. Log into the admin dashboard for the first time
 
 1. Go to `https://<your-app>.onrender.com/<ADMIN_PATH_SLUG>/login`, using the exact value you set for `ADMIN_PATH_SLUG` in Render's environment variables. There is no `/admin` route — that path (and `/__internal_admin`) always 404s, by design.
-2. Log in with `ADMIN_USERNAME` and the plaintext password that was hashed into `ADMIN_PASSWORD_HASH`.
+2. Log in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` exactly as set in Render's environment variables.
 3. From the dashboard: set up Paystack keys (Payments), at least one AI provider with a key and selected model (AI Provider), and at least one website type with fields and a saved template (Website Types) — the public homepage at `/` has nothing to show until a website type is both active and has an active template.
 
 ## Troubleshooting
