@@ -12,7 +12,10 @@
       <input type="text" name="username" autocomplete="username" required>
     </label>
     <label>Password
-      <input type="password" name="password" autocomplete="current-password" required>
+      <span style="display:flex; gap:0.5rem; align-items:center;">
+        <input type="password" name="password" id="passwordInput" autocomplete="current-password" required style="flex:1;">
+        <button type="button" id="togglePassword" aria-label="Show password" style="padding:0.6rem 0.8rem; white-space:nowrap;">👁</button>
+      </span>
     </label>
     <button type="submit" style="margin-top:1rem;">Log in</button>
   </form>
@@ -27,6 +30,15 @@
   // the one thing CSRF can't hand them. CSRF is enforced on every
   // state-changing request from the dashboard onward, once a session
   // (and therefore a token) exists.
+  document.getElementById('togglePassword').addEventListener('click', () => {
+    const input = document.getElementById('passwordInput');
+    const btn = document.getElementById('togglePassword');
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    btn.textContent = showing ? '👁' : '🙈';
+  });
+
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
