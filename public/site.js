@@ -146,9 +146,80 @@
     }
   }
 
+  function initCheckoutPage() {
+    var slug = document.body.dataset.slug;
+    var html = sessionStorage.getItem(previewKey(slug));
+    var draftRaw = sessionStorage.getItem(draftKey(slug));
+
+    // No generated site or no draft in this session — nothing to check
+    // out. Send them back to fill in the form rather than showing a
+    // checkout page with nothing behind it.
+    if (!html || !draftRaw) {
+      window.location.href = '/build/' + encodeURIComponent(slug);
+      return;
+    }
+
+    var draft;
+    try {
+      draft = JSON.parse(draftRaw);
+    } catch (err) {
+      window.location.href = '/build/' + encodeURIComponent(slug);
+      return;
+    }
+
+    var payBtn = document.getElementById('payBtn');
+    var errorEl = document.getElementById('checkoutError');
+
+    function showError(text) {
+      errorEl.textContent = text;
+      errorEl.style.display = 'block';
+    }
+
+    function resetButton() {
+      payBtn.disabled = false;
+      payBtn.textContent = 'Pay Now';
+    }
+
+    payBtn.addEventListener('click', function () {
+      errorEl.style.display = 'none';
+      payBtn.disabled = true;
+      payBtn.textContent = 'Processing…';
+
+      var sitePasswordInput = document.getElementById('sitePassword');
+      var payload = {
+        renderedHtml: html,
+        clientEmail: draft.client_email,
+        sitePassword: sitePasswordInput ? sitePasswordInput.value : ''
+      };
+
+      fetch('/build/' + encodeURIComponent(slug) + '/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        })
+        .then(function (result) {
+          if (!result.ok) {
+            showError(result.data.error || 'Could not start checkout. Please try again.');
+            resetButton();
+            return;
+          }
+          // Redirect to Paystack's hosted checkout page.
+          window.location.href = result.data.authorizationUrl;
+        })
+        .catch(function () {
+          showError('Network error. Please try again.');
+          resetButton();
+        });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var page = document.body.dataset.page;
     if (page === 'build') initBuildPage();
     if (page === 'preview') initPreviewPage();
+    if (page === 'checkout') initCheckoutPage();
   });
 })();
