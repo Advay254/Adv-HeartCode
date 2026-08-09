@@ -105,9 +105,38 @@ CREATE TABLE IF NOT EXISTS templates (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v1.0.4: payment + deployment pipeline
+CREATE TABLE IF NOT EXISTS pending_deployments (
+  reference TEXT PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id),
+  client_email TEXT NOT NULL,
+  site_password_hash TEXT DEFAULT NULL,
+  rendered_html TEXT NOT NULL,
+  amount_kes INTEGER NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS deployed_sites (
+  id SERIAL PRIMARY KEY,
+  reference TEXT UNIQUE NOT NULL,
+  website_type_id INTEGER REFERENCES website_types(id),
+  client_email TEXT NOT NULL,
+  site_url TEXT NOT NULL,
+  cloudflare_project_name TEXT NOT NULL,
+  amount_kes INTEGER NOT NULL,
+  deployed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscriber_emails (
+  email TEXT PRIMARY KEY,
+  first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+  opted_out BOOLEAN DEFAULT false
+);
 `;
 
-const CURRENT_VERSION = '1.0.2';
+const CURRENT_VERSION = '1.0.4';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
