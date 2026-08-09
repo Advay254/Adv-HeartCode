@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+<title>Checkout result — HeartCode</title>
+</head>
+<body>
+<div class="site-shell">
+  <main class="site-main" style="text-align:center; padding-top:3rem;">
+    <% if (outcome === 'success') { %>
+      <h1>Your site is live! 🎉</h1>
+      <p><a href="<%= siteUrl %>" class="btn"><%= siteUrl %></a></p>
+      <p style="color:var(--text-dim);">We've also emailed you this link (and your site password, if you set one).</p>
+    <% } else if (outcome === 'not_paid') { %>
+      <h1>Payment not completed</h1>
+      <p class="msg msg-warning">It looks like this payment wasn't completed. You have not been charged.</p>
+      <% if (slug) { %><p><a href="/build/<%= slug %>/checkout" class="btn-secondary">Try again</a></p><% } %>
+    <% } else if (outcome === 'expired') { %>
+      <h1>This checkout session expired</h1>
+      <p class="msg msg-warning">Checkout sessions are only valid for an hour. Please start over.</p>
+      <% if (slug) { %><p><a href="/build/<%= slug %>" class="btn-secondary">Start over</a></p><% } %>
+    <% } else if (outcome === 'not_found') { %>
+      <h1>We couldn't find this checkout</h1>
+      <p class="msg msg-error">This reference doesn't match anything on file.</p>
+      <p><a href="/" class="btn-secondary">← Back home</a></p>
+    <% } else { %>
+      <h1>Something went wrong</h1>
+      <p class="msg msg-error">
+        We hit a problem finishing this deployment.
+        <% if (reference) { %>If you were charged, contact support and quote this reference: <strong><%= reference %></strong><% } %>
+      </p>
+    <% } %>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+<title>Checkout — <%= websiteType.name %> — HeartCode</title>
+</head>
+<body data-page="checkout" data-slug="<%= websiteType.slug %>">
+<div class="site-shell">
+  <header class="site-header">
+    <h1>Checkout</h1>
+  </header>
+  <main class="site-main">
+    <div class="type-card">
+      <p><%= websiteType.name %></p>
+      <p style="font-size:1.4rem; font-weight:600; margin:0.25rem 0 1rem;">KES <%= Number(websiteType.priceKes).toLocaleString() %></p>
+
+      <label>Password-protect this site (optional)
+        <input type="password" id="sitePassword" placeholder="Leave blank for no password">
+      </label>
+      <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.35rem;">
+        Note: this is a simple visitor gate, not strong security — anyone who views the page source can still see the content.
+      </p>
+
+      <p id="checkoutError" class="msg msg-error" style="display:none;"></p>
+      <button type="button" id="payBtn" style="margin-top:1rem; width:100%;">Pay Now</button>
+    </div>
+    <p style="margin-top:1rem;"><a href="/build/<%= websiteType.slug %>/preview">← Back to preview</a></p>
+  </main>
+</div>
+<script src="/site.js" defer></script>
+</body>
+</html>
