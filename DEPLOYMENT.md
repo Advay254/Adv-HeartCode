@@ -22,6 +22,10 @@ In Render's dashboard, under the service's **Environment** tab, add the followin
 | `SESSION_SECRET` | Required |
 | `ADMIN_PATH_SLUG` | Required |
 | `ENCRYPTION_KEY` | Required |
+| `CLOUDFLARE_API_TOKEN` | Required |
+| `CLOUDFLARE_ACCOUNT_ID` | Required |
+| `RESEND_API_KEY` | Required |
+| `EMAIL_FROM_ADDRESS` | Required |
 | `NODE_ENV` | Optional — not read by any of HeartCode's own code, but set it to `production` anyway as standard practice |
 | `PORT` | Optional — Render injects this automatically; don't set it manually |
 
@@ -41,7 +45,25 @@ See the README's environment variables section for what each one does, its failu
 3. It looks like: `postgres://avnadmin:[password]@[host]:[port]/defaultdb?sslmode=require`
 4. Paste it into Render's `DATABASE_URL` as-is. Aiven's URI already specifies `?sslmode=require`, and it's compatible with the `rejectUnauthorized: false` setting already hardcoded in `db/init.js`.
 
-## 4. Deploy and confirm
+## 4. Set up Cloudflare and Resend
+
+**Cloudflare (deploys client sites):**
+1. Cloudflare dashboard → **My Profile → API Tokens → Create Token**. Use a Custom Token with **Cloudflare Pages — Edit** permission for your account.
+2. Paste the token into Render's `CLOUDFLARE_API_TOKEN`.
+3. On any domain's **Overview** page in the Cloudflare dashboard, find your Account ID in the right-hand sidebar under "API". Paste it into `CLOUDFLARE_ACCOUNT_ID`.
+4. Nothing else to set up — HeartCode creates a new Cloudflare Pages project per paid deployment automatically.
+
+**Resend (sends the "your site is ready" email):**
+1. Resend dashboard → add and verify a domain you control (follow their DNS instructions — this can take a few minutes to propagate).
+2. Resend dashboard → **API Keys → Create API Key**. Paste it into `RESEND_API_KEY`.
+3. Set `EMAIL_FROM_ADDRESS` to any address on that verified domain (e.g. `deploys@yourdomain.com`). Sends from an unverified domain will fail.
+
+**Paystack (after your first deploy, once you have a live URL):**
+1. Paystack dashboard → **Settings → API Keys & Webhooks**.
+2. Set the webhook URL to `https://<your-app>.onrender.com/api/webhooks/paystack`.
+3. This is what triggers deployment if the client closes their browser right after paying, before the redirect back to your site completes — without it, a payment could succeed on Paystack's side with nothing deployed until they happen to reload the callback page. The browser redirect (`callback_url`, sent automatically per-transaction) covers the normal case; the webhook is the safety net for the abnormal one.
+
+## 5. Deploy and confirm
 
 1. Trigger the deploy (push to the connected branch, or click **Deploy** in Render).
 2. Watch the logs for the `[DB]` boot sequence. A healthy boot looks like:
@@ -58,10 +80,10 @@ See the README's environment variables section for what each one does, its failu
    If `initDB()` throws, the process exits immediately by design — it won't serve traffic against a broken database — and you'll see the actual Postgres error logged just before the crash.
 3. Hit `https://<your-app>.onrender.com/health`. You should get:
    ```json
-   { "status": "ok", "db": "connected", "version": "1.0.3" }
+   { "status": "ok", "db": "connected", "version": "1.0.4" }
    ```
 
-## 5. Log into the admin dashboard for the first time
+## 6. Log into the admin dashboard for the first time
 
 1. Go to `https://<your-app>.onrender.com/<ADMIN_PATH_SLUG>/login`, using the exact value you set for `ADMIN_PATH_SLUG` in Render's environment variables. There is no `/admin` route — that path (and `/__internal_admin`) always 404s, by design.
 2. Log in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` exactly as set in Render's environment variables.

@@ -36,6 +36,10 @@ Not every variable is required — two have safe defaults. The table below refle
 | `SESSION_SECRET` | Required | Signs session cookies and derives CSRF tokens | Any long random string — a password generator app works fine |
 | `ADMIN_PATH_SLUG` | Required | Secret URL segment where the admin dashboard lives | Make one up yourself, e.g. `raven-portal-92` |
 | `ENCRYPTION_KEY` | Required | Encrypts Paystack/AI provider secrets at rest | Any string, any length — type a memorable phrase |
+| `CLOUDFLARE_API_TOKEN` | Required | Deploys client sites to Cloudflare Pages | Cloudflare dashboard → My Profile → API Tokens → Create Token, with "Cloudflare Pages — Edit" permission |
+| `CLOUDFLARE_ACCOUNT_ID` | Required | Identifies which Cloudflare account to deploy into | Cloudflare dashboard → any domain's Overview page → right sidebar under "API" |
+| `RESEND_API_KEY` | Required | Sends the "your site is ready" email to clients | Resend dashboard → API Keys → Create API Key |
+| `EMAIL_FROM_ADDRESS` | Required | The "from" address on that email | Any address on a domain you've verified in the Resend dashboard first |
 
 A few notes on what "Required" means in practice, since the failure modes differ:
 - Missing `DATABASE_URL` — the app won't boot at all (`initDB()` fails fast, `process.exit(1)`).
@@ -43,6 +47,8 @@ A few notes on what "Required" means in practice, since the failure modes differ
 - Missing `ADMIN_PATH_SLUG` — the app boots fine, but the entire admin dashboard becomes silently unreachable (404 everywhere, by design — no fallback to a guessable path).
 - Missing `ADMIN_USERNAME`/`ADMIN_PASSWORD` — the app boots fine, but login will never succeed.
 - Missing `ENCRYPTION_KEY` — the app boots fine, and read-only admin pages still load, but saving a Paystack key or an AI provider key will fail.
+- Missing `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` — the app boots fine, checkout and payment still work, but the deployment step fails right after payment succeeds (the client's money is taken and the deployment simply doesn't happen — set these before accepting real payments).
+- Missing `RESEND_API_KEY`/`EMAIL_FROM_ADDRESS` — the app boots fine, deployment still succeeds, but the "your site is ready" email fails to send. The site is still live and shown directly on the checkout result page either way.
 
 ### Getting each value — no computer or terminal needed
 
@@ -53,7 +59,7 @@ Everything below assumes you're setting these directly in Render's dashboard (En
 - **`ADMIN_PATH_SLUG`** — type any word or short phrase nobody would guess, e.g. `wolfden-42`. No special characters needed beyond letters, numbers, and hyphens.
 - **`SESSION_SECRET`** and **`ENCRYPTION_KEY`** — both just need to be long and unpredictable. Easiest option: open any password generator app (or a site like a password manager's built-in generator), generate a 40+ character password, and paste the same one into both fields (or generate two separately — either is fine, they don't need to match each other). If you ever do have Node/a terminal handy, `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` works too — it's just no longer required.
 
-That's every value — nothing here needs a separate generation step or a website. Paste all six required variables (`DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `ADMIN_PATH_SLUG`, `ENCRYPTION_KEY`) into Render, deploy, and log in.
+That's every value from the previous versions — nothing there needs a separate generation step or a website. The four new v1.0.4 variables (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `RESEND_API_KEY`, `EMAIL_FROM_ADDRESS`) do each need a quick trip to Cloudflare's or Resend's dashboard — both work fine from a phone browser, no computer needed, just an extra step beyond "type something."
 
 
 ## Local setup (optional — only needed if you're developing with Node installed on a computer; not required to deploy)
@@ -80,12 +86,14 @@ Once running, visit `http://localhost:3000/` for the public builder flow, or `ht
 ```
 db/         — database bootstrapping: init.js (schema, migrations, getPool())
 lib/        — framework-free helpers: crypto, auth, ai-provider, paystack, template
-              substitution, rate limiting
+              substitution, rate limiting, Cloudflare Pages deployment, email,
+              deployment finalization, the site-password bridge cache
 middleware/ — Express middleware: admin slug gating, session auth, CSRF
 routes/     — route handlers, split by area: admin pages, admin API (by
-              feature), public pages, public build API
+              feature), public pages (incl. checkout), public build API,
+              the Paystack webhook
 views/      — EJS templates, split into admin/ (dashboard) and public/
-              (client-facing builder flow)
+              (client-facing builder + checkout flow)
 public/     — static assets served as-is (CSS, JS) — no server-rendered
               content lives here anymore as of v1.0.3
 ```
@@ -96,7 +104,8 @@ public/     — static assets served as-is (CSS, JS) — no server-rendered
 - **v1.0.1** — Rebrand (SiteForge → HeartCode) + admin authentication: slug-gated login, signed session cookies, CSRF groundwork, brute-force protection on login.
 - **v1.0.2** — Admin dashboard shell + Paystack config + AI provider config + website types/fields/versioned templates, all CSRF-protected, all backed by real DB transactions where single-row/single-active state matters.
 - **v1.0.3** — Public builder flow (type selection → dynamic form → AI content-fill → sandboxed preview), plus this README and `DEPLOYMENT.md`.
+- **v1.0.4** — Real payment and deployment: Paystack checkout, a signature-verified webhook, idempotent deployment finalization, live Cloudflare Pages deploys, and the "your site is ready" email via Resend.
 
 ## What's next
 
-v1.0.4 is expected to add payment — the "Deploy this site" button on the preview page currently links to a placeholder `/build/:slug/checkout` stub that just says so.
+Payment and deployment are live as of v1.0.4. Not yet built: a way for you (the admin) to see the list of paid deployments and subscriber emails collected in `deployed_sites`/`subscriber_emails` — those tables exist and are being written to, but there's no dashboard page for them yet.
