@@ -1,7 +1,20 @@
 const express = require('express');
+const crypto = require('crypto');
 const { getPool } = require('../db/init');
+const { getActivePaystackKeys } = require('../lib/paystack');
+const { finalizeDeployment } = require('../lib/finalizeDeployment');
+const sitePasswordCache = require('../lib/sitePasswordCache');
+const { createRateLimiter } = require('../lib/rateLimit');
 
 const router = express.Router();
+router.use(express.json({ limit: '2mb' }));
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Separate budget from the AI-generate limiter — different action,
+// different cost, an abusive run on one shouldn't block legitimate use of
+// the other.
+const checkoutLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60 * 1000 });
 
 router.get('/', async (req, res) => {
   const pool = getPool();
@@ -82,7 +95,133 @@ router.get('/build/:slug/checkout', async (req, res) => {
     });
   }
 
-  res.render('public/checkout-stub', { slug: typeResult.rows[0].slug });
+  const t = typeResult.rows[0];
+  res.render('public/checkout', {
+    websiteType: { slug: t.slug, name: t.name, priceKes: t.price_kes }
+  });
+});
+
+// Checkout initiation: takes the already-generated site HTML, client
+// email, and an optional site password; stores a pending_deployments row;
+// asks Paystack to initialize a transaction; returns the URL to redirect
+// the browser to. Nothing is deployed yet — that only happens once
+// payment is confirmed, via the webhook or the callback page below.
+router.post('/build/:slug/checkout', async (req, res) => {
+  const ip = req.ip;
+  if (!checkoutLimiter.tryConsume(ip)) {
+    return res.status(429).json({ error: 'Too many checkout attempts, please try again later' });
+  }
+
+  const pool = getPool();
+  const typeResult = await pool.query(
+    'SELECT * FROM website_types WHERE slug = $1 AND is_active = true',
+    [req.params.slug]
+  );
+  if (typeResult.rowCount === 0) {
+    return res.status(404).json({ error: 'Website type not found' });
+  }
+  const websiteType = typeResult.rows[0];
+
+  const { renderedHtml, clientEmail, sitePassword } = req.body || {};
+
+  if (typeof renderedHtml !== 'string' || !renderedHtml.trim()) {
+    return res.status(400).json({ error: 'renderedHtml is required' });
+  }
+
+  const email = typeof clientEmail === 'string' ? clientEmail.trim() : '';
+  if (!email || !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'A valid clientEmail is required' });
+  }
+
+  const keys = await getActivePaystackKeys();
+  if (!keys) {
+    return res.status(503).json({ error: 'Payments are not configured yet' });
+  }
+
+  // Reference doubles as the seed for the Cloudflare Pages project name
+  // later (see lib/cloudflarePages.js) — generated safe for both uses
+  // from the start rather than reformatted downstream.
+  const reference = `hc-${crypto.randomBytes(8).toString('hex')}`;
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  let sitePasswordHash = null;
+  const trimmedPassword = typeof sitePassword === 'string' ? sitePassword.trim() : '';
+  if (trimmedPassword) {
+    // Only the hash goes to Postgres. The plaintext goes into the
+    // in-memory cache so the "site ready" email can include it later —
+    // see lib/sitePasswordCache.js for why this needs to exist at all.
+    sitePasswordHash = crypto.createHash('sha256').update(trimmedPassword).digest('hex');
+    sitePasswordCache.store(reference, trimmedPassword);
+  }
+
+  await pool.query(
+    `INSERT INTO pending_deployments (reference, website_type_id, client_email, site_password_hash, rendered_html, amount_kes, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [reference, websiteType.id, email, sitePasswordHash, renderedHtml, websiteType.price_kes, expiresAt]
+  );
+
+  const callbackUrl = `${req.protocol}://${req.get('host')}/build/${websiteType.slug}/checkout/callback`;
+
+  let initData;
+  try {
+    const initRes = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${keys.secretKey}`
+      },
+      body: JSON.stringify({
+        email,
+        amount: websiteType.price_kes * 100,
+        reference,
+        callback_url: callbackUrl
+      })
+    });
+    initData = await initRes.json();
+  } catch (err) {
+    return res.status(502).json({ error: 'Could not reach Paystack' });
+  }
+
+  if (!initData || !initData.status || !initData.data || !initData.data.authorization_url) {
+    console.error('[CHECKOUT] Paystack initialize failed:', JSON.stringify(initData));
+    return res.status(502).json({ error: 'Paystack could not initialize this transaction' });
+  }
+
+  res.json({ authorizationUrl: initData.data.authorization_url, reference });
+});
+
+// Paystack redirects the browser here after payment. finalizeDeployment()
+// is idempotent (see lib/finalizeDeployment.js) — this may be the FIRST
+// thing to finalize the deployment, or it may run after (or concurrently
+// with) the webhook already having done so; either way exactly one
+// deployment and one email happen, and this page just shows the result.
+router.get('/build/:slug/checkout/callback', async (req, res) => {
+  const reference = req.query.reference;
+
+  if (!reference || typeof reference !== 'string') {
+    return res.status(400).render('public/checkout-callback', {
+      outcome: 'not_found',
+      siteUrl: null,
+      reference: null,
+      slug: req.params.slug
+    });
+  }
+
+  const result = await finalizeDeployment(reference);
+
+  let outcome = 'error';
+  let siteUrl = null;
+
+  if (result.status === 'deployed' || result.status === 'already_deployed') {
+    outcome = 'success';
+    siteUrl = result.site.site_url;
+  } else if (result.status === 'not_paid' || result.status === 'expired' || result.status === 'not_found') {
+    outcome = result.status;
+  } else if (result.error) {
+    console.error(`[CALLBACK] finalizeDeployment error for ${reference}:`, result.error);
+  }
+
+  res.render('public/checkout-callback', { outcome, siteUrl, reference, slug: req.params.slug });
 });
 
 module.exports = router;
