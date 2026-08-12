@@ -4,7 +4,7 @@
 <%- include('../../partials/head') %>
 <title>Website Types — HeartCode Admin</title>
 </head>
-<body>
+<body data-page="website-types-index" data-slug="<%= slug %>">
 <div class="admin-layout">
   <%- include('../../partials/nav', { activePage: 'website-types' }) %>
   <main class="admin-main">
@@ -31,65 +31,5 @@
   </main>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const slug = <%- JSON.stringify(slug) %>;
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str == null ? '' : String(str);
-    return div.innerHTML;
-  }
-
-  async function load() {
-    const res = await window.adminFetch('/api/admin/website-types');
-    const types = await res.json();
-    document.getElementById('typesTableBody').innerHTML = types.map(t => `
-      <tr>
-        <td><a href="/${slug}/website-types/${t.id}">${escapeHtml(t.name)}</a></td>
-        <td><span class="badge ${t.isActive ? 'badge-active' : 'badge-inactive'}">${t.isActive ? 'active' : 'inactive'}</span></td>
-        <td>${t.fieldCount}</td>
-        <td>${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : '—'}</td>
-        <td>KES ${t.priceKes}</td>
-        <td><button type="button" class="btn-danger delete-type" data-id="${t.id}">Delete</button></td>
-      </tr>`).join('') || '<tr><td colspan="6">No website types yet.</td></tr>';
-
-    document.querySelectorAll('.delete-type').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Delete this website type? This permanently removes its fields and template history.')) return;
-        const res = await window.adminFetch(`/api/admin/website-types/${btn.dataset.id}`, { method: 'DELETE' });
-        if (res.ok) load();
-      });
-    });
-  }
-
-  document.getElementById('addTypeForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const statusEl = document.getElementById('addStatus');
-    const res = await window.adminFetch('/api/admin/website-types', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: form.name.value,
-        slug: form.slug.value || undefined,
-        description: form.description.value,
-        priceKes: Number(form.priceKes.value) || 0
-      })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      form.reset();
-      statusEl.style.display = 'none';
-      load();
-    } else {
-      statusEl.textContent = data.error || 'Failed to create website type.';
-      statusEl.className = 'msg msg-error';
-      statusEl.style.display = 'block';
-    }
-  });
-
-  load();
-});
-</script>
 </body>
 </html>
