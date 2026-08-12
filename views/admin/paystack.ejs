@@ -4,7 +4,7 @@
 <%- include('../partials/head') %>
 <title>Payments — HeartCode Admin</title>
 </head>
-<body>
+<body data-page="payments">
 <div class="admin-layout">
   <%- include('../partials/nav', { activePage: 'payments' }) %>
   <main class="admin-main">
@@ -41,89 +41,5 @@
   </main>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('paystackForm');
-  const modeBadge = document.getElementById('modeBadge');
-  const statusMsg = document.getElementById('statusMsg');
 
-  function showStatus(text, type) {
-    statusMsg.textContent = text;
-    statusMsg.className = 'msg msg-' + type;
-    statusMsg.style.display = 'block';
-  }
-
-  function renderMasked(el, masked) {
-    if (masked) {
-      el.textContent = 'Current secret: ' + masked;
-      el.style.display = 'block';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-
-  function applyConfig(cfg) {
-    document.getElementById('modeSelect').value = cfg.mode;
-    modeBadge.textContent = cfg.mode;
-    modeBadge.className = 'badge ' + (cfg.mode === 'live' ? 'badge-live' : 'badge-test');
-    document.getElementById('publicKeyTest').value = cfg.publicKeyTest || '';
-    document.getElementById('publicKeyLive').value = cfg.publicKeyLive || '';
-    renderMasked(document.getElementById('secretTestMasked'), cfg.secretKeyTestMasked);
-    renderMasked(document.getElementById('secretLiveMasked'), cfg.secretKeyLiveMasked);
-  }
-
-  async function load() {
-    const res = await window.adminFetch('/api/admin/paystack');
-    const cfg = await res.json();
-    applyConfig(cfg);
-  }
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = {
-      mode: document.getElementById('modeSelect').value,
-      publicKeyTest: document.getElementById('publicKeyTest').value,
-      publicKeyLive: document.getElementById('publicKeyLive').value,
-      // Blank secret input = "don't change" (null), matching the server's
-      // null-means-unchanged / ""-means-clear convention.
-      secretKeyTest: document.getElementById('secretKeyTest').value || null,
-      secretKeyLive: document.getElementById('secretKeyLive').value || null
-    };
-    const res = await window.adminFetch('/api/admin/paystack', {
-      method: 'PUT',
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (res.ok) {
-      applyConfig(data);
-      document.getElementById('secretKeyTest').value = '';
-      document.getElementById('secretKeyLive').value = '';
-      showStatus('Saved.', 'success');
-    } else {
-      showStatus(data.error || 'Failed to save.', 'error');
-    }
-  });
-
-  document.getElementById('clearTestBtn').addEventListener('click', async () => {
-    const res = await window.adminFetch('/api/admin/paystack', {
-      method: 'PUT',
-      body: JSON.stringify({ mode: document.getElementById('modeSelect').value, secretKeyTest: '' })
-    });
-    const data = await res.json();
-    if (res.ok) { applyConfig(data); showStatus('Test secret cleared.', 'success'); }
-  });
-
-  document.getElementById('clearLiveBtn').addEventListener('click', async () => {
-    const res = await window.adminFetch('/api/admin/paystack', {
-      method: 'PUT',
-      body: JSON.stringify({ mode: document.getElementById('modeSelect').value, secretKeyLive: '' })
-    });
-    const data = await res.json();
-    if (res.ok) { applyConfig(data); showStatus('Live secret cleared.', 'success'); }
-  });
-
-  load();
-});
-</script>
-</body>
 </html>

@@ -4,12 +4,44 @@
 <%- include('../partials/head') %>
 <title>Submissions — HeartCode Admin</title>
 </head>
-<body>
+<body data-page="submissions">
 <div class="admin-layout">
   <%- include('../partials/nav', { activePage: 'submissions' }) %>
   <main class="admin-main">
-    <h1>Submissions</h1>
-    <p class="msg msg-warning">Coming in v1.0.4.</p>
+    <h1>Deployments</h1>
+    <div class="card">
+      <label>Search <input type="text" id="deploymentSearch" placeholder="Email, reference, or site URL"></label>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Client</th><th>Type</th><th>Site</th><th>Amount</th><th>Deployed</th></tr></thead>
+        <tbody id="deploymentsTableBody"></tbody>
+      </table>
+      <p id="deploymentsPageInfo" style="color:var(--text-dim); font-size:0.85rem; margin-top:0.75rem;"></p>
+      <p>
+        <button type="button" id="deploymentsPrev" class="btn-secondary">← Prev</button>
+        <button type="button" id="deploymentsNext" class="btn-secondary">Next →</button>
+      </p>
+    </div>
+
+    <h1 style="margin-top:2rem;">Subscribers</h1>
+    <div class="card">
+      <label>Search <input type="text" id="subscriberSearch" placeholder="Email"></label>
+      <p style="margin-top:0.75rem;">
+        <a href="/api/admin/dashboard/subscribers/export" class="btn-secondary">Export CSV</a>
+      </p>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Email</th><th>First seen</th><th>Status</th><th></th></tr></thead>
+        <tbody id="subscribersTableBody"></tbody>
+      </table>
+      <p id="subscribersPageInfo" style="color:var(--text-dim); font-size:0.85rem; margin-top:0.75rem;"></p>
+      <p>
+        <button type="button" id="subscribersPrev" class="btn-secondary">← Prev</button>
+        <button type="button" id="subscribersNext" class="btn-secondary">Next →</button>
+      </p>
+    </div>
   </main>
 </div>
 </body>
