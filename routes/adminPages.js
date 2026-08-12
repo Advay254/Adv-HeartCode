@@ -17,34 +17,8 @@ router.use((req, res, next) => {
   next();
 });
 
-router.get(`${INTERNAL_ADMIN_PREFIX}/`, async (req, res) => {
-  const pool = getPool();
-
-  const paystackResult = await pool.query('SELECT mode FROM paystack_config WHERE id = 1');
-  const paystackConfigured = paystackResult.rowCount > 0;
-  const paystackMode = paystackConfigured ? paystackResult.rows[0].mode : null;
-
-  const providerResult = await pool.query(
-    'SELECT label, selected_model FROM ai_providers WHERE is_active = true LIMIT 1'
-  );
-  const activeProvider = providerResult.rowCount > 0
-    ? { label: providerResult.rows[0].label, selectedModel: providerResult.rows[0].selected_model }
-    : null;
-
-  const typeCounts = await pool.query(
-    `SELECT
-       COUNT(*) FILTER (WHERE is_active) AS active_count,
-       COUNT(*) FILTER (WHERE NOT is_active) AS inactive_count
-     FROM website_types`
-  );
-
-  res.render('admin/overview', {
-    paystackConfigured,
-    paystackMode,
-    activeProvider,
-    activeTypeCount: Number(typeCounts.rows[0].active_count),
-    inactiveTypeCount: Number(typeCounts.rows[0].inactive_count)
-  });
+router.get(`${INTERNAL_ADMIN_PREFIX}/`, (req, res) => {
+  res.render('admin/overview');
 });
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/payments`, (req, res) => {

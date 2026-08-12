@@ -1,9 +1,19 @@
 const express = require('express');
 const crypto = require('crypto');
+const { z } = require('zod');
 const { getActivePaystackKeys } = require('../lib/paystack');
 const { finalizeDeployment } = require('../lib/finalizeDeployment');
 
 const router = express.Router();
+
+// Applied only AFTER signature verification below — this is a structural
+// sanity check on an already-trusted payload, not a security boundary.
+// The signature check is what actually matters; this just guards against
+// acting on an unexpected/malformed shape from a genuinely-signed request.
+const webhookEventSchema = z.object({
+  event: z.string(),
+  data: z.object({ reference: z.string().min(1) }).passthrough().optional()
+});
 
 // Paystack signs the RAW request body (not the re-serialized JSON) with
 // HMAC-SHA512, keyed with the secret key. express.raw() keeps req.body as
@@ -50,6 +60,13 @@ router.post('/paystack', async (req, res) => {
   } catch (err) {
     return res.status(400).json({ error: 'Malformed JSON body' });
   }
+
+  const eventParsed = webhookEventSchema.safeParse(event);
+  if (!eventParsed.success) {
+    console.error('[WEBHOOK] Unexpected event shape from a validly-signed request:', eventParsed.error.issues);
+    return res.status(400).json({ error: 'Unexpected event shape' });
+  }
+  event = eventParsed.data;
 
   // Always acknowledge with 200 immediately once the signature is valid —
   // Paystack retries on non-200 responses (every 3 min for the first 4

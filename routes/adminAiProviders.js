@@ -1,4 +1,5 @@
 const express = require('express');
+const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -6,6 +7,42 @@ const { requireCsrf } = require('../middleware/requireCsrf');
 
 const router = express.Router();
 router.use(requireAdminSession);
+
+// Gap this whole file closes: four routes below used Number(req.params.id)
+// with NO check for NaN and NO try/catch around the query that follows.
+// A malformed id (e.g. PUT /api/admin/ai-providers/abc) would bind NaN as
+// a query parameter, the pg driver rejects that with a thrown error, and
+// since none of those four routes had a try/catch, that becomes an
+// unhandled promise rejection in an async Express 4 route handler — which
+// Express 4 does NOT automatically forward to error-handling middleware,
+// and which Node (v15+, including the v24 this runs on per the Render
+// deploy log) terminates the process on by default. A single malformed ID
+// could have taken the whole server down for every user, not just failed
+// one request. Every :id/:keyId param below is now validated before it
+// reaches any query.
+const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+const keyIdParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  keyId: z.coerce.number().int().positive()
+});
+
+const createProviderSchema = z.object({
+  label: z.string().trim().min(1).max(200),
+  baseUrl: z.string().trim().url().max(500)
+});
+
+const addKeySchema = z.object({
+  key: z.string().trim().min(1).max(2000),
+  // Previously: a non-integer priority silently became 0 with no
+  // indication anything was wrong. Now it's a clean 400 instead, since
+  // silently discarding what the admin typed is its own kind of bug.
+  priority: z.coerce.number().int().optional().default(0)
+});
+
+const updateProviderSchema = z.object({
+  selectedModel: z.string().max(200).optional(),
+  isActive: z.boolean().optional()
+});
 
 function maskKeyRow(row) {
   try {
@@ -47,30 +84,31 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', requireCsrf, async (req, res) => {
-  const { label, baseUrl } = req.body || {};
-
-  if (typeof label !== 'string' || !label.trim()) {
-    return res.status(400).json({ error: 'label is required' });
+  const parsed = createProviderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'label and a valid baseUrl are required' });
   }
-  if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
-    return res.status(400).json({ error: 'baseUrl is required' });
-  }
+  const { label, baseUrl } = parsed.data;
 
   const pool = getPool();
   const result = await pool.query(
     'INSERT INTO ai_providers (label, base_url) VALUES ($1, $2) RETURNING *',
-    [label.trim(), baseUrl.trim()]
+    [label, baseUrl]
   );
   res.status(201).json(serializeProvider(result.rows[0], []));
 });
 
 router.post('/:id/keys', requireCsrf, async (req, res) => {
-  const providerId = Number(req.params.id);
-  const { key, priority } = req.body || {};
-
-  if (typeof key !== 'string' || !key.trim()) {
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid provider id' });
+  }
+  const bodyParsed = addKeySchema.safeParse(req.body);
+  if (!bodyParsed.success) {
     return res.status(400).json({ error: 'key is required' });
   }
+  const { id: providerId } = paramsParsed.data;
+  const { key, priority } = bodyParsed.data;
 
   const pool = getPool();
   const providerCheck = await pool.query('SELECT id FROM ai_providers WHERE id = $1', [providerId]);
@@ -78,16 +116,21 @@ router.post('/:id/keys', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Provider not found' });
   }
 
-  const encrypted = encrypt(key.trim());
+  const encrypted = encrypt(key);
   const result = await pool.query(
     'INSERT INTO ai_provider_keys (provider_id, key_encrypted, priority) VALUES ($1, $2, $3) RETURNING *',
-    [providerId, encrypted, Number.isInteger(priority) ? priority : 0]
+    [providerId, encrypted, priority]
   );
   res.status(201).json(maskKeyRow(result.rows[0]));
 });
 
 router.delete('/:id/keys/:keyId', requireCsrf, async (req, res) => {
-  const { id, keyId } = req.params;
+  const parsed = keyIdParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid provider or key id' });
+  }
+  const { id, keyId } = parsed.data;
+
   const pool = getPool();
   const result = await pool.query(
     'DELETE FROM ai_provider_keys WHERE id = $1 AND provider_id = $2 RETURNING id',
@@ -100,9 +143,13 @@ router.delete('/:id/keys/:keyId', requireCsrf, async (req, res) => {
 });
 
 router.post('/:id/fetch-models', requireCsrf, async (req, res) => {
-  const providerId = Number(req.params.id);
-  const pool = getPool();
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid provider id' });
+  }
+  const { id: providerId } = paramsParsed.data;
 
+  const pool = getPool();
   const providerResult = await pool.query('SELECT * FROM ai_providers WHERE id = $1', [providerId]);
   if (providerResult.rowCount === 0) {
     return res.status(404).json({ error: 'Provider not found' });
@@ -154,8 +201,16 @@ router.post('/:id/fetch-models', requireCsrf, async (req, res) => {
 });
 
 router.put('/:id', requireCsrf, async (req, res) => {
-  const providerId = Number(req.params.id);
-  const { selectedModel, isActive } = req.body || {};
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid provider id' });
+  }
+  const bodyParsed = updateProviderSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  const { id: providerId } = paramsParsed.data;
+  const { selectedModel, isActive } = bodyParsed.data;
 
   const pool = getPool();
   const client = await pool.connect();
@@ -195,7 +250,12 @@ router.put('/:id', requireCsrf, async (req, res) => {
 });
 
 router.delete('/:id', requireCsrf, async (req, res) => {
-  const providerId = Number(req.params.id);
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid provider id' });
+  }
+  const { id: providerId } = parsed.data;
+
   const pool = getPool();
   const result = await pool.query('DELETE FROM ai_providers WHERE id = $1 RETURNING id', [providerId]);
   if (result.rowCount === 0) {

@@ -1,4 +1,5 @@
 const express = require('express');
+const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
@@ -7,8 +8,64 @@ const router = express.Router();
 router.use(requireAdminSession);
 
 const FIELD_KEY_RE = /^[a-z0-9_]+$/;
-const VALID_FIELD_TYPES = new Set(['text', 'textarea', 'email', 'password', 'dropdown']);
+const VALID_FIELD_TYPES = ['text', 'textarea', 'email', 'password', 'dropdown'];
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+
+// Gap this whole file closes: GET/POST/PUT/DELETE on /:id, /:id/fields,
+// /:id/fields/:fieldId, and /:id/template all used Number(req.params.X)
+// with no NaN check and (for most of them) no try/catch around the query
+// that followed — same unhandled-rejection-crashes-the-process risk
+// documented in adminAiProviders.js. Every path param below is now
+// validated before it reaches any query.
+const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+const fieldIdParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  fieldId: z.coerce.number().int().positive()
+});
+const rollbackParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  version: z.coerce.number().int().positive()
+});
+
+const createTypeSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  priceKes: z.coerce.number().int().min(0).optional(),
+  slug: z.string().trim().max(100).optional()
+});
+
+const updateTypeSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(2000).optional(),
+  isActive: z.boolean().optional(),
+  priceKes: z.coerce.number().int().min(0).optional(),
+  displayOrder: z.coerce.number().int().optional()
+});
+
+const createFieldSchema = z.object({
+  fieldKey: z.string().regex(FIELD_KEY_RE, 'fieldKey must match ^[a-z0-9_]+$'),
+  fieldLabel: z.string().trim().min(1).max(200),
+  fieldType: z.enum(VALID_FIELD_TYPES).optional().default('text'),
+  placeholderText: z.string().max(500).optional(),
+  isRequired: z.boolean().optional().default(true),
+  dropdownOptions: z.array(z.string().max(200)).max(100).optional(),
+  displayOrder: z.coerce.number().int().optional().default(0)
+});
+
+const updateFieldSchema = z.object({
+  fieldLabel: z.string().trim().min(1).max(200).optional(),
+  fieldType: z.enum(VALID_FIELD_TYPES).optional(),
+  placeholderText: z.string().max(500).optional(),
+  isRequired: z.boolean().optional(),
+  dropdownOptions: z.array(z.string().max(200)).max(100).optional(),
+  displayOrder: z.coerce.number().int().optional()
+});
+
+// ~500KB ceiling — generous for a template, well under any body-size limit,
+// still a real bound instead of "any length string accepted."
+const templateSchema = z.object({
+  htmlContent: z.string().min(1).max(500000)
+});
 
 function slugify(input) {
   return String(input)
@@ -66,11 +123,11 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', requireCsrf, async (req, res) => {
-  const { name, description, priceKes, slug: providedSlug } = req.body || {};
-
-  if (typeof name !== 'string' || !name.trim()) {
+  const parsed = createTypeSchema.safeParse(req.body);
+  if (!parsed.success) {
     return res.status(400).json({ error: 'name is required' });
   }
+  const { name, description, priceKes, slug: providedSlug } = parsed.data;
 
   const baseSlug = slugify(providedSlug || name);
   if (!baseSlug) {
@@ -88,7 +145,7 @@ router.post('/', requireCsrf, async (req, res) => {
   const result = await pool.query(
     `INSERT INTO website_types (slug, name, description, price_kes)
      VALUES ($1, $2, $3, $4) RETURNING *`,
-    [baseSlug, name.trim(), typeof description === 'string' ? description : '', price]
+    [baseSlug, name, description || '', price]
   );
   const t = result.rows[0];
   res.status(201).json({
@@ -105,8 +162,16 @@ router.post('/', requireCsrf, async (req, res) => {
 });
 
 router.put('/:id', requireCsrf, async (req, res) => {
-  const id = Number(req.params.id);
-  const { name, description, isActive, priceKes, displayOrder } = req.body || {};
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const bodyParsed = updateTypeSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  const { id } = paramsParsed.data;
+  const { name, description, isActive, priceKes, displayOrder } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -116,11 +181,11 @@ router.put('/:id', requireCsrf, async (req, res) => {
   const current = existing.rows[0];
 
   const next = {
-    name: typeof name === 'string' && name.trim() ? name.trim() : current.name,
-    description: typeof description === 'string' ? description : current.description,
-    is_active: typeof isActive === 'boolean' ? isActive : current.is_active,
-    price_kes: Number.isInteger(priceKes) && priceKes >= 0 ? priceKes : current.price_kes,
-    display_order: Number.isInteger(displayOrder) ? displayOrder : current.display_order
+    name: name !== undefined ? name : current.name,
+    description: description !== undefined ? description : current.description,
+    is_active: isActive !== undefined ? isActive : current.is_active,
+    price_kes: priceKes !== undefined ? priceKes : current.price_kes,
+    display_order: displayOrder !== undefined ? displayOrder : current.display_order
   };
 
   const result = await pool.query(
@@ -142,7 +207,12 @@ router.put('/:id', requireCsrf, async (req, res) => {
 });
 
 router.delete('/:id', requireCsrf, async (req, res) => {
-  const id = Number(req.params.id);
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const { id } = parsed.data;
+
   const pool = getPool();
   // ON DELETE CASCADE on template_fields.website_type_id and
   // templates.website_type_id removes dependent rows automatically.
@@ -156,7 +226,12 @@ router.delete('/:id', requireCsrf, async (req, res) => {
 // ---- fields ----
 
 router.get('/:id/fields', async (req, res) => {
-  const id = Number(req.params.id);
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const { id } = parsed.data;
+
   const pool = getPool();
   const result = await pool.query(
     'SELECT * FROM template_fields WHERE website_type_id = $1 ORDER BY display_order ASC, id ASC',
@@ -166,18 +241,19 @@ router.get('/:id/fields', async (req, res) => {
 });
 
 router.post('/:id/fields', requireCsrf, async (req, res) => {
-  const websiteTypeId = Number(req.params.id);
-  const { fieldKey, fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = req.body || {};
-
-  if (typeof fieldKey !== 'string' || !FIELD_KEY_RE.test(fieldKey)) {
-    return res.status(400).json({ error: 'fieldKey must match ^[a-z0-9_]+$' });
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
   }
-  if (typeof fieldLabel !== 'string' || !fieldLabel.trim()) {
-    return res.status(400).json({ error: 'fieldLabel is required' });
+  const bodyParsed = createFieldSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    const message = bodyParsed.error.issues[0] ? bodyParsed.error.issues[0].message : 'Invalid field data';
+    return res.status(400).json({ error: message });
   }
+  const { id: websiteTypeId } = paramsParsed.data;
+  const { fieldKey, fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = bodyParsed.data;
 
-  const type = VALID_FIELD_TYPES.has(fieldType) ? fieldType : 'text';
-  if (type === 'dropdown' && !Array.isArray(dropdownOptions)) {
+  if (fieldType === 'dropdown' && !Array.isArray(dropdownOptions)) {
     return res.status(400).json({ error: 'dropdownOptions must be an array when fieldType is "dropdown"' });
   }
 
@@ -201,20 +277,28 @@ router.post('/:id/fields', requireCsrf, async (req, res) => {
     [
       websiteTypeId,
       fieldKey,
-      fieldLabel.trim(),
-      type,
-      typeof placeholderText === 'string' ? placeholderText : '',
-      typeof isRequired === 'boolean' ? isRequired : true,
-      type === 'dropdown' ? JSON.stringify(dropdownOptions) : null,
-      Number.isInteger(displayOrder) ? displayOrder : 0
+      fieldLabel,
+      fieldType,
+      placeholderText || '',
+      isRequired,
+      fieldType === 'dropdown' ? JSON.stringify(dropdownOptions) : null,
+      displayOrder
     ]
   );
   res.status(201).json(formatField(result.rows[0]));
 });
 
 router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
-  const { id, fieldId } = req.params;
-  const { fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = req.body || {};
+  const paramsParsed = fieldIdParamsSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type or field id' });
+  }
+  const bodyParsed = updateFieldSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: 'Invalid field data' });
+  }
+  const { id, fieldId } = paramsParsed.data;
+  const { fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query(
@@ -226,20 +310,20 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
   }
   const current = existing.rows[0];
 
-  const nextType = VALID_FIELD_TYPES.has(fieldType) ? fieldType : current.field_type;
+  const nextType = fieldType !== undefined ? fieldType : current.field_type;
   if (nextType === 'dropdown' && dropdownOptions !== undefined && !Array.isArray(dropdownOptions)) {
     return res.status(400).json({ error: 'dropdownOptions must be an array when fieldType is "dropdown"' });
   }
 
   const next = {
-    field_label: typeof fieldLabel === 'string' && fieldLabel.trim() ? fieldLabel.trim() : current.field_label,
+    field_label: fieldLabel !== undefined ? fieldLabel : current.field_label,
     field_type: nextType,
-    placeholder_text: typeof placeholderText === 'string' ? placeholderText : current.placeholder_text,
-    is_required: typeof isRequired === 'boolean' ? isRequired : current.is_required,
+    placeholder_text: placeholderText !== undefined ? placeholderText : current.placeholder_text,
+    is_required: isRequired !== undefined ? isRequired : current.is_required,
     dropdown_options: nextType === 'dropdown'
       ? JSON.stringify(dropdownOptions !== undefined ? dropdownOptions : current.dropdown_options)
       : null,
-    display_order: Number.isInteger(displayOrder) ? displayOrder : current.display_order
+    display_order: displayOrder !== undefined ? displayOrder : current.display_order
   };
 
   const result = await pool.query(
@@ -252,7 +336,12 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
 });
 
 router.delete('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
-  const { id, fieldId } = req.params;
+  const parsed = fieldIdParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type or field id' });
+  }
+  const { id, fieldId } = parsed.data;
+
   const pool = getPool();
   const result = await pool.query(
     'DELETE FROM template_fields WHERE id = $1 AND website_type_id = $2 RETURNING id',
@@ -267,7 +356,12 @@ router.delete('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
 // ---- templates ----
 
 router.get('/:id/template', async (req, res) => {
-  const id = Number(req.params.id);
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const { id } = parsed.data;
+
   const pool = getPool();
 
   const active = await pool.query(
@@ -289,12 +383,16 @@ router.get('/:id/template', async (req, res) => {
 });
 
 router.put('/:id/template', requireCsrf, async (req, res) => {
-  const websiteTypeId = Number(req.params.id);
-  const { htmlContent } = req.body || {};
-
-  if (typeof htmlContent !== 'string' || !htmlContent.trim()) {
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const bodyParsed = templateSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
     return res.status(400).json({ error: 'htmlContent is required' });
   }
+  const { id: websiteTypeId } = paramsParsed.data;
+  const { htmlContent } = bodyParsed.data;
 
   const pool = getPool();
   const client = await pool.connect();
@@ -359,8 +457,11 @@ router.put('/:id/template', requireCsrf, async (req, res) => {
 });
 
 router.post('/:id/template/rollback/:version', requireCsrf, async (req, res) => {
-  const websiteTypeId = Number(req.params.id);
-  const version = Number(req.params.version);
+  const parsed = rollbackParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id or version' });
+  }
+  const { id: websiteTypeId, version } = parsed.data;
 
   const pool = getPool();
   const client = await pool.connect();

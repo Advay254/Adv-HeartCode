@@ -1,4 +1,5 @@
 const express = require('express');
+const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -6,6 +7,22 @@ const { requireCsrf } = require('../middleware/requireCsrf');
 
 const router = express.Router();
 router.use(requireAdminSession);
+
+// Gap this closes: previously these fields had NO type check at all before
+// hitting encrypt()/the database — a non-string value (number, object)
+// wouldn't crash (encrypt() stringifies internally) but would silently
+// encrypt something like "[object Object]" with no indication anything
+// was wrong. .nullable().optional() on each preserves the exact
+// undefined/null/string three-way convention already documented below
+// (omitted or null = don't change, "" = clear) — validation adds type and
+// length safety without changing that behavior.
+const paystackUpdateSchema = z.object({
+  mode: z.enum(['test', 'live']),
+  publicKeyTest: z.string().max(500).nullable().optional(),
+  secretKeyTest: z.string().max(500).nullable().optional(),
+  publicKeyLive: z.string().max(500).nullable().optional(),
+  secretKeyLive: z.string().max(500).nullable().optional()
+});
 
 function decryptForMask(encrypted) {
   if (!encrypted) return null;
@@ -53,11 +70,11 @@ router.get('/', async (req, res) => {
 // lets the client save mode/public-key changes without being forced to
 // resend a secret key it never decrypted in the first place.
 router.put('/', requireCsrf, async (req, res) => {
-  const { mode, publicKeyTest, secretKeyTest, publicKeyLive, secretKeyLive } = req.body || {};
-
-  if (mode !== 'test' && mode !== 'live') {
-    return res.status(400).json({ error: "mode must be 'test' or 'live'" });
+  const parsed = paystackUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid request body', details: parsed.error.issues });
   }
+  const { mode, publicKeyTest, secretKeyTest, publicKeyLive, secretKeyLive } = parsed.data;
 
   const pool = getPool();
   const client = await pool.connect();

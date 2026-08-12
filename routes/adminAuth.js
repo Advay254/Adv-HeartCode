@@ -1,4 +1,5 @@
 const express = require('express');
+const { z } = require('zod');
 const { getPool } = require('../db/init');
 const {
   timingSafeEqual,
@@ -11,6 +12,16 @@ const { requireCsrf } = require('../middleware/requireCsrf');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+// Gap this closes: previously just `typeof username === 'string'`, with no
+// length bound at all — an unbounded string could be sent as either field
+// before the rate limiter even has a chance to matter for THIS request
+// (bcrypt is already gone, but wasted work on a huge string is still
+// wasted work). 200 chars is generous headroom past any real credential.
+const loginBodySchema = z.object({
+  username: z.string().min(1).max(200),
+  password: z.string().min(1).max(200)
+});
 
 // ---- brute-force protection (in-memory) ----
 // Resets on server restart, and only scopes per running process — both
@@ -85,12 +96,12 @@ apiRouter.post('/login', async (req, res) => {
     return res.status(429).json({ error: 'Too many attempts, try again later' });
   }
 
-  const { username, password } = req.body || {};
-
-  if (typeof username !== 'string' || typeof password !== 'string') {
+  const parsed = loginBodySchema.safeParse(req.body);
+  if (!parsed.success) {
     recordFailure(ip);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  const { username, password } = parsed.data;
 
   // Both checks always run (no short-circuit on username first), and both
   // use timingSafeEqual — constant-time comparison against a single

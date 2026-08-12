@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { getActivePaystackKeys } = require('../lib/paystack');
 const { finalizeDeployment } = require('../lib/finalizeDeployment');
@@ -7,9 +8,28 @@ const sitePasswordCache = require('../lib/sitePasswordCache');
 const { createRateLimiter } = require('../lib/rateLimit');
 
 const router = express.Router();
-router.use(express.json({ limit: '2mb' }));
+// Scoped to the one route that needs a parsed body (below), not applied
+// router-wide. This is the actual fix for a bug this version's audit
+// caught: an earlier router-wide express.json() here was silently
+// consuming the request body for EVERY request that reached this router
+// — including, depending on mount order in server.js, requests meant for
+// other routes entirely that need the RAW, unparsed body (the Paystack
+// webhook's signature check). Scoping the parser to exactly the route
+// that needs it means this router can never again do that to a request it
+// wasn't supposed to touch, regardless of how mount order in server.js
+// changes in the future.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Gap this closes: renderedHtml/sitePassword previously had no length
+// bound at all beyond the router's blanket 2MB body limit, and sitePassword
+// had no type check before being hashed. 1MB leaves headroom under that
+// 2MB ceiling for JSON overhead around the actual string.
+const checkoutBodySchema = z.object({
+  renderedHtml: z.string().min(1).max(1000000),
+  clientEmail: z.string().trim().email().max(254),
+  sitePassword: z.string().max(200).optional()
+});
 
 // Separate budget from the AI-generate limiter — different action,
 // different cost, an abusive run on one shouldn't block legitimate use of
@@ -106,7 +126,7 @@ router.get('/build/:slug/checkout', async (req, res) => {
 // asks Paystack to initialize a transaction; returns the URL to redirect
 // the browser to. Nothing is deployed yet — that only happens once
 // payment is confirmed, via the webhook or the callback page below.
-router.post('/build/:slug/checkout', async (req, res) => {
+router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req, res) => {
   const ip = req.ip;
   if (!checkoutLimiter.tryConsume(ip)) {
     return res.status(429).json({ error: 'Too many checkout attempts, please try again later' });
@@ -122,14 +142,18 @@ router.post('/build/:slug/checkout', async (req, res) => {
   }
   const websiteType = typeResult.rows[0];
 
-  const { renderedHtml, clientEmail, sitePassword } = req.body || {};
-
-  if (typeof renderedHtml !== 'string' || !renderedHtml.trim()) {
-    return res.status(400).json({ error: 'renderedHtml is required' });
+  const parsed = checkoutBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const field = firstIssue ? firstIssue.path[0] : 'request';
+    return res.status(400).json({ error: `Invalid ${field}` });
   }
+  const { renderedHtml, clientEmail: email, sitePassword } = parsed.data;
 
-  const email = typeof clientEmail === 'string' ? clientEmail.trim() : '';
-  if (!email || !EMAIL_RE.test(email)) {
+  if (!EMAIL_RE.test(email)) {
+    // zod's .email() already validated this; the house regex is kept as
+    // a belt-and-suspenders check on the exact shape the rest of the
+    // system expects, same reasoning as routes/apiBuild.js.
     return res.status(400).json({ error: 'A valid clientEmail is required' });
   }
 

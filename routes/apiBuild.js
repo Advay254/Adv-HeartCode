@@ -1,20 +1,35 @@
 const express = require('express');
+const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { getActiveProviderConfig } = require('../lib/ai-provider');
 const { substitutePlaceholders } = require('../lib/template');
 const { createRateLimiter } = require('../lib/rateLimit');
 
 const router = express.Router();
-router.use(express.json());
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Field keys are dynamic (only known after querying this website type's
+// template_fields), so this can't be a fully static schema. client_email
+// is validated strictly; .catchall() validates every OTHER key generically
+// — string, reasonably bounded, or absent. Gap this closes: previously an
+// optional (non-required) field had NO type check at all before being
+// dropped into the AI prompt — a client could send a number, array, or
+// deeply nested object for any optional field and it would flow straight
+// into JSON.stringify(). Required-field presence is still checked
+// separately below (depends on runtime DB state — which fields THIS
+// website type actually has — so it can't be expressed in a static schema
+// the way the type/length bound here can).
+const generateBodySchema = z
+  .object({ client_email: z.string().trim().email().max(254) })
+  .catchall(z.string().max(5000).optional());
 
 // Max 5 generations per IP per hour — this is the endpoint that costs AI
 // tokens once a request reaches the provider, so it's worth protecting
 // before payment exists at all.
 const generateLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60 * 1000 });
 
-router.post('/:slug/generate', async (req, res) => {
+router.post('/:slug/generate', express.json(), async (req, res) => {
   const ip = req.ip;
 
   // Consumed FIRST, before any DB work or validation — every POST here
@@ -42,13 +57,20 @@ router.post('/:slug/generate', async (req, res) => {
   );
   const fields = fieldsResult.rows;
 
-  const values = req.body || {};
+  const parsed = generateBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  const values = parsed.data;
 
-  // ---- server-side validation — never trust the client-side checks ----
+  // ---- required-field presence — depends on THIS website type's fields,
+  // which is runtime DB state, not something a static schema can express ----
   const missingFields = [];
 
-  const clientEmail = typeof values.client_email === 'string' ? values.client_email.trim() : '';
-  if (!clientEmail || !EMAIL_RE.test(clientEmail)) {
+  if (!EMAIL_RE.test(values.client_email)) {
+    // zod's .email() already validated this, but the existing stricter
+    // house regex is kept as a belt-and-suspenders check on the exact
+    // shape the rest of the system (and the AI prompt) expects.
     missingFields.push('client_email');
   }
 
