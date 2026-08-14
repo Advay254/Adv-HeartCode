@@ -134,9 +134,78 @@ CREATE TABLE IF NOT EXISTS subscriber_emails (
   first_seen_at TIMESTAMPTZ DEFAULT NOW(),
   opted_out BOOLEAN DEFAULT false
 );
+
+-- v1.0.6: real currency conversion (website_types.price_kes was never
+-- really KES to begin with -- it was a raw number with a hardcoded "KES"
+-- label and no actual conversion anywhere. price_usd is the new source of
+-- truth; price_kes is left in place, populated once below, but nothing in
+-- the application reads it after this version.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS price_usd NUMERIC(10,2);
+
+-- One-time backfill, NO conversion math: the old numeric value becomes the
+-- new price_usd as-is, since it was already effectively the intended price
+-- (just mislabeled). Only touches rows that haven't been backfilled yet
+-- (price_usd IS NULL) so this stays safe to run on every boot -- it will
+-- never re-clobber a price an admin has since edited via the new UI.
+UPDATE website_types SET price_usd = price_kes WHERE price_usd IS NULL;
+
+CREATE TABLE IF NOT EXISTS exchange_rates (
+  base_currency TEXT NOT NULL DEFAULT 'USD',
+  target_currency TEXT NOT NULL,
+  rate NUMERIC(18,6) NOT NULL,
+  fetched_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (base_currency, target_currency)
+);
+
+-- Toggle Advay flips once M-Pesa is actually enabled on his Paystack
+-- account. Until then, Kenyan visitors are charged in USD by card, same as
+-- everyone else. ON CONFLICT DO NOTHING so this seed never clobbers a
+-- value an admin has already set via the dashboard.
+INSERT INTO site_settings (key, value) VALUES ('kenyan_payment_currency', 'USD')
+  ON CONFLICT (key) DO NOTHING;
+
+-- pending_deployments/deployed_sites.amount_kes was the same
+-- raw-number-mislabeled-as-KES value as website_types.price_kes, snapshotted
+-- at checkout time. The new charge_currency/charge_amount(_usd) columns
+-- below are the real, currency-aware replacement for it going forward.
+-- amount_kes is left in place (NOT NULL relaxed so new rows can omit it)
+-- purely so historical rows from before this version keep their original
+-- value -- nothing in the application writes to it anymore after this
+-- version. Safe to run every boot: dropping NOT NULL from an
+-- already-nullable column is a no-op.
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS charge_currency TEXT;
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS charge_amount NUMERIC(12,2);
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS exchange_rate_snapshot NUMERIC(18,6);
+ALTER TABLE pending_deployments ALTER COLUMN amount_kes DROP NOT NULL;
+
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS charge_currency TEXT;
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS charge_amount NUMERIC(12,2);
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS charge_amount_usd NUMERIC(10,2);
+ALTER TABLE deployed_sites ALTER COLUMN amount_kes DROP NOT NULL;
+
+-- v1.0.6: per-website-type AI configuration. AI is OFF by default for
+-- every type (ai_enabled defaults false) -- the admin opts each type in
+-- explicitly and configures it like a node: a system prompt, a
+-- user-prompt template built from the type's own raw fields, and a set of
+-- output fields (ai_output_fields below) describing exactly what
+-- structured JSON to request back.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN DEFAULT false;
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS ai_system_prompt TEXT DEFAULT '';
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS ai_user_prompt_template TEXT DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS ai_output_fields (
+  id SERIAL PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  output_key TEXT NOT NULL,
+  output_type TEXT NOT NULL DEFAULT 'string' CHECK (output_type IN ('string', 'array_of_strings', 'array_of_objects')),
+  description TEXT DEFAULT '',
+  object_shape JSONB DEFAULT NULL,
+  display_order INTEGER DEFAULT 0,
+  UNIQUE(website_type_id, output_key)
+);
 `;
 
-const CURRENT_VERSION = '1.0.4';
+const CURRENT_VERSION = '1.0.6';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
