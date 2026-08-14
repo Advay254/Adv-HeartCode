@@ -9,6 +9,8 @@
   <header class="site-header">
     <a href="/">← HeartCode</a>
     <h1><%= websiteType.name %></h1>
+    <p class="price"><%= websiteType.displayPrimary %></p>
+    <% if (websiteType.displaySecondary) { %><p class="price-secondary"><%= websiteType.displaySecondary %></p><% } %>
   </header>
   <main class="site-main">
     <form id="buildForm">

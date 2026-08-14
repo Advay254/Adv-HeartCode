@@ -21,7 +21,8 @@
           <div class="type-card">
             <h2><%= t.name %></h2>
             <p><%= t.description %></p>
-            <p class="price">KES <%= Number(t.priceKes).toLocaleString() %></p>
+            <p class="price"><%= t.displayPrimary %></p>
+            <% if (t.displaySecondary) { %><p class="price-secondary"><%= t.displaySecondary %></p><% } %>
             <a class="btn" href="/build/<%= t.slug %>">Build this</a>
           </div>
         <% }); %>

@@ -12,7 +12,7 @@
   <main class="site-main">
     <div class="type-card">
       <p><%= websiteType.name %></p>
-      <p style="font-size:1.4rem; font-weight:600; margin:0.25rem 0 1rem;">KES <%= Number(websiteType.priceKes).toLocaleString() %></p>
+      <p style="font-size:1.4rem; font-weight:600; margin:0.25rem 0 1rem;"><%= websiteType.chargeDisplay %></p>
 
       <label>Password-protect this site (optional)
         <input type="password" id="sitePassword" placeholder="Leave blank for no password">
