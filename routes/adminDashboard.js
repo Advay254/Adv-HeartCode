@@ -26,9 +26,24 @@ router.get('/stats', async (req, res) => {
         COUNT(*) FILTER (WHERE NOT is_active) AS inactive_count
       FROM website_types
     `),
-    pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(amount_kes), 0) AS revenue FROM deployed_sites'),
+    // v1.0.6: COALESCE(charge_amount_usd, amount_kes) unifies pre- and
+    // post-1.0.6 rows into one USD-equivalent figure. For rows written
+    // before this version, amount_kes was never really KES to begin with —
+    // it was the same raw, mislabeled number website_types.price_kes used
+    // to hold — so it's numerically already the correct USD-equivalent
+    // value, same reasoning as the price_usd backfill in db/init.js. For
+    // rows written by this version onward, amount_kes is left NULL and
+    // charge_amount_usd (back-calculated from the real charge in
+    // lib/finalizeDeployment.js) is the real figure. Summing raw
+    // charge_amount directly here would be wrong once even one deployment
+    // has been charged in KES — it would add USD and KES numbers together
+    // as if they were the same currency.
+    pool.query(
+      "SELECT COUNT(*) AS total, COALESCE(SUM(COALESCE(charge_amount_usd, amount_kes)), 0) AS revenue FROM deployed_sites"
+    ),
     pool.query(`
-      SELECT wt.name, wt.slug, COUNT(ds.id) AS deployment_count, COALESCE(SUM(ds.amount_kes), 0) AS revenue_kes
+      SELECT wt.name, wt.slug, COUNT(ds.id) AS deployment_count,
+             COALESCE(SUM(COALESCE(ds.charge_amount_usd, ds.amount_kes)), 0) AS revenue_usd
       FROM website_types wt
       LEFT JOIN deployed_sites ds ON ds.website_type_id = wt.id
       GROUP BY wt.id, wt.name, wt.slug
@@ -46,13 +61,13 @@ router.get('/stats', async (req, res) => {
     activeTypeCount: Number(typeCountsResult.rows[0].active_count),
     inactiveTypeCount: Number(typeCountsResult.rows[0].inactive_count),
     totalDeployments: Number(deploymentStatsResult.rows[0].total),
-    totalRevenueKes: Number(deploymentStatsResult.rows[0].revenue),
+    totalRevenueUsd: Number(deploymentStatsResult.rows[0].revenue),
     subscriberCount: Number(subscriberCountResult.rows[0].count),
     breakdown: breakdownResult.rows.map(r => ({
       name: r.name,
       slug: r.slug,
       deploymentCount: Number(r.deployment_count),
-      revenueKes: Number(r.revenue_kes)
+      revenueUsd: Number(r.revenue_usd)
     }))
   });
 });
@@ -78,7 +93,9 @@ router.get('/deployments', async (req, res) => {
   const offset = (page - 1) * PAGE_SIZE;
 
   const dataResult = await pool.query(
-    `SELECT ds.reference, ds.client_email, ds.site_url, ds.amount_kes, ds.deployed_at, wt.name AS website_type_name
+    `SELECT ds.reference, ds.client_email, ds.site_url, ds.amount_kes,
+            ds.charge_currency, ds.charge_amount, ds.charge_amount_usd,
+            ds.deployed_at, wt.name AS website_type_name
      FROM deployed_sites ds
      LEFT JOIN website_types wt ON wt.id = ds.website_type_id
      ${whereClause}
@@ -93,7 +110,14 @@ router.get('/deployments', async (req, res) => {
       clientEmail: d.client_email,
       siteUrl: d.site_url,
       websiteTypeName: d.website_type_name,
-      amountKes: d.amount_kes,
+      // v1.0.6: chargeCurrency/chargeAmount are the REAL amount actually
+      // charged (null for pre-1.0.6 rows, which only have the legacy
+      // amount_kes figure). amountUsd is the unified USD-equivalent figure
+      // used for revenue totals regardless of which era the row is from —
+      // see the /stats route above for the same COALESCE reasoning.
+      chargeCurrency: d.charge_currency,
+      chargeAmount: d.charge_amount !== null ? Number(d.charge_amount) : null,
+      amountUsd: d.charge_amount_usd !== null ? Number(d.charge_amount_usd) : (d.amount_kes !== null ? Number(d.amount_kes) : null),
       deployedAt: d.deployed_at
     })),
     page,
