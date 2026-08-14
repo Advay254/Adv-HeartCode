@@ -14,6 +14,7 @@
     <div class="tabs">
       <button type="button" class="tab-btn active" data-tab="details">Details</button>
       <button type="button" class="tab-btn" data-tab="fields">Fields</button>
+      <button type="button" class="tab-btn" data-tab="ai">AI</button>
       <button type="button" class="tab-btn" data-tab="template">Template</button>
     </div>
 
@@ -22,7 +23,7 @@
         <form id="detailsForm">
           <label>Name <input type="text" name="name" value="<%= websiteType.name %>" required></label>
           <label>Description <textarea name="description" style="min-height:80px;"><%= websiteType.description %></textarea></label>
-          <label>Price (KES) <input type="number" name="priceKes" value="<%= websiteType.price_kes %>" min="0"></label>
+          <label>Price (USD) <input type="number" name="priceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01"></label>
           <label>Display order <input type="number" name="displayOrder" value="<%= websiteType.display_order %>"></label>
           <label><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
           <button type="submit" style="margin-top:0.75rem;">Save details</button>
@@ -57,6 +58,50 @@
           <thead><tr><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
           <tbody id="fieldsTableBody"></tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="tab-ai" class="tab-panel" style="display:none;">
+      <div class="card">
+        <label><input type="checkbox" id="aiEnabledToggle"> Use AI for this website type</label>
+        <p style="color:var(--text-dim); font-size:0.85rem; margin-top:0.5rem;">
+          Off (default): form submissions go straight to the template using the raw values a client typed — no AI call, no cost.
+          On: the raw values are sent to your configured AI provider first, using the prompt and output fields below, and the AI's response fills the template instead.
+        </p>
+      </div>
+
+      <div id="aiConfigSection" style="display:none;">
+        <div class="card">
+          <p>Available raw field tokens: <span id="aiAvailableFields">—</span></p>
+          <label>System prompt <textarea id="aiSystemPrompt" style="min-height:100px;" placeholder="You are a copywriting engine for a bakery's website..."></textarea></label>
+          <label>User prompt template <textarea id="aiUserPromptTemplate" style="min-height:100px;" placeholder="Client's raw input — vibe: {{vibe_description}}, business name: {{business_name}}"></textarea></label>
+          <button type="button" id="saveAiConfigBtn" style="margin-top:0.75rem;">Save AI configuration</button>
+          <p id="aiConfigStatus" class="msg" style="display:none;"></p>
+        </div>
+
+        <div class="card">
+          <h2>Add output field</h2>
+          <p style="color:var(--text-dim); font-size:0.85rem;">These describe exactly what structured JSON to request from the AI — each becomes a placeholder usable in the Template tab.</p>
+          <form id="addOutputFieldForm">
+            <label>Output key (letters, numbers, underscore only) <input type="text" name="outputKey" required pattern="[a-z0-9_]+"></label>
+            <label>Type
+              <select name="outputType" id="outputTypeSelect">
+                <option value="string">Text (single value)</option>
+                <option value="array_of_strings">List of texts</option>
+                <option value="array_of_objects">List of objects</option>
+              </select>
+            </label>
+            <label>Description (guidance for the AI on what to generate) <input type="text" name="description"></label>
+            <label id="objectShapeRow" style="display:none;">Object shape keys (comma-separated, e.g. title, caption) <input type="text" name="objectShapeKeys"></label>
+            <button type="submit" style="margin-top:0.75rem;">Add output field</button>
+          </form>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>Placeholder</th><th>Type</th><th>Description</th><th></th></tr></thead>
+            <tbody id="outputFieldsTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
