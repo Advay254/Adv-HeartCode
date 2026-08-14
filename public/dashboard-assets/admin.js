@@ -170,7 +170,27 @@
       if (res.ok) { applyConfig(data); showStatus('Live secret cleared.', 'success'); }
     });
 
+    // v1.0.6: Kenyan visitor payment currency toggle.
+    async function loadKenyanCurrency() {
+      const res = await window.adminFetch('/api/admin/settings/kenyan-payment-currency');
+      const data = await res.json();
+      document.getElementById('kenyanCurrencySelect').value = data.value;
+    }
+
+    document.getElementById('saveKenyanCurrencyBtn').addEventListener('click', async () => {
+      const value = document.getElementById('kenyanCurrencySelect').value;
+      const res = await window.adminFetch('/api/admin/settings/kenyan-payment-currency', {
+        method: 'PUT',
+        body: JSON.stringify({ value })
+      });
+      const statusEl = document.getElementById('kenyanCurrencyStatus');
+      statusEl.style.display = 'block';
+      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+      statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+    });
+
     load();
+    loadKenyanCurrency();
   }
 
   // ---- AI provider page ----
@@ -322,7 +342,7 @@
           <td><span class="badge ${t.isActive ? 'badge-active' : 'badge-inactive'}">${t.isActive ? 'active' : 'inactive'}</span></td>
           <td>${t.fieldCount}</td>
           <td>${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : '—'}</td>
-          <td>KES ${t.priceKes}</td>
+          <td>$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="badge badge-active">AI</span>' : ''}</td>
           <td><button type="button" class="btn-danger delete-type" data-id="${t.id}">Delete</button></td>
         </tr>`).join('') || '<tr><td colspan="6">No website types yet.</td></tr>';
 
@@ -345,7 +365,7 @@
           name: form.name.value,
           slug: form.slug.value || undefined,
           description: form.description.value,
-          priceKes: Number(form.priceKes.value) || 0
+          priceUsd: Number(form.priceUsd.value) || 0
         })
       });
       const data = await res.json();
@@ -366,6 +386,34 @@
   // ---- website types: detail page ----
   function initWebsiteTypesDetailPage() {
     const typeId = document.body.dataset.typeId;
+    let currentFields = [];
+    let currentOutputFields = [];
+
+    function placeholderTokenForField(f) {
+      return `{{${f.fieldKey}}}`;
+    }
+
+    function placeholderTokenForOutput(f) {
+      if (f.outputType === 'array_of_strings') {
+        return `{{#each ${f.outputKey}}} {{this}} {{/each}}`;
+      }
+      if (f.outputType === 'array_of_objects') {
+        const shapeKeys = f.objectShape ? Object.keys(f.objectShape) : [];
+        const inner = shapeKeys.map(k => `{{this.${k}}}`).join(' ');
+        return `{{#each ${f.outputKey}}} ${inner} {{/each}}`;
+      }
+      return `{{${f.outputKey}}}`;
+    }
+
+    // Combines raw fields and (if AI is enabled) AI output fields into one
+    // reference list — flat outputs and raw fields both show as {{key}},
+    // array-shaped outputs show the full {{#each key}}...{{/each}} syntax
+    // so the admin never has to guess which form a given field needs in
+    // the template.
+    function renderPlaceholdersReference() {
+      const tokens = currentFields.map(placeholderTokenForField).concat(currentOutputFields.map(placeholderTokenForOutput));
+      document.getElementById('availablePlaceholders').textContent = tokens.length ? tokens.join(',  ') : 'none defined yet';
+    }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -384,7 +432,7 @@
         body: JSON.stringify({
           name: form.name.value,
           description: form.description.value,
-          priceKes: Number(form.priceKes.value) || 0,
+          priceUsd: Number(form.priceUsd.value) || 0,
           displayOrder: Number(form.displayOrder.value) || 0,
           isActive: form.isActive.checked
         })
@@ -398,6 +446,7 @@
     async function loadFields() {
       const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields`);
       const fields = await res.json();
+      currentFields = fields;
       document.getElementById('fieldsTableBody').innerHTML = fields.map(f => `
         <tr>
           <td>{{${escapeHtml(f.fieldKey)}}}</td>
@@ -407,8 +456,7 @@
           <td><button type="button" class="btn-danger remove-field" data-id="${f.id}">Remove</button></td>
         </tr>`).join('') || '<tr><td colspan="5">No fields yet.</td></tr>';
 
-      document.getElementById('availablePlaceholders').textContent =
-        fields.length ? fields.map(f => `{{${f.fieldKey}}}`).join(', ') : 'none defined yet';
+      renderPlaceholdersReference();
 
       document.querySelectorAll('.remove-field').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -475,9 +523,12 @@
       const statusEl = document.getElementById('templateStatus');
       statusEl.style.display = 'block';
       if (res.ok) {
-        statusEl.className = 'msg ' + (data.undefinedPlaceholders.length ? 'msg-warning' : 'msg-success');
-        statusEl.textContent = data.undefinedPlaceholders.length
-          ? `Saved as v${data.version}, but these placeholders have no matching field: ${data.undefinedPlaceholders.join(', ')}`
+        const warnings = []
+          .concat(data.undefinedPlaceholders.length ? [`no matching field: ${data.undefinedPlaceholders.join(', ')}`] : [])
+          .concat(data.shapeWarnings || []);
+        statusEl.className = 'msg ' + (warnings.length ? 'msg-warning' : 'msg-success');
+        statusEl.textContent = warnings.length
+          ? `Saved as v${data.version}, but: ${warnings.join(' | ')}`
           : `Saved as v${data.version}.`;
         loadTemplate();
       } else {
@@ -486,7 +537,99 @@
       }
     });
 
-    loadFields();
+    // ---- AI tab (v1.0.6) ----
+
+    function renderOutputFieldsTable() {
+      document.getElementById('outputFieldsTableBody').innerHTML = currentOutputFields.map(f => `
+        <tr>
+          <td>${escapeHtml(placeholderTokenForOutput(f))}</td>
+          <td>${escapeHtml(f.outputType)}</td>
+          <td>${escapeHtml(f.description || '')}</td>
+          <td><button type="button" class="btn-danger remove-output-field" data-id="${f.id}">Remove</button></td>
+        </tr>`).join('') || '<tr><td colspan="4">No output fields yet.</td></tr>';
+
+      document.querySelectorAll('.remove-output-field').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const res = await window.adminFetch(`/api/admin/website-types/${typeId}/ai/output-fields/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) loadAiConfig();
+        });
+      });
+    }
+
+    async function loadAiConfig() {
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/ai`);
+      const data = await res.json();
+
+      document.getElementById('aiEnabledToggle').checked = data.aiEnabled;
+      document.getElementById('aiConfigSection').style.display = data.aiEnabled ? 'block' : 'none';
+      document.getElementById('aiSystemPrompt').value = data.aiSystemPrompt || '';
+      document.getElementById('aiUserPromptTemplate').value = data.aiUserPromptTemplate || '';
+      document.getElementById('aiAvailableFields').textContent =
+        currentFields.length ? currentFields.map(placeholderTokenForField).join(', ') : 'none defined yet — add raw fields first';
+
+      currentOutputFields = data.outputFields || [];
+      renderOutputFieldsTable();
+      renderPlaceholdersReference();
+    }
+
+    document.getElementById('aiEnabledToggle').addEventListener('change', async (e) => {
+      const enabled = e.target.checked;
+      document.getElementById('aiConfigSection').style.display = enabled ? 'block' : 'none';
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/ai`, {
+        method: 'PUT',
+        body: JSON.stringify({ aiEnabled: enabled })
+      });
+      if (res.ok) loadAiConfig();
+    });
+
+    document.getElementById('saveAiConfigBtn').addEventListener('click', async () => {
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/ai`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          aiSystemPrompt: document.getElementById('aiSystemPrompt').value,
+          aiUserPromptTemplate: document.getElementById('aiUserPromptTemplate').value
+        })
+      });
+      const statusEl = document.getElementById('aiConfigStatus');
+      statusEl.style.display = 'block';
+      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+      statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+    });
+
+    document.getElementById('outputTypeSelect').addEventListener('change', (e) => {
+      document.getElementById('objectShapeRow').style.display = e.target.value === 'array_of_objects' ? 'block' : 'none';
+    });
+
+    document.getElementById('addOutputFieldForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const outputType = form.outputType.value;
+      let objectShape;
+      if (outputType === 'array_of_objects') {
+        const keys = form.objectShapeKeys.value.split(',').map(s => s.trim()).filter(Boolean);
+        objectShape = {};
+        keys.forEach(k => { objectShape[k] = 'string'; });
+      }
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/ai/output-fields`, {
+        method: 'POST',
+        body: JSON.stringify({
+          outputKey: form.outputKey.value,
+          outputType,
+          description: form.description.value,
+          objectShape
+        })
+      });
+      if (res.ok) {
+        form.reset();
+        document.getElementById('objectShapeRow').style.display = 'none';
+        loadAiConfig();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to add output field.');
+      }
+    });
+
+    loadFields().then(loadAiConfig);
     loadTemplate();
   }
 
@@ -501,7 +644,7 @@
           <tr>
             <td>${escapeHtml(b.name)}</td>
             <td>${b.deploymentCount}</td>
-            <td>KES ${b.revenueKes.toLocaleString()}</td>
+            <td>$${b.revenueUsd.toFixed(2)}</td>
           </tr>`).join('') || '<tr><td colspan="3">No website types yet.</td></tr>';
 
         container.innerHTML = `
@@ -526,7 +669,7 @@
 
           <div class="card">
             <h2>Deployments</h2>
-            <p>${stats.totalDeployments} total &middot; KES ${stats.totalRevenueKes.toLocaleString()} revenue &middot; ${stats.subscriberCount} subscriber(s)</p>
+            <p>${stats.totalDeployments} total &middot; $${stats.totalRevenueUsd.toFixed(2)} revenue &middot; ${stats.subscriberCount} subscriber(s)</p>
           </div>
 
           <div class="card">
@@ -560,12 +703,25 @@
       const res = await window.adminFetch(url);
       const data = await res.json();
 
+      function formatDeploymentAmount(d) {
+        // v1.0.6: chargeCurrency/chargeAmount hold the REAL amount actually
+        // charged for deployments from this version onward. Pre-1.0.6 rows
+        // only have the legacy amountUsd figure (from amount_kes, which was
+        // already effectively USD — see routes/adminDashboard.js) with no
+        // real currency on record, shown with an "(est.)" hint instead of
+        // asserting a currency that was never actually recorded.
+        if (d.chargeCurrency && d.chargeAmount !== null) {
+          return `${escapeHtml(d.chargeCurrency)} ${Number(d.chargeAmount).toFixed(2)}`;
+        }
+        return d.amountUsd !== null ? `~$${Number(d.amountUsd).toFixed(2)} (est.)` : '—';
+      }
+
       document.getElementById('deploymentsTableBody').innerHTML = data.deployments.map(d => `
         <tr>
           <td>${escapeHtml(d.clientEmail)}</td>
           <td>${escapeHtml(d.websiteTypeName || '—')}</td>
           <td><a href="${escapeHtml(d.siteUrl)}" target="_blank" rel="noopener">${escapeHtml(d.siteUrl)}</a></td>
-          <td>KES ${d.amountKes}</td>
+          <td>${formatDeploymentAmount(d)}</td>
           <td>${formatDate(d.deployedAt)}</td>
         </tr>`).join('') || '<tr><td colspan="5">No deployments yet.</td></tr>';
 
