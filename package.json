@@ -1,6 +1,6 @@
 {
   "name": "heartcode",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "HeartCode — client-facing website builder (foundation)",
   "main": "server.js",
   "scripts": {

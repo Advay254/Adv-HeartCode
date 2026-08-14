@@ -76,18 +76,19 @@ See the README's environment variables section for what each one does, its failu
    [DB] Migrations ready.
    [DB] Init complete.
    [SERVER] HeartCode listening on port ...
+   [CURRENCY] Refreshed ... exchange rates.
    ```
-   If `initDB()` throws, the process exits immediately by design — it won't serve traffic against a broken database — and you'll see the actual Postgres error logged just before the crash.
+   If `initDB()` throws, the process exits immediately by design — it won't serve traffic against a broken database — and you'll see the actual Postgres error logged just before the crash. The `[CURRENCY]` line (added in v1.0.6) comes from a separate, non-blocking exchange-rate fetch right after boot — if that line instead reads "Failed to refresh exchange rates", the app is still healthy; currency conversion just falls back to plain USD everywhere until the next refresh succeeds.
 3. Hit `https://<your-app>.onrender.com/health`. You should get:
    ```json
-   { "status": "ok", "db": "connected", "version": "1.0.4" }
+   { "status": "ok", "db": "connected", "version": "1.0.6" }
    ```
 
 ## 6. Log into the admin dashboard for the first time
 
 1. Go to `https://<your-app>.onrender.com/<ADMIN_PATH_SLUG>/login`, using the exact value you set for `ADMIN_PATH_SLUG` in Render's environment variables. There is no `/admin` route — that path (and `/__internal_admin`) always 404s, by design.
 2. Log in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` exactly as set in Render's environment variables.
-3. From the dashboard: set up Paystack keys (Payments), at least one AI provider with a key and selected model (AI Provider), and at least one website type with fields and a saved template (Website Types) — the public homepage at `/` has nothing to show until a website type is both active and has an active template.
+3. From the dashboard: set up Paystack keys (Payments), at least one AI provider with a key and selected model (AI Provider), and at least one website type with fields, a price, and a saved template (Website Types) — the public homepage at `/` has nothing to show until a website type is both active and has an active template. Prices are set in USD; the app converts for display automatically. AI is off by default per website type — turn it on from that type's own "AI" tab if you want AI-generated copy for it, otherwise form submissions go straight to the template as typed. Kenyan visitors are charged in USD by card until you flip the "Kenyan visitor payment currency" toggle on the Payments page — leave it as-is until M-Pesa is actually set up on your Paystack account.
 
 ## Troubleshooting
 

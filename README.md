@@ -20,7 +20,7 @@ Full step-by-step walkthrough with more detail and troubleshooting: see `DEPLOYM
 - PostgreSQL via `pg`, hosted on Supabase or Aiven
 - EJS server-rendered views for both the admin dashboard and the public builder flow
 - Deployed on Render (see `DEPLOYMENT.md`)
-- Generated client sites are intended to deploy to Cloudflare Pages — not yet implemented, planned for a later version
+- Generated client sites deploy live to Cloudflare Pages, paid for via Paystack
 
 ## Environment variables
 
@@ -86,12 +86,13 @@ Once running, visit `http://localhost:3000/` for the public builder flow, or `ht
 ```
 db/         — database bootstrapping: init.js (schema, migrations, getPool())
 lib/        — framework-free helpers: crypto, auth, ai-provider, paystack, template
-              substitution, rate limiting, Cloudflare Pages deployment, email,
+              substitution (incl. v1.0.6 loop syntax), currency conversion,
+              geolocation, rate limiting, Cloudflare Pages deployment, email,
               deployment finalization, the site-password bridge cache
 middleware/ — Express middleware: admin slug gating, session auth, CSRF
 routes/     — route handlers, split by area: admin pages, admin API (by
-              feature), public pages (incl. checkout), public build API,
-              the Paystack webhook
+              feature, incl. v1.0.6's generic site-settings API), public
+              pages (incl. checkout), public build API, the Paystack webhook
 views/      — EJS templates, split into admin/ (dashboard) and public/
               (client-facing builder + checkout flow)
 public/     — static assets served as-is (CSS, JS) — no server-rendered
@@ -105,7 +106,13 @@ public/     — static assets served as-is (CSS, JS) — no server-rendered
 - **v1.0.2** — Admin dashboard shell + Paystack config + AI provider config + website types/fields/versioned templates, all CSRF-protected, all backed by real DB transactions where single-row/single-active state matters.
 - **v1.0.3** — Public builder flow (type selection → dynamic form → AI content-fill → sandboxed preview), plus this README and `DEPLOYMENT.md`.
 - **v1.0.4** — Real payment and deployment: Paystack checkout, a signature-verified webhook, idempotent deployment finalization, live Cloudflare Pages deploys, and the "your site is ready" email via Resend.
+- **v1.0.5** — Security hardening: Helmet CSP with every inline `<script>` externalized to `public/dashboard-assets/admin.js`/`public/site.js`, same-origin CORS on every API surface except the Paystack webhook (deliberately — see `HANDOFF.md`), a global rate limiter, Zod validation across every route (closed a real crash vector — a malformed numeric ID could previously take the whole process down), and a real admin dashboard for deployments and subscribers. Also fixed a real pre-existing bug present since v1.0.4: the public router's unscoped `express.json()` was silently consuming the Paystack webhook's raw body before its signature check ever saw it.
+- **v1.0.6** — Currency handling, per-website-type AI configuration, and loop-capable templates:
+  - **Real currency conversion.** `website_types.price_kes` was never actually KES — it was a raw number with a hardcoded "KES" label and zero conversion anywhere. It's replaced by `price_usd` as the real source of truth (the old column is left in place, unused, for backward compatibility — nothing reads it anymore). Prices are now geolocated and converted for display in the visitor's own currency (via `open.er-api.com`, cached and refreshed every 24h), with a strict rule: if no rate is available for a currency, the display always falls back to correctly-labeled USD rather than ever showing a raw number under the wrong currency code. Kenyan visitors get a dedicated toggle (Payments page in the dashboard) — USD by default, flippable to real KES charging once M-Pesa is set up on the Paystack account. A separate, real bug was also fixed in the same pass: the Paystack `currency` field was never being sent at all in earlier versions, meaning charges silently relied on whatever currency the Paystack account itself defaulted to, regardless of the number sent as `amount`. It's now sent explicitly, snapshotted at checkout time and never recomputed later (so a mid-flight exchange-rate refresh can't cause a mismatch at verification).
+  - **Per-website-type AI configuration.** AI is now off by default for every website type. Each type can be individually switched on from its dashboard page (new "AI" tab), with its own system prompt, user-prompt template (built from that type's raw fields), and a set of "output fields" describing exactly what structured JSON to request back from the configured provider — flat text, a list of texts, or a list of objects with a defined shape. When a type has AI off, form submissions go straight to the template with zero AI calls and zero cost; the AI provider is never even queried. A lighter rate limit applies to non-AI types (20/hour) versus AI-enabled ones (5/hour, unchanged from earlier versions), since only the latter cost real tokens.
+  - **Loop-capable templates.** Templates can now use `{{#each field}}...{{/each}}` to render a list-shaped AI output field — `{{this}}` for a list of plain text, `{{this.sub_key}}` for a list of objects. Saving a template now also warns (without blocking) if a flat placeholder is used against a list-shaped field, or vice versa, so a shape mistake is caught immediately rather than silently rendering blank on a live client preview.
+  - A real, pre-existing bug (present since the original template substitution was written) was also fixed in the same file: a genuinely-blank optional form field previously rendered as the literal text `"undefined"` in client-facing output.
 
 ## What's next
 
-Payment and deployment are live as of v1.0.4. Not yet built: a way for you (the admin) to see the list of paid deployments and subscriber emails collected in `deployed_sites`/`subscriber_emails` — those tables exist and are being written to, but there's no dashboard page for them yet.
+Nothing is currently scoped for v1.0.7. The dashboard for deployments and subscribers (flagged as missing as of v1.0.4) shipped in v1.0.5. One item flagged in `HANDOFF.md` as worth prioritizing early remains open: there's still no global Express error-handling middleware, and async route handlers aren't wrapped to forward unexpected errors to it — the v1.0.5 Zod audit closed the most likely trigger (malformed IDs/bodies), but any other unexpected error inside an async handler without its own `try/catch` still risks the same unhandled-rejection-terminates-the-process failure mode. See `HANDOFF.md`'s "Known gaps" section for the full list, including the Cloudflare Pages deploy path, which still hasn't completed a real successful deployment in testing (the build/test sandbox has no network access to `api.cloudflare.com`) — worth a deliberate first real-world test with actual credentials.

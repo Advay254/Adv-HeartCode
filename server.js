@@ -12,11 +12,13 @@ const adminPaystackRouter = require('./routes/adminPaystack');
 const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminWebsiteTypesRouter = require('./routes/adminWebsiteTypes');
 const adminDashboardRouter = require('./routes/adminDashboard');
+const adminSettingsRouter = require('./routes/adminSettings');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
 const webhooksRouter = require('./routes/webhooks');
 const sitePasswordCache = require('./lib/sitePasswordCache');
 const { createRateLimiter } = require('./lib/rateLimit');
+const { refreshExchangeRates } = require('./lib/currency');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -139,6 +141,7 @@ app.use('/api/admin/paystack', adminPaystackRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/website-types', adminWebsiteTypesRouter);
 app.use('/api/admin/dashboard', adminDashboardRouter);
+app.use('/api/admin/settings', adminSettingsRouter);
 
 // Public build API: not session-gated (there's no session for a client
 // filling out a form), rate-limited per IP inside the router instead.
@@ -150,10 +153,10 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: '1.0.5' });
+    res.json({ status: 'ok', db: 'connected', version: '1.0.6' });
   } catch (err) {
     console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.5' });
+    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.6' });
   }
 });
 
@@ -181,6 +184,20 @@ function startCleanupJob() {
   }, CLEANUP_INTERVAL_MS);
 }
 
+// v1.0.6: keeps lib/currency.js's exchange_rates table warm. Runs once at
+// boot (fire-and-forget — refreshExchangeRates() already catches and logs
+// its own errors, so a slow/failed first fetch never delays or blocks
+// server startup) and then every 24h, same pattern as the cleanup job
+// above.
+const EXCHANGE_RATE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function startExchangeRateRefreshJob() {
+  refreshExchangeRates().catch(() => {});
+  setInterval(() => {
+    refreshExchangeRates().catch(() => {});
+  }, EXCHANGE_RATE_REFRESH_INTERVAL_MS);
+}
+
 async function start() {
   try {
     await initDB();
@@ -190,6 +207,7 @@ async function start() {
   }
 
   startCleanupJob();
+  startExchangeRateRefreshJob();
 
   app.listen(PORT, () => {
     console.log(`[SERVER] HeartCode listening on port ${PORT}`);
