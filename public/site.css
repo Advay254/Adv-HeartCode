@@ -75,6 +75,8 @@ a { color: inherit; }
 .type-card h2 { margin: 0 0 0.5rem; font-size: 1.15rem; }
 .type-card p { color: var(--text-dim); flex: 1; margin: 0 0 1rem; }
 .type-card .price { color: var(--text); font-weight: 600; margin-bottom: 1rem; }
+.price { color: var(--text); font-weight: 600; }
+.price-secondary { color: var(--text-dim); font-size: 0.8rem; margin: -0.75rem 0 1rem; }
 
 .req { color: var(--danger); }
 
