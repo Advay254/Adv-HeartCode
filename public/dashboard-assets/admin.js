@@ -365,7 +365,8 @@
           name: form.name.value,
           slug: form.slug.value || undefined,
           description: form.description.value,
-          priceUsd: Number(form.priceUsd.value) || 0
+          priceUsd: Number(form.priceUsd.value) || 0,
+          iconName: form.iconName.value
         })
       });
       const data = await res.json();
@@ -434,7 +435,8 @@
           description: form.description.value,
           priceUsd: Number(form.priceUsd.value) || 0,
           displayOrder: Number(form.displayOrder.value) || 0,
-          isActive: form.isActive.checked
+          isActive: form.isActive.checked,
+          iconName: form.iconName.value
         })
       });
       const statusEl = document.getElementById('detailsStatus');
@@ -795,6 +797,109 @@
     loadSubscribers();
   }
 
+  // ---- site settings page (v1.0.7) ----
+  function initSiteSettingsPage() {
+    async function load() {
+      const res = await window.adminFetch('/api/admin/site-settings');
+      const data = await res.json();
+      const form = document.getElementById('siteSettingsForm');
+      Object.keys(data).forEach(key => {
+        if (form[key]) form[key].value = data[key];
+      });
+    }
+
+    document.getElementById('siteSettingsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/site-settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          manual_stats_number: form.manual_stats_number.value,
+          manual_stats_label: form.manual_stats_label.value,
+          site_title: form.site_title.value,
+          meta_description: form.meta_description.value,
+          favicon_url: form.favicon_url.value,
+          og_image_url: form.og_image_url.value
+        })
+      });
+      const statusEl = document.getElementById('siteSettingsStatus');
+      statusEl.style.display = 'block';
+      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+      statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+    });
+
+    load();
+  }
+
+  // ---- script injection manager page (v1.0.7) ----
+  function initScriptsPage() {
+    const CONTAINER_IDS = { head: 'headScripts', body_start: 'bodyStartScripts', footer: 'footerScripts' };
+    const COUNT_IDS = { head: 'headCount', body_start: 'bodyStartCount', footer: 'footerCount' };
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/scripts');
+      const data = await res.json();
+      ['head', 'body_start', 'footer'].forEach(placement => renderPlacement(placement, data[placement] || []));
+    }
+
+    function renderPlacement(placement, scripts) {
+      document.getElementById(COUNT_IDS[placement]).textContent = `${scripts.length} / 3`;
+      const container = document.getElementById(CONTAINER_IDS[placement]);
+      container.innerHTML = scripts.map(s => `
+        <div class="card" style="margin-top:0.75rem;">
+          <p><strong>${escapeHtml(s.name)}</strong> ${s.isActive ? '<span class="badge badge-active">Active</span>' : '<span class="badge">Inactive</span>'}</p>
+          <pre style="white-space:pre-wrap; word-break:break-all; font-size:0.8rem; background:var(--bg); padding:0.5rem; border-radius:6px; overflow-x:auto;">${escapeHtml(s.scriptContent)}</pre>
+          <button type="button" class="toggle-script" data-id="${s.id}" data-active="${s.isActive}">${s.isActive ? 'Deactivate' : 'Activate'}</button>
+          <button type="button" class="btn-danger remove-script" data-id="${s.id}">Remove</button>
+        </div>`).join('') || '<p style="color:var(--text-dim); font-size:0.85rem;">No scripts in this section yet.</p>';
+
+      container.querySelectorAll('.toggle-script').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const isActive = btn.dataset.active === 'true';
+          const res = await window.adminFetch(`/api/admin/scripts/${btn.dataset.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: !isActive })
+          });
+          if (res.ok) load();
+        });
+      });
+      container.querySelectorAll('.remove-script').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const res = await window.adminFetch(`/api/admin/scripts/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+    }
+
+    document.getElementById('addScriptForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/scripts', {
+        method: 'POST',
+        body: JSON.stringify({
+          placement: form.placement.value,
+          name: form.name.value,
+          scriptContent: form.scriptContent.value,
+          isActive: form.isActive.checked
+        })
+      });
+      const statusEl = document.getElementById('addScriptStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        statusEl.className = 'msg msg-success';
+        statusEl.textContent = 'Script added.';
+        form.reset();
+        load();
+      } else {
+        const data = await res.json();
+        statusEl.className = 'msg msg-error';
+        statusEl.textContent = data.error || 'Failed to add script.';
+      }
+    });
+
+    load();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -805,5 +910,7 @@
     if (page === 'website-types-detail') initWebsiteTypesDetailPage();
     if (page === 'overview') initOverviewPage();
     if (page === 'submissions') initSubmissionsPage();
+    if (page === 'site-settings') initSiteSettingsPage();
+    if (page === 'scripts') initScriptsPage();
   });
 })();
