@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+</head>
+<body class="bg-white font-sans text-hc-ink antialiased">
+<%- include('../partials/public-body-start-scripts') %>
+
+<%- include('../partials/public-nav') %>
+
+<section class="bg-hc-blue px-4 py-14 text-center sm:px-6 sm:py-20">
+  <div class="mx-auto max-w-3xl" data-reveal>
+    <p class="mb-3 inline-block rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-hc-yellow">
+      Website types
+    </p>
+    <h1 class="font-display text-4xl uppercase text-white sm:text-5xl">Find your kind of site</h1>
+    <p class="mt-4 text-base text-white/80 sm:text-lg">
+      Every price below is already converted to your own currency — pick a type to see the form.
+    </p>
+  </div>
+</section>
+
+<main class="bg-white px-4 py-16 sm:px-6">
+  <div class="mx-auto max-w-6xl">
+    <% if (websiteTypes.length === 0) { %>
+      <div class="mx-auto max-w-md py-16 text-center" data-reveal>
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-6 [&>svg]:w-6">
+          <%- getIconSvg('sparkles') %>
+        </div>
+        <h2 class="mt-5 text-lg font-semibold text-hc-ink">Nothing available right now</h2>
+        <p class="mt-2 text-sm text-hc-ink/60">Check back soon — new website types are added regularly.</p>
+      </div>
+    <% } else { %>
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <% websiteTypes.forEach(function (t) { %>
+          <div class="hc-panel hc-panel-hover flex flex-col p-6" data-reveal>
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-6 [&>svg]:w-6">
+              <%- getIconSvg(t.iconName) %>
+            </div>
+            <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
+            <p class="mt-1 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+            <div class="mt-5">
+              <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
+              <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>
+            </div>
+            <a href="/build/<%= t.slug %>" class="hc-pill-btn mt-5 w-full">Build this</a>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</main>
+
+<%- include('../partials/public-footer') %>
+<%- include('../partials/public-footer-scripts') %>
+</body>
+</html>

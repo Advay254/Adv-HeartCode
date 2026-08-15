@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <%- include('../partials/public-head') %>
-<title>Build <%= websiteType.name %> — HeartCode</title>
 </head>
 <body data-page="build" data-slug="<%= websiteType.slug %>">
+<%- include('../partials/public-body-start-scripts') %>
 <div class="site-shell">
   <header class="site-header">
     <a href="/">← HeartCode</a>
@@ -47,5 +47,6 @@
 
 <script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return f.fieldKey; })) %></script>
 <script src="/site.js" defer></script>
+<%- include('../partials/public-footer-scripts') %>
 </body>
 </html>

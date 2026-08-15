@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <%- include('../partials/public-head') %>
-<title>Checkout — <%= websiteType.name %> — HeartCode</title>
 </head>
 <body data-page="checkout" data-slug="<%= websiteType.slug %>">
+<%- include('../partials/public-body-start-scripts') %>
 <div class="site-shell">
   <header class="site-header">
     <h1>Checkout</h1>
@@ -28,5 +28,6 @@
   </main>
 </div>
 <script src="/site.js" defer></script>
+<%- include('../partials/public-footer-scripts') %>
 </body>
 </html>

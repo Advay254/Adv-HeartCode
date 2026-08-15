@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+</head>
+<body class="bg-white font-sans text-hc-ink antialiased">
+<%- include('../partials/public-body-start-scripts') %>
+
+<%- include('../partials/public-nav') %>
+
+<!-- HERO -->
+<section class="relative overflow-hidden bg-hc-blue px-4 pb-16 pt-14 sm:px-6 sm:pb-24 sm:pt-20 lg:pb-28 lg:pt-24">
+  <div class="mx-auto flex max-w-6xl flex-col items-center gap-12 lg:flex-row lg:items-center lg:gap-10">
+    <div class="max-w-xl text-center lg:text-left" data-reveal>
+      <p class="mb-4 inline-block rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-hc-yellow">
+        Live in minutes, not weeks
+      </p>
+      <h1 class="font-display text-5xl uppercase leading-[0.95] text-white sm:text-6xl lg:text-8xl">
+        <%= siteSettings.site_title %>
+      </h1>
+      <p class="mt-6 text-lg text-white/80 sm:text-xl">
+        Pick a type, answer a short form, and get a real website — copy written, hosted, and live before you close the tab.
+      </p>
+      <div class="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
+        <a href="/explore" class="hc-pill-btn">Explore website types</a>
+      </div>
+    </div>
+    <div class="w-full max-w-xl" data-reveal>
+      <!-- LAPTOP MOCKUP PLACEHOLDER — swap this <div> for the real asset once
+           it's ready, e.g.:
+           <img src="/images/hero-laptop.png" width="640" height="480"
+                alt="A HeartCode-built website shown on a laptop"
+                class="hc-panel w-full" loading="eager">
+           Explicit width/height on that real <img> tag is required to avoid
+           layout shift once it's swapped in — don't drop them. -->
+      <div
+        class="hc-panel aspect-[4/3] w-full bg-gradient-to-br from-hc-yellow via-white to-hc-blue/30 shadow-2xl"
+        role="img"
+        aria-label="Placeholder for a laptop mockup of a HeartCode-built website"
+      ></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works" class="bg-white px-4 py-20 sm:px-6">
+  <div class="mx-auto max-w-6xl">
+    <p class="text-center text-xs font-semibold uppercase tracking-widest text-hc-blue">How it works</p>
+    <h2 class="mt-3 text-center font-display text-3xl uppercase text-hc-ink sm:text-4xl">Three steps. One live site.</h2>
+
+    <div class="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
+      <div class="text-center" data-reveal>
+        <span class="font-display text-sm text-hc-blue/40">01</span>
+        <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
+          <%- getIconSvg('layout-template') %>
+        </div>
+        <h3 class="mt-5 text-lg font-semibold text-hc-ink">Pick a type</h3>
+        <p class="mt-2 text-sm text-hc-ink/60">Choose the kind of site that fits your business — bakery, salon, studio, and more.</p>
+      </div>
+
+      <div class="text-center" data-reveal>
+        <span class="font-display text-sm text-hc-blue/40">02</span>
+        <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
+          <%- getIconSvg('pencil') %>
+        </div>
+        <h3 class="mt-5 text-lg font-semibold text-hc-ink">Fill in details</h3>
+        <p class="mt-2 text-sm text-hc-ink/60">A short form asks what makes your business yours. Real copy comes back, not a template.</p>
+      </div>
+
+      <div class="text-center" data-reveal>
+        <span class="font-display text-sm text-hc-blue/40">03</span>
+        <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
+          <%- getIconSvg('rocket') %>
+        </div>
+        <h3 class="mt-5 text-lg font-semibold text-hc-ink">Get your live site</h3>
+        <p class="mt-2 text-sm text-hc-ink/60">Pay once, and your site deploys live in minutes — no hosting to manage, ever.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="bg-hc-ink px-4 py-16 text-center sm:px-6">
+  <div class="mx-auto max-w-2xl" data-reveal>
+    <p class="font-display text-6xl text-hc-yellow sm:text-7xl">
+      <span data-countup="<%= statsNumber %>">0</span>
+    </p>
+    <p class="mt-3 text-sm uppercase tracking-widest text-white/70"><%= siteSettings.manual_stats_label %></p>
+  </div>
+</section>
+
+<!-- TYPE TEASER GRID -->
+<section class="bg-white px-4 py-20 sm:px-6">
+  <div class="mx-auto max-w-6xl">
+    <div class="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-widest text-hc-blue">Website types</p>
+        <h2 class="mt-3 font-display text-3xl uppercase text-hc-ink sm:text-4xl">Built for your kind of business</h2>
+      </div>
+      <a href="/explore" class="hc-pill-btn-outline hidden sm:inline-flex">See all types</a>
+    </div>
+
+    <% if (typeTeasers.length === 0) { %>
+      <p class="mt-10 text-center text-hc-ink/60">Nothing available right now — check back soon.</p>
+    <% } else { %>
+      <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <% typeTeasers.forEach(function (t) { %>
+          <a href="/build/<%= t.slug %>" class="hc-panel hc-panel-hover block p-6" data-reveal>
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-6 [&>svg]:w-6">
+              <%- getIconSvg(t.iconName) %>
+            </div>
+            <h3 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h3>
+            <p class="mt-1 line-clamp-2 text-sm text-hc-ink/60"><%= t.description %></p>
+            <p class="mt-4 text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
+          </a>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <div class="mt-10 flex justify-center sm:hidden">
+      <a href="/explore" class="hc-pill-btn-outline">See all types</a>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST LINE -->
+<section class="border-y border-black/5 bg-white px-4 py-8 sm:px-6">
+  <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 text-center sm:flex-row sm:justify-center sm:gap-10">
+    <span class="inline-flex items-center gap-2 text-sm text-hc-ink/70">
+      <span class="text-hc-blue [&>svg]:h-4 [&>svg]:w-4"><%- getIconSvg('shield-check') %></span>
+      Secure checkout via Paystack
+    </span>
+    <span class="inline-flex items-center gap-2 text-sm text-hc-ink/70">
+      <span class="text-hc-blue [&>svg]:h-4 [&>svg]:w-4"><%- getIconSvg('zap') %></span>
+      No account or registration required
+    </span>
+  </div>
+</section>
+
+<%- include('../partials/public-footer') %>
+<%- include('../partials/public-footer-scripts') %>
+</body>
+</html>

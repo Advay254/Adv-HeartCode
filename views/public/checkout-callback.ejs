@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <%- include('../partials/public-head') %>
-<title>Checkout result — HeartCode</title>
 </head>
 <body>
+<%- include('../partials/public-body-start-scripts') %>
 <div class="site-shell">
   <main class="site-main" style="text-align:center; padding-top:3rem;">
     <% if (outcome === 'success') { %>
@@ -32,5 +32,6 @@
     <% } %>
   </main>
 </div>
+<%- include('../partials/public-footer-scripts') %>
 </body>
 </html>
