@@ -5,7 +5,7 @@ HeartCode is a client-facing website builder platform: a client picks a website 
 ## Deploy this to Render
 
 1. Push this repo to GitHub.
-2. Render dashboard → **New → Web Service** → connect the repo. Build command: `npm install`. Start command: `npm start`.
+2. Render dashboard → **New → Web Service** → connect the repo. Build command: **`npm install && npm run build:css`** — not just `npm install` anymore as of v1.0.7 (see "Build command" note below; missing this half breaks every public page's styling). Start command: `npm start`.
 3. Add every env var from the table below under the service's **Environment** tab.
 4. Provision a Postgres database on Supabase or Aiven, and paste its pooled connection string into `DATABASE_URL`.
 5. Deploy.
@@ -14,11 +14,24 @@ HeartCode is a client-facing website builder platform: a client picks a website 
 
 Full step-by-step walkthrough with more detail and troubleshooting: see `DEPLOYMENT.md`.
 
+### Build command — read this if you're updating an existing Render service
+
+As of v1.0.7, the public-facing pages (landing page, type gallery) are styled with Tailwind CSS, compiled ahead of time into `public/styles/main.css` by a build step — it is **not** checked into the repo as the source of truth; `src/styles/main.css` is the real source, and `public/styles/main.css` is generated from it.
+
+If you already have a Render service running from an earlier version, you need to **update its Build Command** in the Render dashboard (Settings → Build Command) from `npm install` to:
+```
+npm install && npm run build:css
+```
+This is a setting on the Render service itself, not something in the repo — updating the code alone (applying this version's zip) does **not** change it. If you forget, `npm run build:css` never runs, `public/styles/main.css` never gets (re)generated on that deploy, and the landing page / type gallery load with no styling.
+
+As a safety net, this delivery includes a real, already-built `public/styles/main.css` committed alongside the source files — so the site won't be broken even if you deploy without updating the build command first. But it will go stale the moment any future change touches the Tailwind source files or view markup, so update the build command as soon as you can rather than relying on this indefinitely.
+
 ## Tech stack
 
 - Node.js + Express (CommonJS)
 - PostgreSQL via `pg`, hosted on Supabase or Aiven
 - EJS server-rendered views for both the admin dashboard and the public builder flow
+- Tailwind CSS (CLI-compiled, v1.0.7) for the public-facing landing page and type gallery — the admin dashboard keeps its own hand-written stylesheet, untouched
 - Deployed on Render (see `DEPLOYMENT.md`)
 - Generated client sites deploy live to Cloudflare Pages, paid for via Paystack
 
@@ -74,8 +87,11 @@ cp .env.example .env
 Fill in `.env` using the table and guidance above, then:
 
 ```bash
+npm run build:css
 npm start
 ```
+
+`npm run build:css` compiles `src/styles/main.css` into `public/styles/main.css` (Tailwind CLI) — needed once before first run, and again any time you change `src/styles/main.css`, `tailwind.config.js`, or add new Tailwind classes to a public view (there's no watch mode wired up; re-run it manually after each such change during local development).
 
 The server runs `initDB()` on every boot, which creates/updates all tables and is safe to run repeatedly — it fails fast (`process.exit(1)`) rather than serving traffic against a broken database.
 
@@ -88,15 +104,22 @@ db/         — database bootstrapping: init.js (schema, migrations, getPool())
 lib/        — framework-free helpers: crypto, auth, ai-provider, paystack, template
               substitution (incl. v1.0.6 loop syntax), currency conversion,
               geolocation, rate limiting, Cloudflare Pages deployment, email,
-              deployment finalization, the site-password bridge cache
+              deployment finalization, the site-password bridge cache, site
+              settings + site scripts reads (v1.0.7, cached), icon loading (v1.0.7)
 middleware/ — Express middleware: admin slug gating, session auth, CSRF
 routes/     — route handlers, split by area: admin pages, admin API (by
-              feature, incl. v1.0.6's generic site-settings API), public
-              pages (incl. checkout), public build API, the Paystack webhook
+              feature, incl. v1.0.6's generic site-settings API and v1.0.7's
+              site-settings/scripts APIs), public pages (incl. checkout,
+              landing page, type gallery), public build API, the Paystack webhook
 views/      — EJS templates, split into admin/ (dashboard) and public/
-              (client-facing builder + checkout flow)
-public/     — static assets served as-is (CSS, JS) — no server-rendered
-              content lives here anymore as of v1.0.3
+              (client-facing landing page, type gallery, builder + checkout flow)
+public/     — static assets: dashboard-assets/ (admin CSS/JS), site.css/site.js
+              (public builder flow), site-interactions.js (v1.0.7 scroll-reveal/
+              count-up), icons/ (v1.0.7, 40 bundled Lucide SVGs), styles/main.css
+              (v1.0.7, BUILT from src/styles/main.css — see "Build command" above)
+src/        — v1.0.7: Tailwind source. src/styles/main.css is the real source of
+              truth for the public design system; public/styles/main.css is
+              generated from it and should not be hand-edited
 ```
 
 ## Versions
@@ -112,7 +135,14 @@ public/     — static assets served as-is (CSS, JS) — no server-rendered
   - **Per-website-type AI configuration.** AI is now off by default for every website type. Each type can be individually switched on from its dashboard page (new "AI" tab), with its own system prompt, user-prompt template (built from that type's raw fields), and a set of "output fields" describing exactly what structured JSON to request back from the configured provider — flat text, a list of texts, or a list of objects with a defined shape. When a type has AI off, form submissions go straight to the template with zero AI calls and zero cost; the AI provider is never even queried. A lighter rate limit applies to non-AI types (20/hour) versus AI-enabled ones (5/hour, unchanged from earlier versions), since only the latter cost real tokens.
   - **Loop-capable templates.** Templates can now use `{{#each field}}...{{/each}}` to render a list-shaped AI output field — `{{this}}` for a list of plain text, `{{this.sub_key}}` for a list of objects. Saving a template now also warns (without blocking) if a flat placeholder is used against a list-shaped field, or vice versa, so a shape mistake is caught immediately rather than silently rendering blank on a live client preview.
   - A real, pre-existing bug (present since the original template substitution was written) was also fixed in the same file: a genuinely-blank optional form field previously rendered as the literal text `"undefined"` in client-facing output.
+- **v1.0.7** — Real design system, marketing landing page, type gallery, and a script injection manager:
+  - **Design system.** Anton (display) + Inter (body) via Google Fonts, `--hc-blue` (#183fad) / `--hc-yellow` (#F1BF0A) as CSS custom properties, compiled through a real Tailwind CSS v3 pipeline (`src/styles/main.css` → `public/styles/main.css`, see "Build command" above — **this changes what Render's Build Command needs to be**). Two reusable component classes: `.hc-pill-btn` (pure-CSS hover fill-sweep, no JS) and `.hc-panel` (the site's signature asymmetric-corner card shape, with a uniform-rounding fallback below 480px). Scroll-reveal and a count-up stat number run off one shared `IntersectionObserver` in `public/site-interactions.js`, respecting `prefers-reduced-motion`. Scoped entirely to public-facing views — the admin dashboard's own stylesheet and look are untouched.
+  - **Landing page (`/`)** — nav, hero, a genuinely-sequential "how it works" (pick a type → fill in details → get your live site), an admin-editable stats counter, a live teaser of real website types pulled from the DB (converted prices, v1.0.6's currency work included), a trust line, and a footer.
+  - **Type gallery (`/explore`)** — replaces the old bare list that used to live at `/` with a real card grid: curated icon, name, description, converted price, and a "Build this" CTA per type. `/build/:slug` is unaffected — same route, same form, just linked to differently now.
+  - **Site Settings** (new admin page) — site title, meta description, favicon URL, OG share image URL, and the landing page's stats number/label, all editable without a redeploy and reflected on public pages within the same request (the read-side cache is actively invalidated on save, not just left to expire).
+  - **Script injection manager** (new admin page) — paste raw third-party script tags/inline code (analytics, pixels, etc.), targeting three placements (`<head>`, right after `<body>` opens, right before `</body>` closes), capped at 3 per placement. Rendered on **public pages only** — never reaches an admin-authenticated page. This required a real, deliberate CSP change: `script-src`/`connect-src`/`img-src` are loosened to `https:` (plus `'unsafe-inline'` for `script-src`, since real analytics snippets are often inline code, not just an external `src`) on public pages specifically, while the admin dashboard keeps the original strict `script-src 'self'` policy completely unchanged. `unsafe-eval` was deliberately never added to either policy.
+  - **40 curated icons** (real Lucide SVGs, bundled as static files, inlined via a small cached loader) — a fixed set for layout/UI use, plus a smaller admin-selectable subset (`website_types.icon_name`, new column) shown on type gallery/teaser cards.
 
 ## What's next
 
-Nothing is currently scoped for v1.0.7. The dashboard for deployments and subscribers (flagged as missing as of v1.0.4) shipped in v1.0.5. One item flagged in `HANDOFF.md` as worth prioritizing early remains open: there's still no global Express error-handling middleware, and async route handlers aren't wrapped to forward unexpected errors to it — the v1.0.5 Zod audit closed the most likely trigger (malformed IDs/bodies), but any other unexpected error inside an async handler without its own `try/catch` still risks the same unhandled-rejection-terminates-the-process failure mode. See `HANDOFF.md`'s "Known gaps" section for the full list, including the Cloudflare Pages deploy path, which still hasn't completed a real successful deployment in testing (the build/test sandbox has no network access to `api.cloudflare.com`) — worth a deliberate first real-world test with actual credentials.
+Nothing is currently scoped for v1.0.8 yet. v1.0.7's own build prompt already flagged its own follow-ups: the admin dashboard's visual design, the live preview page, and the form/checkout/callback pages were deliberately left untouched this version (only their `<head>`/script-injection plumbing changed, not their layout) — a visual pass on those is expected to be a future version. Real photography/mockup assets for the landing page's hero are still a placeholder gradient panel (clearly marked in `views/public/landing.ejs` with the exact `<img>` tag to swap in once a real asset exists). Beyond that, the items already flagged in `HANDOFF.md`'s "Known gaps" remain open — most notably, there's still no global Express error-handling middleware wrapping every async route handler, and the Cloudflare Pages deploy path still hasn't completed a real successful deployment in testing (no network access to `api.cloudflare.com` from the build/test sandbox) — worth a deliberate first real-world test with actual credentials.
