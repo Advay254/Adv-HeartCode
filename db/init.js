@@ -203,9 +203,41 @@ CREATE TABLE IF NOT EXISTS ai_output_fields (
   display_order INTEGER DEFAULT 0,
   UNIQUE(website_type_id, output_key)
 );
+
+-- v1.0.7: design system + landing page + type gallery + script manager.
+-- site_settings reuses the existing generic key-value table -- no schema
+-- change needed there, just seeding sensible defaults below so the
+-- landing page and every page's <head> have something real to render
+-- before the admin ever visits the new Site Settings page. ON CONFLICT DO
+-- NOTHING throughout so this never clobbers a value an admin has already
+-- customized, on this or any future boot.
+INSERT INTO site_settings (key, value) VALUES
+  ('manual_stats_number', '4500'),
+  ('manual_stats_label', 'Sites built and counting'),
+  ('favicon_url', ''),
+  ('og_image_url', ''),
+  ('meta_description', 'Pick a website type, fill in your details, and get a live site in minutes.'),
+  ('site_title', 'HeartCode')
+ON CONFLICT (key) DO NOTHING;
+
+-- Curated icon name (matches a filename in public/icons/, see
+-- routes/adminWebsiteTypes.js's ICON_NAMES allow-list) shown on the type
+-- gallery and landing page's type teaser cards. Defaults every existing
+-- row to a real, sensible icon rather than leaving it null and having to
+-- special-case "no icon" rendering on every card.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS icon_name TEXT NOT NULL DEFAULT 'sparkles';
+
+CREATE TABLE IF NOT EXISTS site_scripts (
+  id SERIAL PRIMARY KEY,
+  placement TEXT NOT NULL CHECK (placement IN ('head', 'body_start', 'footer')),
+  name TEXT NOT NULL,
+  script_content TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
-const CURRENT_VERSION = '1.0.6';
+const CURRENT_VERSION = '1.0.7';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
