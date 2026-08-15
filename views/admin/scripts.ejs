@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Scripts — HeartCode Admin</title>
+</head>
+<body data-page="scripts">
+<div class="admin-layout">
+  <%- include('../partials/nav', { activePage: 'scripts' }) %>
+  <main class="admin-main">
+    <h1>Script Injection</h1>
+    <p style="color:var(--text-dim); font-size:0.9rem;">
+      Paste raw script tags or inline code (analytics, pixels, etc.) — rendered on <strong>public pages only</strong>, never on this dashboard.
+      Up to 3 scripts per section. To make room for more, delete one first.
+    </p>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Add a script</h2>
+      <form id="addScriptForm">
+        <label>Section
+          <select name="placement" id="placementSelect">
+            <option value="head">Header (inside &lt;head&gt;)</option>
+            <option value="body_start">Body (right after &lt;body&gt; opens)</option>
+            <option value="footer">Footer (right before &lt;/body&gt;)</option>
+          </select>
+        </label>
+        <label>Name <input type="text" name="name" required placeholder="e.g. Umami Analytics"></label>
+        <label>Script content <textarea name="scriptContent" required style="min-height:120px; font-family:monospace; font-size:0.85rem;" placeholder="&lt;script defer src=&quot;https://...&quot; data-website-id=&quot;...&quot;&gt;&lt;/script&gt;"></textarea></label>
+        <label><input type="checkbox" name="isActive" checked> Active</label>
+        <button type="submit" style="margin-top:0.75rem;">Add script</button>
+      </form>
+      <p id="addScriptStatus" class="msg" style="display:none;"></p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Header <span id="headCount" class="badge">0 / 3</span></h2>
+      <div id="headScripts"></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Body <span id="bodyStartCount" class="badge">0 / 3</span></h2>
+      <div id="bodyStartScripts"></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0;">Footer <span id="footerCount" class="badge">0 / 3</span></h2>
+      <div id="footerScripts"></div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

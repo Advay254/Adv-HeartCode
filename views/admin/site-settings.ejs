@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Site Settings — HeartCode Admin</title>
+</head>
+<body data-page="site-settings">
+<div class="admin-layout">
+  <%- include('../partials/nav', { activePage: 'site-settings' }) %>
+  <main class="admin-main">
+    <h1>Site Settings</h1>
+    <p style="color:var(--text-dim); font-size:0.9rem;">
+      Feeds the landing page's stats section and every public page's favicon/meta tags. Admin dashboard's own look is unaffected.
+    </p>
+
+    <div class="card">
+      <form id="siteSettingsForm">
+        <h2 style="margin-top:0;">Landing page stats</h2>
+        <label>Stats number <input type="text" name="manual_stats_number" placeholder="4500"></label>
+        <label>Stats label <input type="text" name="manual_stats_label" placeholder="Sites built and counting"></label>
+
+        <h2>Page meta</h2>
+        <label>Site title <input type="text" name="site_title" placeholder="HeartCode"></label>
+        <label>Meta description <textarea name="meta_description" style="min-height:70px;" placeholder="Pick a website type, fill in your details, and get a live site in minutes."></textarea></label>
+        <label>Favicon URL <input type="url" name="favicon_url" placeholder="https://example.com/favicon.png"></label>
+        <label>Social share image (OG) URL <input type="url" name="og_image_url" placeholder="https://example.com/og-image.png"></label>
+        <p style="color:var(--text-dim); font-size:0.8rem;">Paste a hosted image URL — no upload here yet, same as the template/hero image workflow already in use.</p>
+
+        <button type="submit" style="margin-top:0.75rem;">Save site settings</button>
+      </form>
+      <p id="siteSettingsStatus" class="msg" style="display:none;"></p>
+    </div>
+  </main>
+</div>
+</body>
+</html>
