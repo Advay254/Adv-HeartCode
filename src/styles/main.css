@@ -1,0 +1,123 @@
+/* v1.0.7 public design system source file — compiled to
+   public/styles/main.css via `npm run build:css` (tailwindcss CLI).
+   PUBLIC-facing pages only; the admin dashboard keeps its own separate
+   stylesheet (public/dashboard-assets/admin.css) and visual design,
+   untouched this version.
+
+   @import MUST be the first rule in the file per the CSS spec (aside from
+   @charset) — this is passed through as-is by the Tailwind CLI (no
+   postcss-import plugin is configured, so it isn't fetched/inlined at
+   build time), and resolved by the visitor's own browser at runtime. The
+   two <link rel="preconnect"> hints for the same two font hosts live in
+   views/partials/public-head.ejs, ahead of this stylesheet's own <link>,
+   so the browser can open those connections before it's even finished
+   downloading/parsing this file. */
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:opsz,wght@14..32,100..900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --hc-blue: #183fad;
+  --hc-yellow: #F1BF0A;
+  --hc-ink: #14151d;
+}
+
+@layer components {
+  /* Pill-shaped CTA button with a pure-CSS hover fill-sweep: a
+     negative-z-index pseudo-element scaled to 0 width, origin-left, swept
+     to full width on hover via a transform transition. No JS. `isolate`
+     gives the button its own stacking context so `-z-10` only has to beat
+     the pseudo, not fight anything outside the button; ordinary in-flow
+     content (the label/icon) naturally paints above a negative-z-index
+     sibling within that context, so no explicit z-index is needed on it. */
+  .hc-pill-btn {
+    @apply relative isolate inline-flex items-center justify-center gap-2
+           overflow-hidden rounded-full bg-hc-blue px-6 py-3 font-sans
+           text-sm font-semibold text-white transition-colors duration-300
+           ease-out;
+  }
+  .hc-pill-btn::before {
+    content: '';
+    @apply absolute inset-0 -z-10 origin-left scale-x-0 bg-hc-yellow
+           transition-transform duration-300 ease-out;
+  }
+  .hc-pill-btn:hover::before,
+  .hc-pill-btn:focus-visible::before {
+    @apply scale-x-100;
+  }
+  .hc-pill-btn:hover,
+  .hc-pill-btn:focus-visible {
+    color: var(--hc-ink);
+  }
+  .hc-pill-btn:focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-hc-blue;
+  }
+
+  /* Secondary pill variant — outlined, for a page's second-priority action
+     (e.g. nav's "Build this" vs. a quieter "Learn more"). Same sweep
+     mechanic, sweeps to a solid blue fill instead of yellow. */
+  .hc-pill-btn-outline {
+    @apply relative isolate inline-flex items-center justify-center gap-2
+           overflow-hidden rounded-full border-2 border-hc-blue bg-transparent
+           px-6 py-[0.6rem] font-sans text-sm font-semibold text-hc-blue
+           transition-colors duration-300 ease-out;
+  }
+  .hc-pill-btn-outline::before {
+    content: '';
+    @apply absolute inset-0 -z-10 origin-left scale-x-0 bg-hc-blue
+           transition-transform duration-300 ease-out;
+  }
+  .hc-pill-btn-outline:hover::before,
+  .hc-pill-btn-outline:focus-visible::before {
+    @apply scale-x-100;
+  }
+  .hc-pill-btn-outline:hover,
+  .hc-pill-btn-outline:focus-visible {
+    @apply text-white;
+  }
+
+  /* Asymmetric rounded-corner panel — the site's signature shape,
+     reused for every card (type teaser, gallery card, how-it-works step).
+     One consistent asymmetric pattern (large sweep top-left/bottom-right,
+     tight corners top-right/bottom-left) rather than a different asymmetry
+     per component. Degrades to uniform, smaller rounding below 480px,
+     where the aggressive asymmetry reads as a layout glitch rather than a
+     deliberate shape on a narrow screen. */
+  .hc-panel {
+    @apply rounded-tl-[2.5rem] rounded-tr-lg rounded-bl-lg rounded-br-[2.5rem]
+           bg-white transition-transform duration-300 ease-out;
+  }
+  .hc-panel-hover {
+    @apply hover:-translate-y-1 hover:shadow-xl;
+  }
+}
+
+@media (max-width: 480px) {
+  .hc-panel {
+    border-radius: 1.25rem;
+  }
+}
+
+/* data-reveal / .is-visible: driven by public/site-interactions.js's
+   IntersectionObserver, CSS transitions only (no JS-driven animation
+   frames for this one — count-up is the only rAF-driven effect, see that
+   file). Respects prefers-reduced-motion by skipping straight to the
+   visible end state with no transition at all. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
