@@ -1,0 +1,14 @@
+<nav class="sticky top-0 z-40 border-b border-black/5 bg-white/90 backdrop-blur">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+    <a href="/" class="flex items-center gap-2 font-sans text-base font-semibold text-hc-ink">
+      <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-hc-blue text-hc-yellow [&>svg]:h-4 [&>svg]:w-4">
+        <%- getIconSvg('heart') %>
+      </span>
+      <span><%= siteSettings.site_title %></span>
+    </a>
+    <div class="flex items-center gap-3 sm:gap-6">
+      <a href="/#how-it-works" class="hidden text-sm font-medium text-hc-ink/70 transition-colors hover:text-hc-ink sm:inline">How it works</a>
+      <a href="/explore" class="hc-pill-btn">Explore types</a>
+    </div>
+  </div>
+</nav>

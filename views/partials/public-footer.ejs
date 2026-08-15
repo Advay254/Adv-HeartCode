@@ -1,0 +1,15 @@
+<footer class="border-t border-black/5 bg-white">
+  <div class="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-10 text-center sm:flex-row sm:justify-between sm:px-6 sm:text-left">
+    <div class="flex items-center gap-2 font-sans font-semibold text-hc-ink">
+      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-hc-blue text-hc-yellow [&>svg]:h-3.5 [&>svg]:w-3.5">
+        <%- getIconSvg('heart') %>
+      </span>
+      <span><%= siteSettings.site_title %></span>
+    </div>
+    <nav class="flex gap-6 text-sm text-hc-ink/60">
+      <a href="/#how-it-works" class="transition-colors hover:text-hc-ink">How it works</a>
+      <a href="/explore" class="transition-colors hover:text-hc-ink">Explore types</a>
+    </nav>
+    <p class="text-xs text-hc-ink/40">&copy; <%= new Date().getFullYear() %> <%= siteSettings.site_title %>. All rights reserved.</p>
+  </div>
+</footer>

@@ -1,0 +1,5 @@
+<% if (typeof activeScripts !== 'undefined' && activeScripts.footer && activeScripts.footer.length) { %>
+<% activeScripts.footer.forEach(function (scriptContent) { %>
+<%- scriptContent %>
+<% }); %>
+<% } %>

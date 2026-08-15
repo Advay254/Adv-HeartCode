@@ -1,3 +1,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' — ' + siteSettings.site_title : siteSettings.site_title %></title>
+<meta name="description" content="<%= siteSettings.meta_description %>">
+<meta property="og:type" content="website">
+<meta property="og:title" content="<%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' — ' + siteSettings.site_title : siteSettings.site_title %>">
+<meta property="og:description" content="<%= siteSettings.meta_description %>">
+<% if (siteSettings.og_image_url) { %><meta property="og:image" content="<%= siteSettings.og_image_url %>"><% } %>
+<% if (siteSettings.favicon_url) { %><link rel="icon" href="<%= siteSettings.favicon_url %>"><% } %>
+
+<!-- v1.0.7: preconnect hints for the two Google Fonts hosts, ahead of the
+     @import inside /styles/main.css that actually requests Anton + Inter
+     — lets the browser open both connections before it's even finished
+     downloading/parsing the stylesheet that needs them. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/styles/main.css">
 <link rel="stylesheet" href="/site.css">
+<script src="/site-interactions.js" defer></script>
+<script src="/site.js" defer></script>
+
+<% if (typeof activeScripts !== 'undefined' && activeScripts.head && activeScripts.head.length) { %>
+<%# v1.0.7: admin-pasted third-party snippets (routes/adminScripts.js), rendered
+    verbatim -- this is exactly the injection point publicCsp in server.js
+    was loosened for. Public pages only; see that file's comment and
+    lib/siteScripts.js for why this never reaches an admin-authenticated render. %>
+<% activeScripts.head.forEach(function (scriptContent) { %>
+<%- scriptContent %>
+<% }); %>
+<% } %>
