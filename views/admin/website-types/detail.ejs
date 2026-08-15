@@ -24,6 +24,11 @@
           <label>Name <input type="text" name="name" value="<%= websiteType.name %>" required></label>
           <label>Description <textarea name="description" style="min-height:80px;"><%= websiteType.description %></textarea></label>
           <label>Price (USD) <input type="number" name="priceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01"></label>
+          <label>Icon
+            <select name="iconName">
+              <% iconNames.forEach(function (name) { %><option value="<%= name %>" <%= websiteType.icon_name === name ? 'selected' : '' %>><%= name %></option><% }); %>
+            </select>
+          </label>
           <label>Display order <input type="number" name="displayOrder" value="<%= websiteType.display_order %>"></label>
           <label><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
           <button type="submit" style="margin-top:0.75rem;">Save details</button>
