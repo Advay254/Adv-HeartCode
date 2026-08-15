@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
+const { CATEGORY_ICON_NAMES, DEFAULT_ICON_NAME } = require('../lib/icons');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -46,7 +47,14 @@ const createTypeSchema = z.object({
   // schema (unused) purely for backward compatibility with pre-1.0.6 rows.
   // Decimals now allowed (no .int()) since real USD prices have cents.
   priceUsd: z.coerce.number().min(0).optional(),
-  slug: z.string().trim().max(100).optional()
+  slug: z.string().trim().max(100).optional(),
+  // v1.0.7: validated against the exact curated set lib/icons.js bundles
+  // as real SVG files — an arbitrary string here would just mean a card
+  // silently falls back to the default icon at render time (getIconSvg
+  // already guards for that), but rejecting it here means the admin finds
+  // out immediately, at save time, rather than wondering later why their
+  // custom icon name never showed up.
+  iconName: z.enum(CATEGORY_ICON_NAMES).optional()
 });
 
 const updateTypeSchema = z.object({
@@ -54,7 +62,8 @@ const updateTypeSchema = z.object({
   description: z.string().max(2000).optional(),
   isActive: z.boolean().optional(),
   priceUsd: z.coerce.number().min(0).optional(),
-  displayOrder: z.coerce.number().int().optional()
+  displayOrder: z.coerce.number().int().optional(),
+  iconName: z.enum(CATEGORY_ICON_NAMES).optional()
 });
 
 const createFieldSchema = z.object({
@@ -139,6 +148,7 @@ router.get('/', async (req, res) => {
       displayOrder: t.display_order,
       priceUsd: Number(t.price_usd) || 0,
       aiEnabled: t.ai_enabled,
+      iconName: t.icon_name,
       fieldCount: Number(fieldCount.rows[0].count),
       activeTemplateVersion: activeTemplate.rowCount > 0 ? activeTemplate.rows[0].version : null,
       createdAt: t.created_at,
@@ -154,7 +164,7 @@ router.post('/', requireCsrf, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'name is required' });
   }
-  const { name, description, priceUsd, slug: providedSlug } = parsed.data;
+  const { name, description, priceUsd, slug: providedSlug, iconName } = parsed.data;
 
   const baseSlug = slugify(providedSlug || name);
   if (!baseSlug) {
@@ -170,9 +180,9 @@ router.post('/', requireCsrf, async (req, res) => {
   const price = typeof priceUsd === 'number' && priceUsd >= 0 ? priceUsd : 0;
 
   const result = await pool.query(
-    `INSERT INTO website_types (slug, name, description, price_usd)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [baseSlug, name, description || '', price]
+    `INSERT INTO website_types (slug, name, description, price_usd, icon_name)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [baseSlug, name, description || '', price, iconName || DEFAULT_ICON_NAME]
   );
   const t = result.rows[0];
   res.status(201).json({
@@ -184,6 +194,7 @@ router.post('/', requireCsrf, async (req, res) => {
     displayOrder: t.display_order,
     priceUsd: Number(t.price_usd) || 0,
     aiEnabled: t.ai_enabled,
+    iconName: t.icon_name,
     fieldCount: 0,
     activeTemplateVersion: null
   });
@@ -199,7 +210,7 @@ router.put('/:id', requireCsrf, async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const { id } = paramsParsed.data;
-  const { name, description, isActive, priceUsd, displayOrder } = bodyParsed.data;
+  const { name, description, isActive, priceUsd, displayOrder, iconName } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -213,14 +224,15 @@ router.put('/:id', requireCsrf, async (req, res) => {
     description: description !== undefined ? description : current.description,
     is_active: isActive !== undefined ? isActive : current.is_active,
     price_usd: priceUsd !== undefined ? priceUsd : current.price_usd,
-    display_order: displayOrder !== undefined ? displayOrder : current.display_order
+    display_order: displayOrder !== undefined ? displayOrder : current.display_order,
+    icon_name: iconName !== undefined ? iconName : current.icon_name
   };
 
   const result = await pool.query(
     `UPDATE website_types SET name = $1, description = $2, is_active = $3,
-       price_usd = $4, display_order = $5, updated_at = NOW()
-     WHERE id = $6 RETURNING *`,
-    [next.name, next.description, next.is_active, next.price_usd, next.display_order, id]
+       price_usd = $4, display_order = $5, icon_name = $6, updated_at = NOW()
+     WHERE id = $7 RETURNING *`,
+    [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name, id]
   );
   const t = result.rows[0];
   res.json({
@@ -231,7 +243,8 @@ router.put('/:id', requireCsrf, async (req, res) => {
     isActive: t.is_active,
     displayOrder: t.display_order,
     priceUsd: Number(t.price_usd) || 0,
-    aiEnabled: t.ai_enabled
+    aiEnabled: t.ai_enabled,
+    iconName: t.icon_name
   });
 });
 

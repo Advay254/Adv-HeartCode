@@ -3,6 +3,7 @@ const { getPool } = require('../db/init');
 const { deriveCsrfToken } = require('../lib/auth');
 const { requireAdminSession, getSessionCookie } = require('../middleware/requireAdminSession');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
+const { CATEGORY_ICON_NAMES } = require('../lib/icons');
 
 const router = express.Router();
 
@@ -11,9 +12,15 @@ router.use(requireAdminSession);
 // Every dashboard page needs the current slug (to build nav links) and a
 // CSRF token (to embed in the page for state-changing fetch calls) — set
 // once here via res.locals rather than repeating it in every route.
+// iconNames (v1.0.7) is here for the same reason: only the website-types
+// views actually use it (the icon picker), but setting it once for every
+// admin page is simpler and safer than remembering to pass it at each of
+// the two specific routes that need it, and lib/icons.js's
+// CATEGORY_ICON_NAMES stays the single source of truth either way.
 router.use((req, res, next) => {
   res.locals.slug = process.env.ADMIN_PATH_SLUG;
   res.locals.csrfToken = deriveCsrfToken(getSessionCookie(req), process.env.SESSION_SECRET);
+  res.locals.iconNames = CATEGORY_ICON_NAMES;
   next();
 });
 
@@ -44,6 +51,14 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, async (req, res) => {
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {
   res.render('admin/submissions');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/site-settings`, (req, res) => {
+  res.render('admin/site-settings');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/scripts`, (req, res) => {
+  res.render('admin/scripts');
 });
 
 module.exports = router;

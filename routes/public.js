@@ -8,8 +8,38 @@ const sitePasswordCache = require('../lib/sitePasswordCache');
 const { createRateLimiter } = require('../lib/rateLimit');
 const { getCurrencyForIp } = require('../lib/geolocation');
 const { getRate, convertUsdTo, getChargeCurrencyForCountry, formatMoney } = require('../lib/currency');
+const { getSiteSettings } = require('../lib/siteSettings');
+const { getActiveScriptsByPlacement } = require('../lib/siteScripts');
 
 const router = express.Router();
+
+// v1.0.7: every public page's <head> needs site_settings (title/meta/OG/
+// favicon), and every public page's layout needs active site_scripts
+// grouped by placement — rather than have every single route handler
+// below remember to fetch and pass both explicitly to res.render(), this
+// runs once per request, before any route, and sets them on res.locals.
+// EJS's include() shares the calling template's locals by default, so
+// views/partials/public-head.ejs (and the body_start/footer script
+// partials) see `siteSettings`/`activeScripts` automatically in every
+// view rendered through this router, with no per-route wiring to forget.
+router.use(async (req, res, next) => {
+  try {
+    const [siteSettings, activeScripts] = await Promise.all([
+      getSiteSettings(),
+      getActiveScriptsByPlacement()
+    ]);
+    res.locals.siteSettings = siteSettings;
+    res.locals.activeScripts = activeScripts;
+  } catch (err) {
+    // Both helpers already catch their own DB errors internally and fall
+    // back to safe defaults — this catch is only for something more
+    // exotic going wrong. Either way, a page render should never break
+    // over site settings/scripts specifically.
+    console.error('[PUBLIC] Failed to load site settings/scripts for request:', err.message);
+  }
+  next();
+});
+
 // Scoped to the one route that needs a parsed body (below), not applied
 // router-wide. This is the actual fix for a bug this version's audit
 // caught: an earlier router-wide express.json() here was silently
@@ -112,18 +142,51 @@ async function resolveChargeForCheckout(req, priceUsd) {
 router.get('/', async (req, res) => {
   const pool = getPool();
   const result = await pool.query(
+    'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 6'
+  );
+
+  const priceFor = await resolveVisitorPricing(req);
+
+  // Sanitized to digits only for the count-up widget (public/site-interactions.js
+  // does its own parseInt/isFinite guard too, but a clean value server-side
+  // means a stray non-numeric character the admin might type into the Site
+  // Settings form — "4,500" or "4500 sites" — never even reaches the DOM
+  // attribute in a form that could confuse it).
+  const statsNumber = String(res.locals.siteSettings.manual_stats_number || '').replace(/[^0-9]/g, '') || '0';
+
+  res.render('public/landing', {
+    pageTitle: null,
+    statsNumber,
+    typeTeasers: result.rows.map(t => {
+      const priceUsd = Number(t.price_usd) || 0;
+      return {
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        iconName: t.icon_name,
+        ...priceFor(priceUsd)
+      };
+    })
+  });
+});
+
+router.get('/explore', async (req, res) => {
+  const pool = getPool();
+  const result = await pool.query(
     'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC'
   );
 
   const priceFor = await resolveVisitorPricing(req);
 
-  res.render('public/home', {
+  res.render('public/explore', {
+    pageTitle: 'Explore website types',
     websiteTypes: result.rows.map(t => {
       const priceUsd = Number(t.price_usd) || 0;
       return {
         slug: t.slug,
         name: t.name,
         description: t.description,
+        iconName: t.icon_name,
         ...priceFor(priceUsd)
       };
     })
@@ -139,6 +202,7 @@ router.get('/build/:slug', async (req, res) => {
 
   if (typeResult.rowCount === 0) {
     return res.status(404).render('public/not-found', {
+      pageTitle: 'Not found',
       message: 'That website type is not available.'
     });
   }
@@ -153,6 +217,7 @@ router.get('/build/:slug', async (req, res) => {
   const priceUsd = Number(websiteType.price_usd) || 0;
 
   res.render('public/build', {
+    pageTitle: websiteType.name,
     websiteType: { slug: websiteType.slug, name: websiteType.name, ...priceFor(priceUsd) },
     fields: fieldsResult.rows.map(f => ({
       fieldKey: f.field_key,
@@ -174,11 +239,13 @@ router.get('/build/:slug/preview', async (req, res) => {
 
   if (typeResult.rowCount === 0) {
     return res.status(404).render('public/not-found', {
+      pageTitle: 'Not found',
       message: 'That website type is not available.'
     });
   }
 
   res.render('public/preview', {
+    pageTitle: `Preview — ${typeResult.rows[0].name}`,
     websiteType: { slug: typeResult.rows[0].slug, name: typeResult.rows[0].name }
   });
 });
@@ -192,6 +259,7 @@ router.get('/build/:slug/checkout', async (req, res) => {
 
   if (typeResult.rowCount === 0) {
     return res.status(404).render('public/not-found', {
+      pageTitle: 'Not found',
       message: 'That website type is not available.'
     });
   }
@@ -207,6 +275,7 @@ router.get('/build/:slug/checkout', async (req, res) => {
   const charge = await resolveChargeForCheckout(req, priceUsd);
 
   res.render('public/checkout', {
+    pageTitle: `Checkout — ${t.name}`,
     websiteType: { slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) }
   });
 });
@@ -361,7 +430,7 @@ router.get('/build/:slug/checkout/callback', async (req, res) => {
     console.error(`[CALLBACK] finalizeDeployment error for ${reference}:`, result.error);
   }
 
-  res.render('public/checkout-callback', { outcome, siteUrl, reference, slug: req.params.slug });
+  res.render('public/checkout-callback', { pageTitle: 'Checkout result', outcome, siteUrl, reference, slug: req.params.slug });
 });
 
 module.exports = router;
