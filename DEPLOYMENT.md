@@ -107,6 +107,9 @@ That's expected — `/admin` is designed to never resolve to anything. Use `/<AD
 **Forgot to set `ADMIN_PATH_SLUG` at all**
 Without it, `adminSlugMiddleware` has nothing to match against and the entire admin dashboard becomes unreachable (by design — no fallback to a guessable default path). Set the env var in Render and redeploy.
 
+**Build fails with `sh: 1: tailwindcss: not found`**
+This was a real bug in the first cut of v1.0.7's delivery, since fixed: `tailwindcss` was listed under `devDependencies` in `package.json`, and `npm install` skips `devDependencies` entirely when `NODE_ENV=production` is set — which this app's own `.env`/Render guidance tells you to set as standard practice (see the `NODE_ENV` row above). The two pieces of advice contradicted each other. Fixed by moving `tailwindcss` into regular `dependencies`, where it installs regardless of `NODE_ENV`. If you're seeing this exact error, you're on a version from before that fix — take the current `package.json`.
+
 **Landing page / type gallery load with no styling (plain black-and-white HTML)**
 `public/styles/main.css` either doesn't exist or is stale. This means the Build Command isn't actually running `npm run build:css` on your Render service — go check **Settings → Build Command** and confirm it reads `npm install && npm run build:css`, not just `npm install`. This is a per-service Render setting, not something that comes from the repo automatically; if you applied this version's zip to an already-existing service, you have to change this yourself. After fixing it, trigger a new deploy (a settings change alone doesn't rebuild) — watch the build logs for a `tailwindcss` line confirming the build actually ran. The admin dashboard is unaffected either way — it uses its own separate, hand-written stylesheet, not this pipeline.
 
