@@ -235,9 +235,104 @@ CREATE TABLE IF NOT EXISTS site_scripts (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v1.0.8 Part A: expanded field types. The original inline CHECK constraint
+-- (no explicit name given) got Postgres's auto-generated name
+-- "template_fields_field_type_check" -- dropped and re-added with the
+-- expanded list every boot. Cheap, and simpler than tracking whether the
+-- constraint definition already matches; a fresh DB gets the same
+-- constraint from SCHEMA above anyway, so this is only ever doing real
+-- work on a pre-1.0.8 database.
+ALTER TABLE template_fields DROP CONSTRAINT IF EXISTS template_fields_field_type_check;
+ALTER TABLE template_fields ADD CONSTRAINT template_fields_field_type_check
+  CHECK (field_type IN ('text', 'textarea', 'email', 'password', 'dropdown', 'number', 'date', 'checkboxes', 'radio'));
+
+-- v1.0.8 Part B: optional per-website-type deploy slug pattern. NULL means
+-- "keep today's random-slug behavior" -- see lib/deploySlug.js.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS deploy_slug_pattern TEXT DEFAULT NULL;
+
+-- Persists the client's raw form field values from checkout through to
+-- deploy time -- previously these only ever existed transiently during
+-- the /api/build/:slug/generate call and were never stored anywhere, so
+-- by the time finalizeDeployment.js actually runs (at payment
+-- verification, potentially long after the original form submission) they
+-- were already gone. A deploy_slug_pattern needs them at THAT point (to
+-- substitute {{field_key}} tokens), which is what this column exists for.
+-- Nullable and only meaningfully populated going forward -- historical
+-- pre-1.0.8 rows never had this data to begin with, which is fine since
+-- deploy_slug_pattern itself defaults to NULL (unused) unless an admin
+-- opts a website type into it.
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS raw_field_values JSONB DEFAULT NULL;
+
+-- v1.0.8 Part C: landing page CMS. landing_content is a single-row table
+-- (enforced in application code the same way routes/adminPaystack.js
+-- enforces paystack_config's single row -- SELECT ... FOR UPDATE inside a
+-- transaction, not a DB-level constraint here, consistent with the
+-- existing pattern). Seeded with the EXACT v1.0.7 hardcoded landing-page
+-- copy so this migration changes zero visual output by itself -- the
+-- point of moving this into the DB is that an admin CAN edit it from here
+-- on, not that anything looks different the moment this migration runs.
+--
+-- One deliberate content change from the literal v1.0.7 markup: the trust
+-- line was two separate badges ("Secure checkout via Paystack" / "No
+-- account or registration required") -- this table has one
+-- trust_line_text column, not a list, so those two are combined into one
+-- line here and the section is rendered as a single line going forward.
+-- Flagged clearly in the delivery notes, not silently changed.
+CREATE TABLE IF NOT EXISTS landing_content (
+  id SERIAL PRIMARY KEY,
+  hero_headline TEXT DEFAULT 'HeartCode',
+  hero_tagline TEXT DEFAULT 'Pick a type, answer a short form, and get a real website — copy written, hosted, and live before you close the tab.',
+  hero_cta_text TEXT DEFAULT 'Explore website types',
+  trust_line_text TEXT DEFAULT 'Secure checkout via Paystack — no account or registration required.',
+  footer_text TEXT DEFAULT '© 2026 HeartCode. All rights reserved.',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO landing_content (hero_headline, hero_tagline, hero_cta_text, trust_line_text, footer_text)
+SELECT
+  'HeartCode',
+  'Pick a type, answer a short form, and get a real website — copy written, hosted, and live before you close the tab.',
+  'Explore website types',
+  'Secure checkout via Paystack — no account or registration required.',
+  '© 2026 HeartCode. All rights reserved.'
+WHERE NOT EXISTS (SELECT 1 FROM landing_content);
+
+CREATE TABLE IF NOT EXISTS landing_steps (
+  id SERIAL PRIMARY KEY,
+  icon_name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  display_order INTEGER DEFAULT 0
+);
+
+-- Seeded once, only if the table has never had a row -- an admin later
+-- deleting every step intentionally (leaving the table empty) must NOT
+-- cause it to silently reseed on the next boot.
+INSERT INTO landing_steps (icon_name, title, description, display_order)
+SELECT * FROM (VALUES
+  ('layout-template', 'Pick a type', 'Choose the kind of site that fits your business — bakery, salon, studio, and more.', 1),
+  ('pencil', 'Fill in details', 'A short form asks what makes your business yours. Real copy comes back, not a template.', 2),
+  ('rocket', 'Get your live site', 'Pay once, and your site deploys live in minutes — no hosting to manage, ever.', 3)
+) AS seed(icon_name, title, description, display_order)
+WHERE NOT EXISTS (SELECT 1 FROM landing_steps);
+
+CREATE TABLE IF NOT EXISTS landing_footer_links (
+  id SERIAL PRIMARY KEY,
+  label TEXT NOT NULL,
+  url TEXT NOT NULL,
+  display_order INTEGER DEFAULT 0
+);
+
+INSERT INTO landing_footer_links (label, url, display_order)
+SELECT * FROM (VALUES
+  ('How it works', '/#how-it-works', 1),
+  ('Explore types', '/explore', 2)
+) AS seed(label, url, display_order)
+WHERE NOT EXISTS (SELECT 1 FROM landing_footer_links);
 `;
 
-const CURRENT_VERSION = '1.0.7';
+const CURRENT_VERSION = '1.0.8';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
