@@ -5,58 +5,59 @@
 <title>Payments — HeartCode Admin</title>
 </head>
 <body data-page="payments">
-<div class="admin-layout">
+<div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'payments' }) %>
   <main class="admin-main">
-    <h1>Payments</h1>
-    <p>Current mode: <span id="modeBadge" class="badge">…</span></p>
-
-    <div class="card">
-      <form id="paystackForm">
-        <label>Mode
-          <select name="mode" id="modeSelect">
-            <option value="test">Test</option>
-            <option value="live">Live</option>
-          </select>
-        </label>
-
-        <h3>Test keys</h3>
-        <label>Public key (test) <input type="text" id="publicKeyTest"></label>
-        <label>Secret key (test) <input type="password" id="secretKeyTest" placeholder="Leave blank to keep current key"></label>
-        <p id="secretTestMasked" class="msg" style="display:none;"></p>
-
-        <h3>Live keys</h3>
-        <label>Public key (live) <input type="text" id="publicKeyLive"></label>
-        <label>Secret key (live) <input type="password" id="secretKeyLive" placeholder="Leave blank to keep current key"></label>
-        <p id="secretLiveMasked" class="msg" style="display:none;"></p>
-
-        <p style="margin-top:1rem;">
-          <button type="submit">Save</button>
-          <button type="button" id="clearTestBtn" class="btn-secondary">Clear test secret</button>
-          <button type="button" id="clearLiveBtn" class="btn-secondary">Clear live secret</button>
-        </p>
-      </form>
-      <p id="statusMsg" class="msg" style="display:none;"></p>
+    <div class="mb-6 flex items-center gap-3">
+      <h1 class="font-display text-2xl uppercase tracking-wide text-hc-ink">Payments</h1>
+      <span id="modeBadge" class="admin-badge">…</span>
     </div>
 
-    <div class="card">
-      <h2>Kenyan visitor payment currency</h2>
-      <p style="color:var(--text-dim); font-size:0.85rem;">
+    <div class="admin-card max-w-xl">
+      <form id="paystackForm">
+        <label class="admin-label" for="modeSelect">Mode</label>
+        <select class="admin-select" name="mode" id="modeSelect">
+          <option value="test">Test</option>
+          <option value="live">Live</option>
+        </select>
+
+        <h2 class="mt-5 text-sm font-semibold text-hc-ink">Test keys</h2>
+        <label class="admin-label" for="publicKeyTest">Public key (test)</label>
+        <input class="admin-input" type="text" id="publicKeyTest">
+        <label class="admin-label" for="secretKeyTest">Secret key (test)</label>
+        <input class="admin-input" type="password" id="secretKeyTest" placeholder="Leave blank to keep current key">
+        <p id="secretTestMasked" class="admin-msg" style="display:none;"></p>
+
+        <h2 class="mt-5 text-sm font-semibold text-hc-ink">Live keys</h2>
+        <label class="admin-label" for="publicKeyLive">Public key (live)</label>
+        <input class="admin-input" type="text" id="publicKeyLive">
+        <label class="admin-label" for="secretKeyLive">Secret key (live)</label>
+        <input class="admin-input" type="password" id="secretKeyLive" placeholder="Leave blank to keep current key">
+        <p id="secretLiveMasked" class="admin-msg" style="display:none;"></p>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button type="submit" class="admin-btn">Save</button>
+          <button type="button" id="clearTestBtn" class="admin-btn-outline">Clear test secret</button>
+          <button type="button" id="clearLiveBtn" class="admin-btn-outline">Clear live secret</button>
+        </div>
+      </form>
+      <p id="statusMsg" class="admin-msg" style="display:none;"></p>
+    </div>
+
+    <div class="admin-card mt-6 max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Kenyan visitor payment currency</h2>
+      <p class="mt-1 text-sm text-slate-500">
         Controls what currency Kenyan visitors are actually charged in. Leave this on USD until M-Pesa is set up and enabled on your Paystack account — until then, Kenyan visitors are charged in USD by card, exactly like everyone else.
       </p>
-      <label>Charge Kenyan visitors in
-        <select id="kenyanCurrencySelect">
-          <option value="USD">USD (default — until M-Pesa is set up)</option>
-          <option value="KES">KES (M-Pesa is set up on Paystack)</option>
-        </select>
-      </label>
-      <p style="margin-top:0.75rem;">
-        <button type="button" id="saveKenyanCurrencyBtn">Save</button>
-      </p>
-      <p id="kenyanCurrencyStatus" class="msg" style="display:none;"></p>
+      <label class="admin-label" for="kenyanCurrencySelect">Charge Kenyan visitors in</label>
+      <select class="admin-select" id="kenyanCurrencySelect">
+        <option value="USD">USD (default — until M-Pesa is set up)</option>
+        <option value="KES">KES (M-Pesa is set up on Paystack)</option>
+      </select>
+      <button type="button" id="saveKenyanCurrencyBtn" class="admin-btn mt-4">Save</button>
+      <p id="kenyanCurrencyStatus" class="admin-msg" style="display:none;"></p>
     </div>
   </main>
 </div>
-
-
+</body>
 </html>

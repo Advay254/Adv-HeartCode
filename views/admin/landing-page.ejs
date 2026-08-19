@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Landing Page — HeartCode Admin</title>
+</head>
+<body data-page="landing-page">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'landing-page' }) %>
+  <main class="admin-main">
+    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Landing Page</h1>
+    <p class="mb-6 max-w-2xl text-sm text-slate-500">
+      Edits the marketing page at <code>/</code> — hero text, the "how it works" steps, the trust line, and the footer. Nothing here affects this dashboard's own look.
+    </p>
+
+    <div class="admin-card max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Hero &amp; footer text</h2>
+      <form id="contentForm">
+        <label class="admin-label" for="heroHeadline">Hero headline</label>
+        <input class="admin-input" type="text" name="heroHeadline" id="heroHeadline" maxlength="200">
+        <label class="admin-label" for="heroTagline">Hero tagline</label>
+        <textarea class="admin-textarea" name="heroTagline" id="heroTagline" maxlength="500"></textarea>
+        <label class="admin-label" for="heroCtaText">Hero button text</label>
+        <input class="admin-input" type="text" name="heroCtaText" id="heroCtaText" maxlength="100">
+        <label class="admin-label" for="trustLineText">Trust line</label>
+        <input class="admin-input" type="text" name="trustLineText" id="trustLineText" maxlength="300">
+        <label class="admin-label" for="footerText">Footer text</label>
+        <input class="admin-input" type="text" name="footerText" id="footerText" maxlength="300">
+        <button type="submit" class="admin-btn mt-3">Save</button>
+      </form>
+      <p id="contentStatus" class="admin-msg" style="display:none;"></p>
+    </div>
+
+    <div class="admin-card mt-6 max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">How it works — steps</h2>
+      <form id="addStepForm" class="mt-2">
+        <label class="admin-label" for="stepIconName">Icon</label>
+        <select class="admin-select" name="iconName" id="stepIconName">
+          <% stepIconNames.forEach(function (name) { %><option value="<%= name %>"><%= name %></option><% }); %>
+        </select>
+        <label class="admin-label" for="stepTitle">Title</label>
+        <input class="admin-input" type="text" name="title" id="stepTitle" required maxlength="100">
+        <label class="admin-label" for="stepDescription">Description</label>
+        <textarea class="admin-textarea" name="description" id="stepDescription" required maxlength="300"></textarea>
+        <button type="submit" class="admin-btn admin-btn-sm mt-2">Add step</button>
+      </form>
+      <p id="stepStatus" class="admin-msg" style="display:none;"></p>
+      <div id="stepsList" class="mt-4 space-y-3"></div>
+    </div>
+
+    <div class="admin-card mt-6 max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Footer links</h2>
+      <form id="addFooterLinkForm" class="mt-2">
+        <label class="admin-label" for="footerLinkLabel">Label</label>
+        <input class="admin-input" type="text" name="label" id="footerLinkLabel" required maxlength="100">
+        <label class="admin-label" for="footerLinkUrl">URL</label>
+        <input class="admin-input" type="text" name="url" id="footerLinkUrl" required maxlength="500" placeholder="/explore or https://...">
+        <button type="submit" class="admin-btn admin-btn-sm mt-2">Add link</button>
+      </form>
+      <div id="footerLinksList" class="mt-4 space-y-2"></div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

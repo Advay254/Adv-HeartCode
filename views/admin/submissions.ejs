@@ -5,42 +5,46 @@
 <title>Submissions — HeartCode Admin</title>
 </head>
 <body data-page="submissions">
-<div class="admin-layout">
+<div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'submissions' }) %>
   <main class="admin-main">
-    <h1>Deployments</h1>
-    <div class="card">
-      <label>Search <input type="text" id="deploymentSearch" placeholder="Email, reference, or site URL"></label>
+    <h1 class="mb-4 font-display text-2xl uppercase tracking-wide text-hc-ink">Deployments</h1>
+    <div class="admin-card mb-4 max-w-md">
+      <label class="admin-label" for="deploymentSearch">Search</label>
+      <input class="admin-input" type="text" id="deploymentSearch" placeholder="Email, reference, or site URL">
     </div>
-    <div class="card">
-      <table>
+    <div class="admin-table-wrap">
+      <table class="admin-table is-responsive-stack">
         <thead><tr><th>Client</th><th>Type</th><th>Site</th><th>Amount</th><th>Deployed</th></tr></thead>
         <tbody id="deploymentsTableBody"></tbody>
       </table>
-      <p id="deploymentsPageInfo" style="color:var(--text-dim); font-size:0.85rem; margin-top:0.75rem;"></p>
-      <p>
-        <button type="button" id="deploymentsPrev" class="btn-secondary">← Prev</button>
-        <button type="button" id="deploymentsNext" class="btn-secondary">Next →</button>
-      </p>
+    </div>
+    <div class="mt-2 flex items-center justify-between">
+      <p id="deploymentsPageInfo" class="text-xs text-slate-400"></p>
+      <div class="flex gap-2">
+        <button type="button" id="deploymentsPrev" class="admin-btn-outline admin-btn-sm">← Prev</button>
+        <button type="button" id="deploymentsNext" class="admin-btn-outline admin-btn-sm">Next →</button>
+      </div>
     </div>
 
-    <h1 style="margin-top:2rem;">Subscribers</h1>
-    <div class="card">
-      <label>Search <input type="text" id="subscriberSearch" placeholder="Email"></label>
-      <p style="margin-top:0.75rem;">
-        <a href="/api/admin/dashboard/subscribers/export" class="btn-secondary">Export CSV</a>
-      </p>
+    <h1 class="mb-4 mt-10 font-display text-2xl uppercase tracking-wide text-hc-ink">Subscribers</h1>
+    <div class="admin-card mb-4 max-w-md">
+      <label class="admin-label" for="subscriberSearch">Search</label>
+      <input class="admin-input" type="text" id="subscriberSearch" placeholder="Email">
+      <a href="/api/admin/dashboard/subscribers/export" class="admin-btn-outline mt-3 inline-flex">Export CSV</a>
     </div>
-    <div class="card">
-      <table>
+    <div class="admin-table-wrap">
+      <table class="admin-table is-responsive-stack">
         <thead><tr><th>Email</th><th>First seen</th><th>Status</th><th></th></tr></thead>
         <tbody id="subscribersTableBody"></tbody>
       </table>
-      <p id="subscribersPageInfo" style="color:var(--text-dim); font-size:0.85rem; margin-top:0.75rem;"></p>
-      <p>
-        <button type="button" id="subscribersPrev" class="btn-secondary">← Prev</button>
-        <button type="button" id="subscribersNext" class="btn-secondary">Next →</button>
-      </p>
+    </div>
+    <div class="mt-2 flex items-center justify-between">
+      <p id="subscribersPageInfo" class="text-xs text-slate-400"></p>
+      <div class="flex gap-2">
+        <button type="button" id="subscribersPrev" class="admin-btn-outline admin-btn-sm">← Prev</button>
+        <button type="button" id="subscribersNext" class="admin-btn-outline admin-btn-sm">Next →</button>
+      </div>
     </div>
   </main>
 </div>

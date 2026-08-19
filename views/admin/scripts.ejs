@@ -5,44 +5,47 @@
 <title>Scripts — HeartCode Admin</title>
 </head>
 <body data-page="scripts">
-<div class="admin-layout">
+<div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'scripts' }) %>
   <main class="admin-main">
-    <h1>Script Injection</h1>
-    <p style="color:var(--text-dim); font-size:0.9rem;">
+    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Script Injection</h1>
+    <p class="mb-6 max-w-2xl text-sm text-slate-500">
       Paste raw script tags or inline code (analytics, pixels, etc.) — rendered on <strong>public pages only</strong>, never on this dashboard.
       Up to 3 scripts per section. To make room for more, delete one first.
     </p>
 
-    <div class="card">
-      <h2 style="margin-top:0;">Add a script</h2>
+    <div class="admin-card max-w-2xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Add a script</h2>
       <form id="addScriptForm">
-        <label>Section
-          <select name="placement" id="placementSelect">
-            <option value="head">Header (inside &lt;head&gt;)</option>
-            <option value="body_start">Body (right after &lt;body&gt; opens)</option>
-            <option value="footer">Footer (right before &lt;/body&gt;)</option>
-          </select>
-        </label>
-        <label>Name <input type="text" name="name" required placeholder="e.g. Umami Analytics"></label>
-        <label>Script content <textarea name="scriptContent" required style="min-height:120px; font-family:monospace; font-size:0.85rem;" placeholder="&lt;script defer src=&quot;https://...&quot; data-website-id=&quot;...&quot;&gt;&lt;/script&gt;"></textarea></label>
-        <label><input type="checkbox" name="isActive" checked> Active</label>
-        <button type="submit" style="margin-top:0.75rem;">Add script</button>
+        <label class="admin-label" for="placementSelect">Section</label>
+        <select class="admin-select" name="placement" id="placementSelect">
+          <option value="head">Header (inside &lt;head&gt;)</option>
+          <option value="body_start">Body (right after &lt;body&gt; opens)</option>
+          <option value="footer">Footer (right before &lt;/body&gt;)</option>
+        </select>
+        <label class="admin-label" for="scriptName">Name</label>
+        <input class="admin-input" type="text" name="name" id="scriptName" required placeholder="e.g. Umami Analytics">
+        <label class="admin-label" for="scriptContent">Script content</label>
+        <textarea class="admin-textarea font-mono" name="scriptContent" id="scriptContent" required placeholder='&lt;script defer src="https://..." data-website-id="..."&gt;&lt;/script&gt;'></textarea>
+        <label class="admin-checkbox-label"><input type="checkbox" name="isActive" checked> Active</label>
+        <button type="submit" class="admin-btn mt-3">Add script</button>
       </form>
-      <p id="addScriptStatus" class="msg" style="display:none;"></p>
+      <p id="addScriptStatus" class="admin-msg" style="display:none;"></p>
     </div>
 
-    <div class="card">
-      <h2 style="margin-top:0;">Header <span id="headCount" class="badge">0 / 3</span></h2>
-      <div id="headScripts"></div>
-    </div>
-    <div class="card">
-      <h2 style="margin-top:0;">Body <span id="bodyStartCount" class="badge">0 / 3</span></h2>
-      <div id="bodyStartScripts"></div>
-    </div>
-    <div class="card">
-      <h2 style="margin-top:0;">Footer <span id="footerCount" class="badge">0 / 3</span></h2>
-      <div id="footerScripts"></div>
+    <div class="mt-6 grid gap-6 lg:grid-cols-3">
+      <div>
+        <h2 class="text-sm font-semibold text-hc-ink">Header <span id="headCount" class="admin-badge">0 / 3</span></h2>
+        <div id="headScripts"></div>
+      </div>
+      <div>
+        <h2 class="text-sm font-semibold text-hc-ink">Body <span id="bodyStartCount" class="admin-badge">0 / 3</span></h2>
+        <div id="bodyStartScripts"></div>
+      </div>
+      <div>
+        <h2 class="text-sm font-semibold text-hc-ink">Footer <span id="footerCount" class="admin-badge">0 / 3</span></h2>
+        <div id="footerScripts"></div>
+      </div>
     </div>
   </main>
 </div>

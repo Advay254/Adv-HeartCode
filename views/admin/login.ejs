@@ -4,22 +4,29 @@
 <%- include('../partials/head') %>
 <title>HeartCode Admin Login</title>
 </head>
-<body data-page="login" data-slug="<%= slug %>">
-<div class="admin-main" style="max-width:360px; margin:4rem auto;">
-  <h1>Admin Login</h1>
-  <form id="loginForm">
-    <label>Username
-      <input type="text" name="username" autocomplete="username" required>
-    </label>
-    <label>Password
-      <span style="display:flex; gap:0.5rem; align-items:center;">
-        <input type="password" name="password" id="passwordInput" autocomplete="current-password" required style="flex:1;">
-        <button type="button" id="togglePassword" aria-label="Show password" style="padding:0.6rem 0.8rem; white-space:nowrap;">👁</button>
+<body data-page="login" data-slug="<%= slug %>" class="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+  <div class="w-full max-w-sm">
+    <div class="mb-6 flex items-center justify-center gap-2">
+      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-hc-blue text-hc-yellow [&>svg]:h-4 [&>svg]:w-4">
+        <%- getIconSvg('heart') %>
       </span>
-    </label>
-    <button type="submit" style="margin-top:1rem;">Log in</button>
-  </form>
-  <p id="error" class="msg msg-error" style="display:none;"></p>
-</div>
+      <span class="font-display text-xl uppercase tracking-wide text-hc-blue">HeartCode Admin</span>
+    </div>
+    <div class="admin-card">
+      <form id="loginForm">
+        <label class="admin-label" for="usernameInput">Username</label>
+        <input class="admin-input" type="text" name="username" id="usernameInput" autocomplete="username" required>
+
+        <label class="admin-label" for="passwordInput">Password</label>
+        <div class="flex items-center gap-2">
+          <input class="admin-input" type="password" name="password" id="passwordInput" autocomplete="current-password" required>
+          <button type="button" id="togglePassword" aria-label="Show password" class="admin-btn-outline shrink-0 px-3 py-2">👁</button>
+        </div>
+
+        <button type="submit" class="admin-btn mt-4 w-full">Log in</button>
+      </form>
+      <p id="error" class="admin-msg admin-msg-error" style="display:none;"></p>
+    </div>
+  </div>
 </body>
 </html>

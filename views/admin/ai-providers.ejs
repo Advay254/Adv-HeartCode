@@ -5,21 +5,23 @@
 <title>AI Provider — HeartCode Admin</title>
 </head>
 <body data-page="ai-provider">
-<div class="admin-layout">
+<div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'ai-provider' }) %>
   <main class="admin-main">
-    <h1>AI Provider</h1>
+    <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink">AI Provider</h1>
 
-    <div class="card">
-      <h2>Add provider</h2>
+    <div class="admin-card max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Add provider</h2>
       <form id="addProviderForm">
-        <label>Label <input type="text" name="label" required placeholder="e.g. Groq"></label>
-        <label>Base URL <input type="text" name="baseUrl" required placeholder="https://api.groq.com/openai/v1"></label>
-        <button type="submit" style="margin-top:0.75rem;">Add provider</button>
+        <label class="admin-label" for="providerLabel">Label</label>
+        <input class="admin-input" type="text" name="label" id="providerLabel" required placeholder="e.g. Groq">
+        <label class="admin-label" for="providerBaseUrl">Base URL</label>
+        <input class="admin-input" type="text" name="baseUrl" id="providerBaseUrl" required placeholder="https://api.groq.com/openai/v1">
+        <button type="submit" class="admin-btn mt-3">Add provider</button>
       </form>
     </div>
 
-    <div id="providersList"></div>
+    <div id="providersList" class="mt-6 space-y-4"></div>
   </main>
 </div>
 </body>
