@@ -13,11 +13,48 @@
 
   function initBuildPage() {
     var slug = document.body.dataset.slug;
-    var fieldKeysEl = document.getElementById('fieldKeysData');
-    var fieldKeys = fieldKeysEl ? JSON.parse(fieldKeysEl.textContent) : [];
+    var fieldMetaEl = document.getElementById('fieldKeysData');
+    // v1.0.8: carries {key, type, required} per field now, not just a bare
+    // key string — radio/checkboxes groups don't have one single DOM
+    // element with a natural .value the way text/number/date/dropdown do,
+    // so the collection logic below needs to know each field's type to
+    // read (and later restore) its value correctly.
+    var fieldMeta = fieldMetaEl ? JSON.parse(fieldMetaEl.textContent) : [];
+
     var form = document.getElementById('buildForm');
     var errorEl = document.getElementById('formError');
     var submitBtn = document.getElementById('submitBtn');
+
+    function getFieldValue(key, type) {
+      if (type === 'radio') {
+        var checked = document.querySelector('input[name="field_' + key + '"]:checked');
+        return checked ? checked.value : '';
+      }
+      if (type === 'checkboxes') {
+        var boxes = document.querySelectorAll('input[name="field_' + key + '"]:checked');
+        return Array.prototype.map.call(boxes, function (el) { return el.value; });
+      }
+      var el = document.getElementById('field_' + key);
+      return el ? el.value.trim() : '';
+    }
+
+    function setFieldValue(key, type, value) {
+      if (type === 'radio') {
+        var radio = document.querySelector('input[name="field_' + key + '"][value="' + CSS.escape(String(value)) + '"]');
+        if (radio) radio.checked = true;
+        return;
+      }
+      if (type === 'checkboxes') {
+        var selected = Array.isArray(value) ? value : [];
+        var boxes = document.querySelectorAll('input[name="field_' + key + '"]');
+        boxes.forEach(function (box) {
+          box.checked = selected.indexOf(box.value) !== -1;
+        });
+        return;
+      }
+      var el = document.getElementById('field_' + key);
+      if (el && value !== undefined) el.value = value;
+    }
 
     // Restore a draft from a previous visit or "back" navigation from preview.
     try {
@@ -25,9 +62,8 @@
       if (raw) {
         var draft = JSON.parse(raw);
         if (draft.client_email) document.getElementById('client_email').value = draft.client_email;
-        fieldKeys.forEach(function (key) {
-          var el = document.getElementById('field_' + key);
-          if (el && draft[key] !== undefined) el.value = draft[key];
+        fieldMeta.forEach(function (f) {
+          if (draft[f.key] !== undefined) setFieldValue(f.key, f.type, draft[f.key]);
         });
       }
     } catch (err) {
@@ -36,9 +72,8 @@
 
     function saveDraft() {
       var draft = { client_email: document.getElementById('client_email').value };
-      fieldKeys.forEach(function (key) {
-        var el = document.getElementById('field_' + key);
-        if (el) draft[key] = el.value;
+      fieldMeta.forEach(function (f) {
+        draft[f.key] = getFieldValue(f.key, f.type);
       });
       try {
         sessionStorage.setItem(draftKey(slug), JSON.stringify(draft));
@@ -49,6 +84,7 @@
     }
 
     form.addEventListener('input', saveDraft);
+    form.addEventListener('change', saveDraft);
 
     function showError(text) {
       errorEl.textContent = text;
@@ -76,11 +112,11 @@
 
       var values = { client_email: email };
       var missing = [];
-      fieldKeys.forEach(function (key) {
-        var el = document.getElementById('field_' + key);
-        var val = el ? el.value.trim() : '';
-        values[key] = val;
-        if (el && el.required && !val) missing.push(key);
+      fieldMeta.forEach(function (f) {
+        var val = getFieldValue(f.key, f.type);
+        values[f.key] = val;
+        var isEmpty = f.type === 'checkboxes' ? val.length === 0 : !val;
+        if (f.required && isEmpty) missing.push(f.key);
       });
 
       if (missing.length > 0) {
@@ -186,10 +222,22 @@
       payBtn.textContent = 'Processing…';
 
       var sitePasswordInput = document.getElementById('sitePassword');
+      // v1.0.8 Part B: `draft` already holds every raw field value (it's
+      // the exact object initBuildPage's saveDraft() wrote) — strip out
+      // client_email (sent separately, not a template/slug field) and
+      // forward the rest as rawFieldValues so lib/deploySlug.js has real
+      // data to resolve a custom deploy_slug_pattern against, later, at
+      // actual deploy time.
+      var rawFieldValues = {};
+      Object.keys(draft).forEach(function (key) {
+        if (key !== 'client_email') rawFieldValues[key] = draft[key];
+      });
+
       var payload = {
         renderedHtml: html,
         clientEmail: draft.client_email,
-        sitePassword: sitePasswordInput ? sitePasswordInput.value : ''
+        sitePassword: sitePasswordInput ? sitePasswordInput.value : '',
+        rawFieldValues: rawFieldValues
       };
 
       fetch('/build/' + encodeURIComponent(slug) + '/checkout', {
