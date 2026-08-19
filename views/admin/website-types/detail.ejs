@@ -5,61 +5,81 @@
 <title><%= websiteType.name %> — HeartCode Admin</title>
 </head>
 <body data-page="website-types-detail" data-type-id="<%= websiteType.id %>">
-<div class="admin-layout">
+<div class="admin-shell">
   <%- include('../../partials/nav', { activePage: 'website-types' }) %>
   <main class="admin-main">
-    <p><a href="/<%= slug %>/website-types">← All website types</a></p>
-    <h1><%= websiteType.name %></h1>
+    <p class="mb-2"><a href="/<%= slug %>/website-types" class="text-sm text-hc-blue">← All website types</a></p>
+    <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink"><%= websiteType.name %></h1>
 
-    <div class="tabs">
-      <button type="button" class="tab-btn active" data-tab="details">Details</button>
-      <button type="button" class="tab-btn" data-tab="fields">Fields</button>
-      <button type="button" class="tab-btn" data-tab="ai">AI</button>
-      <button type="button" class="tab-btn" data-tab="template">Template</button>
+    <div class="admin-tabs">
+      <button type="button" class="admin-tab-btn active" data-tab="details">Details</button>
+      <button type="button" class="admin-tab-btn" data-tab="fields">Fields</button>
+      <button type="button" class="admin-tab-btn" data-tab="ai">AI</button>
+      <button type="button" class="admin-tab-btn" data-tab="template">Template</button>
     </div>
 
     <section id="tab-details" class="tab-panel">
-      <div class="card">
+      <div class="admin-card max-w-xl">
         <form id="detailsForm">
-          <label>Name <input type="text" name="name" value="<%= websiteType.name %>" required></label>
-          <label>Description <textarea name="description" style="min-height:80px;"><%= websiteType.description %></textarea></label>
-          <label>Price (USD) <input type="number" name="priceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01"></label>
-          <label>Icon
-            <select name="iconName">
-              <% iconNames.forEach(function (name) { %><option value="<%= name %>" <%= websiteType.icon_name === name ? 'selected' : '' %>><%= name %></option><% }); %>
-            </select>
-          </label>
-          <label>Display order <input type="number" name="displayOrder" value="<%= websiteType.display_order %>"></label>
-          <label><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
-          <button type="submit" style="margin-top:0.75rem;">Save details</button>
+          <label class="admin-label" for="detailsName">Name</label>
+          <input class="admin-input" type="text" name="name" id="detailsName" value="<%= websiteType.name %>" required>
+          <label class="admin-label" for="detailsDescription">Description</label>
+          <textarea class="admin-textarea" name="description" id="detailsDescription"><%= websiteType.description %></textarea>
+          <label class="admin-label" for="detailsPriceUsd">Price (USD)</label>
+          <input class="admin-input" type="number" name="priceUsd" id="detailsPriceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01">
+          <label class="admin-label" for="detailsIconName">Icon</label>
+          <select class="admin-select" name="iconName" id="detailsIconName">
+            <% iconNames.forEach(function (name) { %><option value="<%= name %>" <%= websiteType.icon_name === name ? 'selected' : '' %>><%= name %></option><% }); %>
+          </select>
+          <label class="admin-label" for="detailsDisplayOrder">Display order</label>
+          <input class="admin-input" type="number" name="displayOrder" id="detailsDisplayOrder" value="<%= websiteType.display_order %>">
+          <label class="admin-checkbox-label"><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
+
+          <h2 class="mt-5 text-sm font-semibold text-hc-ink">Custom deploy slug</h2>
+          <p class="mt-1 text-xs text-slate-500">
+            Optional. Leave blank to keep the default random slug. Use <code>{{field_key}}</code> for a raw field's submitted value,
+            <code>{{random}}</code> / <code>{{random:N}}</code> for N random letters+digits, <code>{{random:numbers:N}}</code> for N digits,
+            <code>{{random:letters:N}}</code> for N letters. Example: <code>happybirthday-from{{user_name}}-to{{recepient_name}}</code>.
+          </p>
+          <label class="admin-label" for="detailsDeploySlugPattern">Pattern</label>
+          <input class="admin-input font-mono" type="text" name="deploySlugPattern" id="detailsDeploySlugPattern" value="<%= websiteType.deploy_slug_pattern || '' %>" placeholder="e.g. happybirthday-from{{user_name}}-to{{recepient_name}}">
+
+          <button type="submit" class="admin-btn mt-4">Save details</button>
         </form>
-        <p id="detailsStatus" class="msg" style="display:none;"></p>
+        <p id="detailsStatus" class="admin-msg" style="display:none;"></p>
       </div>
     </section>
 
     <section id="tab-fields" class="tab-panel" style="display:none;">
-      <div class="card">
-        <h2>Add field</h2>
+      <div class="admin-card max-w-xl">
+        <h2 class="text-sm font-semibold text-hc-ink">Add field</h2>
         <form id="addFieldForm">
-          <label>Field key (letters, numbers, underscore only) <input type="text" name="fieldKey" required pattern="[a-z0-9_]+"></label>
-          <label>Label <input type="text" name="fieldLabel" required></label>
-          <label>Type
-            <select name="fieldType" id="fieldTypeSelect">
-              <option value="text">Text</option>
-              <option value="textarea">Textarea</option>
-              <option value="email">Email</option>
-              <option value="password">Password</option>
-              <option value="dropdown">Dropdown</option>
-            </select>
-          </label>
-          <label>Placeholder text <input type="text" name="placeholderText"></label>
-          <label>Dropdown options (comma-separated — only used for the Dropdown type) <input type="text" name="dropdownOptions"></label>
-          <label><input type="checkbox" name="isRequired" checked> Required</label>
-          <button type="submit" style="margin-top:0.75rem;">Add field</button>
+          <label class="admin-label" for="fieldKeyInput">Field key (letters, numbers, underscore only)</label>
+          <input class="admin-input" type="text" name="fieldKey" id="fieldKeyInput" required pattern="[a-z0-9_]+">
+          <label class="admin-label" for="fieldLabelInput">Label</label>
+          <input class="admin-input" type="text" name="fieldLabel" id="fieldLabelInput" required>
+          <label class="admin-label" for="fieldTypeSelect">Type</label>
+          <select class="admin-select" name="fieldType" id="fieldTypeSelect">
+            <option value="text">Text</option>
+            <option value="textarea">Textarea</option>
+            <option value="email">Email</option>
+            <option value="password">Password</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+            <option value="dropdown">Dropdown (pick one)</option>
+            <option value="radio">Radio buttons (pick one)</option>
+            <option value="checkboxes">Checkboxes (pick multiple)</option>
+          </select>
+          <label class="admin-label" for="fieldPlaceholderInput">Placeholder text</label>
+          <input class="admin-input" type="text" name="placeholderText" id="fieldPlaceholderInput">
+          <label class="admin-label" id="dropdownOptionsRow" for="fieldDropdownOptions" style="display:none;">Options (comma-separated)</label>
+          <input class="admin-input" type="text" name="dropdownOptions" id="fieldDropdownOptions" style="display:none;">
+          <label class="admin-checkbox-label"><input type="checkbox" name="isRequired" checked> Required</label>
+          <button type="submit" class="admin-btn mt-3">Add field</button>
         </form>
       </div>
-      <div class="card">
-        <table>
+      <div class="admin-table-wrap mt-6">
+        <table class="admin-table is-responsive-stack">
           <thead><tr><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
           <tbody id="fieldsTableBody"></tbody>
         </table>
@@ -67,42 +87,46 @@
     </section>
 
     <section id="tab-ai" class="tab-panel" style="display:none;">
-      <div class="card">
-        <label><input type="checkbox" id="aiEnabledToggle"> Use AI for this website type</label>
-        <p style="color:var(--text-dim); font-size:0.85rem; margin-top:0.5rem;">
+      <div class="admin-card max-w-xl">
+        <label class="admin-checkbox-label"><input type="checkbox" id="aiEnabledToggle"> Use AI for this website type</label>
+        <p class="mt-2 text-xs text-slate-500">
           Off (default): form submissions go straight to the template using the raw values a client typed — no AI call, no cost.
           On: the raw values are sent to your configured AI provider first, using the prompt and output fields below, and the AI's response fills the template instead.
         </p>
       </div>
 
       <div id="aiConfigSection" style="display:none;">
-        <div class="card">
-          <p>Available raw field tokens: <span id="aiAvailableFields">—</span></p>
-          <label>System prompt <textarea id="aiSystemPrompt" style="min-height:100px;" placeholder="You are a copywriting engine for a bakery's website..."></textarea></label>
-          <label>User prompt template <textarea id="aiUserPromptTemplate" style="min-height:100px;" placeholder="Client's raw input — vibe: {{vibe_description}}, business name: {{business_name}}"></textarea></label>
-          <button type="button" id="saveAiConfigBtn" style="margin-top:0.75rem;">Save AI configuration</button>
-          <p id="aiConfigStatus" class="msg" style="display:none;"></p>
+        <div class="admin-card mt-6 max-w-xl">
+          <p class="text-sm text-slate-500">Available raw field tokens: <span id="aiAvailableFields" class="font-mono text-xs">—</span></p>
+          <label class="admin-label" for="aiSystemPrompt">System prompt</label>
+          <textarea class="admin-textarea" id="aiSystemPrompt" placeholder="You are a copywriting engine for a bakery's website..."></textarea>
+          <label class="admin-label" for="aiUserPromptTemplate">User prompt template</label>
+          <textarea class="admin-textarea" id="aiUserPromptTemplate" placeholder="Client's raw input — vibe: {{vibe_description}}, business name: {{business_name}}"></textarea>
+          <button type="button" id="saveAiConfigBtn" class="admin-btn mt-3">Save AI configuration</button>
+          <p id="aiConfigStatus" class="admin-msg" style="display:none;"></p>
         </div>
 
-        <div class="card">
-          <h2>Add output field</h2>
-          <p style="color:var(--text-dim); font-size:0.85rem;">These describe exactly what structured JSON to request from the AI — each becomes a placeholder usable in the Template tab.</p>
+        <div class="admin-card mt-6 max-w-xl">
+          <h2 class="text-sm font-semibold text-hc-ink">Add output field</h2>
+          <p class="mt-1 text-xs text-slate-500">These describe exactly what structured JSON to request from the AI — each becomes a placeholder usable in the Template tab.</p>
           <form id="addOutputFieldForm">
-            <label>Output key (letters, numbers, underscore only) <input type="text" name="outputKey" required pattern="[a-z0-9_]+"></label>
-            <label>Type
-              <select name="outputType" id="outputTypeSelect">
-                <option value="string">Text (single value)</option>
-                <option value="array_of_strings">List of texts</option>
-                <option value="array_of_objects">List of objects</option>
-              </select>
-            </label>
-            <label>Description (guidance for the AI on what to generate) <input type="text" name="description"></label>
-            <label id="objectShapeRow" style="display:none;">Object shape keys (comma-separated, e.g. title, caption) <input type="text" name="objectShapeKeys"></label>
-            <button type="submit" style="margin-top:0.75rem;">Add output field</button>
+            <label class="admin-label" for="outputKeyInput">Output key (letters, numbers, underscore only)</label>
+            <input class="admin-input" type="text" name="outputKey" id="outputKeyInput" required pattern="[a-z0-9_]+">
+            <label class="admin-label" for="outputTypeSelect">Type</label>
+            <select class="admin-select" name="outputType" id="outputTypeSelect">
+              <option value="string">Text (single value)</option>
+              <option value="array_of_strings">List of texts</option>
+              <option value="array_of_objects">List of objects</option>
+            </select>
+            <label class="admin-label" for="outputDescriptionInput">Description (guidance for the AI on what to generate)</label>
+            <input class="admin-input" type="text" name="description" id="outputDescriptionInput">
+            <label class="admin-label" id="objectShapeRow" for="objectShapeKeysInput" style="display:none;">Object shape keys (comma-separated, e.g. title, caption)</label>
+            <input class="admin-input" type="text" name="objectShapeKeys" id="objectShapeKeysInput" style="display:none;">
+            <button type="submit" class="admin-btn mt-3">Add output field</button>
           </form>
         </div>
-        <div class="card">
-          <table>
+        <div class="admin-table-wrap mt-6">
+          <table class="admin-table is-responsive-stack">
             <thead><tr><th>Placeholder</th><th>Type</th><th>Description</th><th></th></tr></thead>
             <tbody id="outputFieldsTableBody"></tbody>
           </table>
@@ -111,17 +135,17 @@
     </section>
 
     <section id="tab-template" class="tab-panel" style="display:none;">
-      <div class="card">
-        <p>Available placeholders: <span id="availablePlaceholders">—</span></p>
+      <div class="admin-card max-w-2xl">
+        <p class="text-sm text-slate-500">Available placeholders: <span id="availablePlaceholders" class="font-mono text-xs">—</span></p>
         <form id="templateForm">
-          <label>HTML content (current version: <span id="currentVersion">—</span>) <textarea id="htmlContent"></textarea></label>
-          <button type="submit" style="margin-top:0.75rem;">Save new version</button>
+          <label class="admin-label" for="htmlContent">HTML content (current version: <span id="currentVersion">—</span>)</label>
+          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="htmlContent"></textarea>
+          <button type="submit" class="admin-btn mt-3">Save new version</button>
         </form>
-        <p id="templateStatus" class="msg" style="display:none;"></p>
+        <p id="templateStatus" class="admin-msg" style="display:none;"></p>
       </div>
-      <div class="card">
-        <h2>Version history</h2>
-        <table>
+      <div class="admin-table-wrap mt-6">
+        <table class="admin-table is-responsive-stack">
           <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
           <tbody id="historyTableBody"></tbody>
         </table>
