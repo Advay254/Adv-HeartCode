@@ -15,6 +15,7 @@ const adminDashboardRouter = require('./routes/adminDashboard');
 const adminSettingsRouter = require('./routes/adminSettings');
 const adminSiteSettingsRouter = require('./routes/adminSiteSettings');
 const adminScriptsRouter = require('./routes/adminScripts');
+const adminLandingRouter = require('./routes/adminLanding');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
 const webhooksRouter = require('./routes/webhooks');
@@ -227,6 +228,7 @@ app.use('/api/admin/dashboard', adminDashboardRouter);
 app.use('/api/admin/settings', adminSettingsRouter);
 app.use('/api/admin/site-settings', adminSiteSettingsRouter);
 app.use('/api/admin/scripts', adminScriptsRouter);
+app.use('/api/admin/landing', adminLandingRouter);
 
 // Public build API: not session-gated (there's no session for a client
 // filling out a form), rate-limited per IP inside the router instead.
@@ -238,10 +240,10 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: '1.0.7' });
+    res.json({ status: 'ok', db: 'connected', version: '1.0.8' });
   } catch (err) {
     console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.7' });
+    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.8' });
   }
 });
 

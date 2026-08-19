@@ -1,11 +1,13 @@
 {
   "name": "heartcode",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "HeartCode — client-facing website builder (foundation)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build:css": "tailwindcss -i ./src/styles/main.css -o ./public/styles/main.css --minify"
+    "build:css": "npm run build:css:public && npm run build:css:admin",
+    "build:css:public": "tailwindcss -c ./tailwind.config.js -i ./src/styles/main.css -o ./public/styles/main.css --minify",
+    "build:css:admin": "tailwindcss -c ./tailwind.admin.config.js -i ./src/styles/admin.css -o ./public/dashboard-assets/admin.css --minify"
   },
   "dependencies": {
     "cors": "^2.8.6",

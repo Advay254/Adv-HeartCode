@@ -16,22 +16,22 @@ Full step-by-step walkthrough with more detail and troubleshooting: see `DEPLOYM
 
 ### Build command — read this if you're updating an existing Render service
 
-As of v1.0.7, the public-facing pages (landing page, type gallery) are styled with Tailwind CSS, compiled ahead of time into `public/styles/main.css` by a build step — it is **not** checked into the repo as the source of truth; `src/styles/main.css` is the real source, and `public/styles/main.css` is generated from it.
+As of v1.0.7, the public-facing pages (landing page, type gallery) are styled with Tailwind CSS, compiled ahead of time into `public/styles/main.css` by a build step — it is **not** checked into the repo as the source of truth; `src/styles/main.css` is the real source, and `public/styles/main.css` is generated from it. As of v1.0.8, the admin dashboard got the same treatment as its own separate bundle (`src/styles/admin.css` → `public/dashboard-assets/admin.css`, via `tailwind.admin.config.js`) — **the Render Build Command itself does not need to change again**: `npm run build:css` (already in place since v1.0.7) now runs both `build:css:public` and `build:css:admin` in sequence.
 
-If you already have a Render service running from an earlier version, you need to **update its Build Command** in the Render dashboard (Settings → Build Command) from `npm install` to:
+If you already have a Render service running from before v1.0.7, you still need to **update its Build Command** in the Render dashboard (Settings → Build Command) from `npm install` to:
 ```
 npm install && npm run build:css
 ```
-This is a setting on the Render service itself, not something in the repo — updating the code alone (applying this version's zip) does **not** change it. If you forget, `npm run build:css` never runs, `public/styles/main.css` never gets (re)generated on that deploy, and the landing page / type gallery load with no styling.
+This is a setting on the Render service itself, not something in the repo — updating the code alone (applying a version's zip) does **not** change it. If you forget, neither CSS bundle gets (re)generated on that deploy, and the entire site — public pages AND the admin dashboard — loads with no styling.
 
-As a safety net, this delivery includes a real, already-built `public/styles/main.css` committed alongside the source files — so the site won't be broken even if you deploy without updating the build command first. But it will go stale the moment any future change touches the Tailwind source files or view markup, so update the build command as soon as you can rather than relying on this indefinitely.
+As a safety net, this delivery includes both bundles already built and committed alongside the source files — so the site won't be broken even if you deploy without the correct build command. But they'll go stale the moment any future change touches the Tailwind source files or view markup, so get the build command right rather than relying on this indefinitely.
 
 ## Tech stack
 
 - Node.js + Express (CommonJS)
 - PostgreSQL via `pg`, hosted on Supabase or Aiven
 - EJS server-rendered views for both the admin dashboard and the public builder flow
-- Tailwind CSS (CLI-compiled, v1.0.7) for the public-facing landing page and type gallery — the admin dashboard keeps its own hand-written stylesheet, untouched
+- Tailwind CSS (CLI-compiled) for BOTH the public site and (as of v1.0.8) the admin dashboard — two separate configs/bundles (`tailwind.config.js` + `src/styles/main.css` for public, `tailwind.admin.config.js` + `src/styles/admin.css` for admin), sharing one palette/font source (`tailwind.theme.js`) but compiled independently so neither bundle carries unused classes from the other surface
 - Deployed on Render (see `DEPLOYMENT.md`)
 - Generated client sites deploy live to Cloudflare Pages, paid for via Paystack
 
@@ -91,7 +91,7 @@ npm run build:css
 npm start
 ```
 
-`npm run build:css` compiles `src/styles/main.css` into `public/styles/main.css` (Tailwind CLI) — needed once before first run, and again any time you change `src/styles/main.css`, `tailwind.config.js`, or add new Tailwind classes to a public view (there's no watch mode wired up; re-run it manually after each such change during local development).
+`npm run build:css` compiles both Tailwind bundles (`src/styles/main.css` → `public/styles/main.css` for public pages, `src/styles/admin.css` → `public/dashboard-assets/admin.css` for the admin dashboard, as of v1.0.8) — needed once before first run, and again any time you change either source file, either `tailwind*.config.js`, or add new Tailwind classes to any view. There's no watch mode wired up; re-run it manually after each such change during local development. `npm run build:css:public` / `npm run build:css:admin` run just one bundle at a time if you only touched one side.
 
 The server runs `initDB()` on every boot, which creates/updates all tables and is safe to run repeatedly — it fails fast (`process.exit(1)`) rather than serving traffic against a broken database.
 
@@ -105,21 +105,26 @@ lib/        — framework-free helpers: crypto, auth, ai-provider, paystack, tem
               substitution (incl. v1.0.6 loop syntax), currency conversion,
               geolocation, rate limiting, Cloudflare Pages deployment, email,
               deployment finalization, the site-password bridge cache, site
-              settings + site scripts reads (v1.0.7, cached), icon loading (v1.0.7)
+              settings + site scripts + landing content reads (cached),
+              icon loading, slug sanitization (shared, v1.0.8), deploy slug
+              pattern resolution (v1.0.8), field type constants (v1.0.8)
 middleware/ — Express middleware: admin slug gating, session auth, CSRF
 routes/     — route handlers, split by area: admin pages, admin API (by
-              feature, incl. v1.0.6's generic site-settings API and v1.0.7's
-              site-settings/scripts APIs), public pages (incl. checkout,
-              landing page, type gallery), public build API, the Paystack webhook
+              feature — paystack, ai-providers, website-types, dashboard,
+              settings, site-settings, scripts, landing (v1.0.8)), public
+              pages (incl. checkout, landing page, type gallery), public
+              build API, the Paystack webhook
 views/      — EJS templates, split into admin/ (dashboard) and public/
               (client-facing landing page, type gallery, builder + checkout flow)
-public/     — static assets: dashboard-assets/ (admin CSS/JS), site.css/site.js
-              (public builder flow), site-interactions.js (v1.0.7 scroll-reveal/
-              count-up), icons/ (v1.0.7, 40 bundled Lucide SVGs), styles/main.css
-              (v1.0.7, BUILT from src/styles/main.css — see "Build command" above)
-src/        — v1.0.7: Tailwind source. src/styles/main.css is the real source of
-              truth for the public design system; public/styles/main.css is
-              generated from it and should not be hand-edited
+public/     — static assets: dashboard-assets/ (admin.css + admin.js, BOTH
+              Tailwind-built as of v1.0.8), site.css/site.js (public builder
+              flow), site-interactions.js (scroll-reveal/count-up), icons/
+              (40 bundled Lucide SVGs), styles/main.css (BUILT from
+              src/styles/main.css — see "Build command" above)
+src/        — Tailwind sources: main.css (public — real source of truth for
+              the public design system) and admin.css (v1.0.8 — same for
+              the admin dashboard). Neither compiled output under public/
+              should be hand-edited; both are generated.
 ```
 
 ## Versions
@@ -142,7 +147,15 @@ src/        — v1.0.7: Tailwind source. src/styles/main.css is the real source 
   - **Site Settings** (new admin page) — site title, meta description, favicon URL, OG share image URL, and the landing page's stats number/label, all editable without a redeploy and reflected on public pages within the same request (the read-side cache is actively invalidated on save, not just left to expire).
   - **Script injection manager** (new admin page) — paste raw third-party script tags/inline code (analytics, pixels, etc.), targeting three placements (`<head>`, right after `<body>` opens, right before `</body>` closes), capped at 3 per placement. Rendered on **public pages only** — never reaches an admin-authenticated page. This required a real, deliberate CSP change: `script-src`/`connect-src`/`img-src` are loosened to `https:` (plus `'unsafe-inline'` for `script-src`, since real analytics snippets are often inline code, not just an external `src`) on public pages specifically, while the admin dashboard keeps the original strict `script-src 'self'` policy completely unchanged. `unsafe-eval` was deliberately never added to either policy.
   - **40 curated icons** (real Lucide SVGs, bundled as static files, inlined via a small cached loader) — a fixed set for layout/UI use, plus a smaller admin-selectable subset (`website_types.icon_name`, new column) shown on type gallery/teaser cards.
+- **v1.0.8** — Expanded field types, custom deploy slugs, a landing-page CMS, and a full admin redesign:
+  - **Expanded field types.** Raw form fields can now be Number, Date, Radio (pick one), or Checkboxes (pick multiple), alongside the existing Text/Textarea/Email/Password/Dropdown. Every type gets real server-side validation on submit (not just "is it present") — a number must actually parse as one, a date must be a real calendar date (`2024-02-30` is correctly rejected, not silently rolled over to March 1st), and dropdown/radio/checkbox values must be a member of that field's own configured options. **That last check closed a real, pre-existing gap**: dropdown values were never checked against their configured options before this version, only checked for non-empty. Checkboxes (the one multi-value type) feed a template two ways from the same submitted array: `{{field_key}}` gives the values joined with `", "`, `{{#each field_key}}...{{/each}}` iterates them — reusing v1.0.6's loop syntax unchanged.
+  - **Custom deploy slugs.** A website type can now set a pattern like `happybirthday-from{{user_name}}-to{{recepient_name}}` (Website Types → a type → Details tab) instead of the default random slug — supports `{{field_key}}` (that field's raw submitted value), `{{random}}` / `{{random:N}}` (N random letters+digits), `{{random:numbers:N}}`, `{{random:letters:N}}`. Checked against `deployed_sites` for a collision regardless of whether the pattern includes a `{{random}}` token of its own, with a random suffix appended only if one's actually found — a pattern with no random component at all stays perfectly clean unless two clients genuinely submit the exact same values. A pattern referencing a field that doesn't exist yet warns (doesn't block) at save time, the same way template placeholder mistakes already do. This needed a real, necessary architectural fix: the client's raw form values were previously only ever used transiently during the initial AI-generate call and never stored anywhere — by the time a deploy actually happens (at payment verification, potentially long after that first call), they were already gone. Checkout now carries them through in a new `pending_deployments.raw_field_values` column specifically so a slug pattern has something real to resolve against at the moment it's actually needed.
+  - **Landing page CMS.** The hero headline/tagline/button text, the "how it works" steps (add/remove/reorder via up-down buttons — no drag-and-drop library, works on a phone), the trust line, and the footer links are now all editable from a new Landing Page admin page, with the exact same content pre-seeded so the page looks identical to v1.0.7 until an admin actually changes something. One necessary content change flagged plainly: the trust line used to be two separate badges ("Secure checkout via Paystack" / "No account or registration required") — the new data model is a single text field, so it's now one combined line by default; two-badge layouts weren't representable in what was asked for here.
+  - **Admin dashboard redesign.** Every admin page — Overview, Payments, AI Provider, Website Types, Submissions, Site Settings, Scripts, and the new Landing Page screen — now runs on a proper Tailwind design system (see "Tech stack" above), not the original hand-written CSS. A collapsible sidebar (grouped into Overview / Content / Revenue / System) replaces the old flat nav, with an off-canvas drawer on mobile. Every table on every page now uses one shared, CSS-only responsive pattern that collapses into a label/value card stack below 640px, with no separate mobile markup to keep in sync. Long admin-entered text (script contents, AI output field descriptions) gets a "Show more" toggle instead of blowing out a layout. Deliberately more restrained than the public site's visual language — rectangular controls, not pills; modest rounded corners, not the public site's signature asymmetric shape — since this is a working tool, not a marketing surface.
+  - **Two real bugs found and fixed along the way, unrelated to any of the above but caught while building it:**
+    - Every opacity-modified color utility across the **entire public site delivered in v1.0.7** (`text-hc-ink/60`, `bg-hc-blue/10`, and every other `/NN` variant throughout the landing page, type gallery, and shared nav/footer) was silently never generated by Tailwind at all — not a wrong shade, simply absent — because the color tokens were defined pointing at a plain hex-string CSS variable, which Tailwind can't blend an alpha channel into. Fixed at the root (RGB-triplet custom properties + Tailwind's `<alpha-value>` pattern) for both the public and the new admin bundle. This means **the live v1.0.7 site has been missing a layer of intended color styling** since it was deployed; this fix corrects it going forward.
+    - `lib/cloudflarePages.js` was silently producing double-prefixed Cloudflare project names (`hc-hc-...`) on every single deployment since this file was first written in v1.0.4 — `pending.reference` already starts with `hc-`, and the project-naming function unconditionally added a second one. Never caught before now because every prior round of testing mocked this function out rather than exercising its real logic end-to-end; building this version's custom-slug feature required a faithful mock for the first time, which is what surfaced it. Fixed at the call site (the redundant prefix is now stripped before the seed is passed in), and the project-name length cap was raised from 20 to 40 characters in the same pass — the old cap silently truncated anything past it, which would have gutted most realistic custom slug patterns.
 
 ## What's next
 
-Nothing is currently scoped for v1.0.8 yet. v1.0.7's own build prompt already flagged its own follow-ups: the admin dashboard's visual design, the live preview page, and the form/checkout/callback pages were deliberately left untouched this version (only their `<head>`/script-injection plumbing changed, not their layout) — a visual pass on those is expected to be a future version. Real photography/mockup assets for the landing page's hero are still a placeholder gradient panel (clearly marked in `views/public/landing.ejs` with the exact `<img>` tag to swap in once a real asset exists). Beyond that, the items already flagged in `HANDOFF.md`'s "Known gaps" remain open — most notably, there's still no global Express error-handling middleware wrapping every async route handler, and the Cloudflare Pages deploy path still hasn't completed a real successful deployment in testing (no network access to `api.cloudflare.com` from the build/test sandbox) — worth a deliberate first real-world test with actual credentials.
+Nothing is currently scoped for v1.0.9 yet. The items already flagged in `HANDOFF.md`'s "Known gaps" remain open — most notably, there's still no global Express error-handling middleware wrapping every async route handler, and the Cloudflare Pages deploy path still hasn't completed a real successful deployment in testing (no network access to `api.cloudflare.com` from the build/test sandbox) — worth a deliberate first real-world test with actual credentials, especially now that v1.0.8 changed how deploy project names get built. Real photography/mockup assets for the landing page's hero are still a placeholder gradient panel (clearly marked in `views/public/landing.ejs` with the exact `<img>` tag to swap in once a real asset exists). The live preview page and the form/checkout/callback pages still haven't had a visual pass — only their `<head>`/script-injection plumbing has changed since v1.0.6, not their layout.

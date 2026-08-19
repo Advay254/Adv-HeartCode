@@ -1,31 +1,18 @@
 /**
- * v1.0.7: covers PUBLIC-facing views only (landing page, type gallery, and
- * the shared public partials) — the admin dashboard's own visual design is
- * untouched this version (see HANDOFF.md / the v1.0.7 build prompt), so
- * admin views intentionally aren't in `content` below. `hc-blue`/`hc-yellow`
- * resolve through the CSS custom properties defined in src/styles/main.css
- * (--hc-blue / --hc-yellow) rather than hardcoded hex here, so there's one
- * single source of truth for the palette regardless of whether a given use
- * is a Tailwind utility class or a plain CSS reference.
+ * v1.0.8: scoped to PUBLIC-facing views only. Content scanning is kept
+ * separate per bundle (this file vs. tailwind.admin.config.js) rather
+ * than one shared config scanning everything, so public's compiled
+ * main.css doesn't end up bundling unused admin-only utility classes and
+ * vice versa — each output stays scoped to what that surface actually
+ * uses. Theme tokens (colors/fonts) are still shared, via tailwind.theme.js,
+ * so the palette can't drift between the two.
  */
 module.exports = {
   content: [
     './views/public/**/*.ejs',
-    './views/partials/*.ejs',
-    './public/*.js'
+    './views/partials/public-*.ejs',
+    './public/site.js',
+    './public/site-interactions.js'
   ],
-  theme: {
-    extend: {
-      colors: {
-        'hc-blue': 'var(--hc-blue)',
-        'hc-yellow': 'var(--hc-yellow)',
-        'hc-ink': 'var(--hc-ink)'
-      },
-      fontFamily: {
-        display: ['Anton', 'sans-serif'],
-        sans: ['Inter', 'sans-serif']
-      }
-    }
-  },
-  plugins: []
+  theme: require('./tailwind.theme')
 };
