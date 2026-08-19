@@ -4,25 +4,30 @@ const { getPool } = require('../db/init');
 const { getActiveProviderConfig } = require('../lib/ai-provider');
 const { substitutePlaceholders, substitutePlainText } = require('../lib/template');
 const { createRateLimiter } = require('../lib/rateLimit');
+const { OPTION_BASED_FIELD_TYPES, MULTI_SELECT_FIELD_TYPES } = require('../lib/fieldTypes');
 
 const router = express.Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Field keys are dynamic (only known after querying this website type's
 // template_fields), so this can't be a fully static schema. client_email
-// is validated strictly; .catchall() validates every OTHER key generically
-// — string, reasonably bounded, or absent. Gap this closes: previously an
-// optional (non-required) field had NO type check at all before being
-// dropped into the AI prompt — a client could send a number, array, or
-// deeply nested object for any optional field and it would flow straight
-// into JSON.stringify(). Required-field presence is still checked
-// separately below (depends on runtime DB state — which fields THIS
-// website type actually has — so it can't be expressed in a static schema
-// the way the type/length bound here can).
+// is validated strictly; .catchall() validates every OTHER key generically.
+// v1.0.8: a submitted value is now EITHER a string (every field type
+// except checkboxes) OR an array of strings (checkboxes, multi-select) —
+// the union covers both without needing a per-field-type schema, which
+// isn't possible here anyway since field types are runtime DB state, not
+// known until the query below. Required-field presence AND per-type shape
+// validation (number/date/checkboxes/radio/dropdown) both happen after
+// that query, in validateFieldValue below — this schema only guards the
+// outer shape (right JS type, sane length/count bounds) before any of
+// that runs.
 const generateBodySchema = z
   .object({ client_email: z.string().trim().email().max(254) })
-  .catchall(z.string().max(5000).optional());
+  .catchall(
+    z.union([z.string().max(5000), z.array(z.string().max(500)).max(50)]).optional()
+  );
 
 // v1.0.6: two separate limiters, chosen per-request based on whether the
 // REQUESTED website type actually costs AI tokens (websiteType.ai_enabled)
@@ -35,6 +40,64 @@ const aiGenerateLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60 * 1000 }
 const basicGenerateLimiter = createRateLimiter({ max: 20, windowMs: 60 * 60 * 1000 });
 
 const OUTPUT_TYPES = ['string', 'array_of_strings', 'array_of_objects'];
+
+/**
+ * Whether a submitted value counts as "present" for this field's type —
+ * used both for the required-field check and to decide whether shape
+ * validation below even needs to run (an empty, non-required field has
+ * nothing to validate the shape of).
+ */
+function isValuePresent(fieldType, val) {
+  if (MULTI_SELECT_FIELD_TYPES.includes(fieldType)) {
+    return Array.isArray(val) && val.length > 0;
+  }
+  return typeof val === 'string' && val.trim() !== '';
+}
+
+/**
+ * v1.0.8 Part A: per-field-type shape validation, run on any NON-EMPTY
+ * submitted value regardless of whether the field is required — a
+ * present-but-garbage value (a non-numeric "number" field, a checkbox
+ * selection that isn't one of the configured options) is rejected the
+ * same way an empty required field is, not just when required happens to
+ * also be true. Returns true if valid.
+ *
+ * dropdown gets the same membership check as radio/checkboxes here too —
+ * this closes a real pre-existing gap: dropdown values were previously
+ * never checked against the field's own configured options at all, only
+ * required-non-empty. A crafted request could submit any arbitrary string
+ * for a dropdown field.
+ */
+function isValidFieldValue(field, val) {
+  const type = field.field_type;
+
+  if (type === 'number') {
+    return typeof val === 'string' && val.trim() !== '' && Number.isFinite(Number(val));
+  }
+
+  if (type === 'date') {
+    if (typeof val !== 'string' || !ISO_DATE_RE.test(val)) return false;
+    const d = new Date(`${val}T00:00:00Z`);
+    // Guards against Date's silent day/month overflow correction (e.g.
+    // "2024-02-30" parses "successfully" as March 1st unless the
+    // round-trip is checked against the original string).
+    return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === val;
+  }
+
+  if (type === 'checkboxes') {
+    const options = Array.isArray(field.dropdown_options) ? field.dropdown_options : [];
+    return Array.isArray(val) && val.every(v => typeof v === 'string' && options.includes(v));
+  }
+
+  if (type === 'dropdown' || type === 'radio') {
+    const options = Array.isArray(field.dropdown_options) ? field.dropdown_options : [];
+    return typeof val === 'string' && options.includes(val);
+  }
+
+  // text, textarea, email, password — no shape constraint beyond the
+  // outer schema's string/length bound already applied.
+  return typeof val === 'string';
+}
 
 /**
  * Builds a JSON Schema description of the AI's expected output shape from
@@ -154,9 +217,11 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
   }
   const submitted = parsed.data;
 
-  // ---- required-field presence — depends on THIS website type's fields,
-  // which is runtime DB state, not something a static schema can express ----
+  // ---- required-field presence + per-type shape validation — depends on
+  // THIS website type's fields, which is runtime DB state, not something
+  // a static schema can express ----
   const missingFields = [];
+  const invalidFields = [];
 
   if (!EMAIL_RE.test(submitted.client_email)) {
     // zod's .email() already validated this, but the existing stricter
@@ -166,13 +231,24 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
   }
 
   for (const f of fields) {
-    if (!f.is_required) continue;
-    const val = typeof submitted[f.field_key] === 'string' ? submitted[f.field_key].trim() : '';
-    if (!val) missingFields.push(f.field_key);
+    const val = submitted[f.field_key];
+    const present = isValuePresent(f.field_type, val);
+
+    if (!present) {
+      if (f.is_required) missingFields.push(f.field_key);
+      continue;
+    }
+    if (!isValidFieldValue(f, val)) {
+      invalidFields.push(f.field_key);
+    }
   }
 
-  if (missingFields.length > 0) {
-    return res.status(400).json({ error: 'Missing or invalid required fields', missingFields });
+  if (missingFields.length > 0 || invalidFields.length > 0) {
+    return res.status(400).json({
+      error: 'Missing or invalid fields',
+      missingFields,
+      invalidFields
+    });
   }
 
   const templateResult = await pool.query(
@@ -184,18 +260,34 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
   }
   const templateHtml = templateResult.rows[0].html_content;
 
-  // Raw submitted values, keyed by field_key — the base of the final
-  // template variables regardless of whether AI is involved.
-  const rawValues = fields.reduce((acc, f) => {
-    acc[f.field_key] = submitted[f.field_key];
-    return acc;
-  }, {});
+  // Raw submitted values, split into a flat map (every field, joined with
+  // ", " for checkboxes so {{field_key}} has a sensible readable default)
+  // and an array map (checkboxes only, for {{#each field_key}} — the same
+  // array-of-strings shape v1.0.6's loop syntax already handles, just fed
+  // from a raw form field instead of an AI output field this time). Both
+  // maps get the SAME key for a checkboxes field, on purpose — see
+  // lib/template.js's substitutePlaceholders, which expands loops first
+  // (consuming arrayValues) before the flat pass runs (consuming values),
+  // so a template can use either syntax for the same field without
+  // conflict.
+  const rawFlatValues = {};
+  const rawArrayValues = {};
+  for (const f of fields) {
+    const val = submitted[f.field_key];
+    if (f.field_type === 'checkboxes') {
+      const arr = Array.isArray(val) ? val : [];
+      rawArrayValues[f.field_key] = arr;
+      rawFlatValues[f.field_key] = arr.join(', ');
+    } else {
+      rawFlatValues[f.field_key] = val;
+    }
+  }
 
   // ---- AI disabled: substitute raw values straight into the template.
   // No AI provider is looked up, no AI client is ever instantiated or
   // called — this whole branch never touches lib/ai-provider.js. ----
   if (!websiteType.ai_enabled) {
-    const html = substitutePlaceholders(templateHtml, rawValues, {});
+    const html = substitutePlaceholders(templateHtml, rawFlatValues, rawArrayValues);
     return res.json({ html });
   }
 
@@ -213,7 +305,7 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
     // the disabled path rather than spending a token budget on an
     // effectively-empty request.
     console.warn(`[BUILD] Website type "${req.params.slug}" has AI enabled but no output fields configured — skipping AI call.`);
-    const html = substitutePlaceholders(templateHtml, rawValues, {});
+    const html = substitutePlaceholders(templateHtml, rawFlatValues, rawArrayValues);
     return res.json({ html });
   }
 
@@ -229,13 +321,15 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
   // deliberately NOT substitutePlaceholders, since this text is going into
   // an LLM prompt, not markup, and HTML-escaping it would inject literal
   // "&amp;"-style noise into the prompt instead of protecting anything.
+  // Uses rawFlatValues (the joined-string form of checkboxes) since a
+  // prompt is plain text, not a template with loop syntax.
   const outputSchema = buildOutputSchema(outputFields);
   const schemaInstructions = `Return ONLY a single JSON object, no preamble, no markdown code fences, no commentary — just the JSON object itself. It must conform EXACTLY to this JSON Schema (every listed key required, no extra keys):
 
 ${JSON.stringify(outputSchema)}`;
 
-  const systemPrompt = `${substitutePlainText(websiteType.ai_system_prompt || '', rawValues)}\n\n${schemaInstructions}`;
-  const userPrompt = substitutePlainText(websiteType.ai_user_prompt_template || '', rawValues);
+  const systemPrompt = `${substitutePlainText(websiteType.ai_system_prompt || '', rawFlatValues)}\n\n${schemaInstructions}`;
+  const userPrompt = substitutePlainText(websiteType.ai_user_prompt_template || '', rawFlatValues);
 
   let parsedOutput = null;
   const attemptErrors = [];
@@ -311,14 +405,14 @@ ${JSON.stringify(outputSchema)}`;
 
   // ---- split AI output into flat vs array-shaped, merge with raw values ----
   // Final variables object = a shallow merge of the raw submitted values
-  // and the AI's flat (string) outputs, keyed together for
-  // substitutePlaceholders's `values` map. Array-shaped AI outputs go into
-  // a separate `arrayValues` map for the {{#each}} pass. In an unexpected
-  // key collision (shouldn't happen — output_key is validated against
-  // field_key at save time in routes/adminWebsiteTypes.js, specifically to
-  // prevent this), the AI's value wins: it's spread in AFTER rawValues.
-  const flatValues = { ...rawValues };
-  const arrayValues = {};
+  // (rawFlatValues/rawArrayValues, which already include any checkboxes
+  // fields split both ways — see above) and the AI's own outputs, split
+  // the same way. In an unexpected key collision (shouldn't happen —
+  // output_key is validated against field_key at save time in
+  // routes/adminWebsiteTypes.js, specifically to prevent this), the AI's
+  // value wins: it's spread in AFTER the raw values.
+  const flatValues = { ...rawFlatValues };
+  const arrayValues = { ...rawArrayValues };
 
   for (const f of outputFields) {
     if (f.output_type === 'array_of_strings' || f.output_type === 'array_of_objects') {

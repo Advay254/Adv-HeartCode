@@ -4,12 +4,14 @@ const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { CATEGORY_ICON_NAMES, DEFAULT_ICON_NAME } = require('../lib/icons');
+const { slugify } = require('../lib/slugify');
+const { resolveDeploySlugPattern, extractFieldKeyReferences } = require('../lib/deploySlug');
 
 const router = express.Router();
 router.use(requireAdminSession);
 
 const FIELD_KEY_RE = /^[a-z0-9_]+$/;
-const VALID_FIELD_TYPES = ['text', 'textarea', 'email', 'password', 'dropdown'];
+const { VALID_FIELD_TYPES, OPTION_BASED_FIELD_TYPES } = require('../lib/fieldTypes');
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 // v1.0.6: matches a full loop block, {{#each key}}...{{/each}}, capturing
 // both the root key and the body — used at template-save time to (a)
@@ -63,7 +65,12 @@ const updateTypeSchema = z.object({
   isActive: z.boolean().optional(),
   priceUsd: z.coerce.number().min(0).optional(),
   displayOrder: z.coerce.number().int().optional(),
-  iconName: z.enum(CATEGORY_ICON_NAMES).optional()
+  iconName: z.enum(CATEGORY_ICON_NAMES).optional(),
+  // v1.0.8 Part B. Follows the same convention already established for
+  // admin config secrets (see HANDOFF.md): omitted = don't change,
+  // empty string = clear it (stored as NULL, reverting to today's random
+  // slug behavior), non-empty string = set/replace the pattern.
+  deploySlugPattern: z.string().max(500).optional()
 });
 
 const createFieldSchema = z.object({
@@ -90,14 +97,6 @@ const updateFieldSchema = z.object({
 const templateSchema = z.object({
   htmlContent: z.string().min(1).max(500000)
 });
-
-function slugify(input) {
-  return String(input)
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 
 function formatField(f) {
   return {
@@ -210,7 +209,7 @@ router.put('/:id', requireCsrf, async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const { id } = paramsParsed.data;
-  const { name, description, isActive, priceUsd, displayOrder, iconName } = bodyParsed.data;
+  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -225,16 +224,45 @@ router.put('/:id', requireCsrf, async (req, res) => {
     is_active: isActive !== undefined ? isActive : current.is_active,
     price_usd: priceUsd !== undefined ? priceUsd : current.price_usd,
     display_order: displayOrder !== undefined ? displayOrder : current.display_order,
-    icon_name: iconName !== undefined ? iconName : current.icon_name
+    icon_name: iconName !== undefined ? iconName : current.icon_name,
+    // '' clears to NULL (today's random-slug behavior); omitted leaves it
+    // unchanged; a non-empty string sets/replaces it.
+    deploy_slug_pattern: deploySlugPattern !== undefined
+      ? (deploySlugPattern === '' ? null : deploySlugPattern)
+      : current.deploy_slug_pattern
   };
 
   const result = await pool.query(
     `UPDATE website_types SET name = $1, description = $2, is_active = $3,
-       price_usd = $4, display_order = $5, icon_name = $6, updated_at = NOW()
-     WHERE id = $7 RETURNING *`,
-    [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name, id]
+       price_usd = $4, display_order = $5, icon_name = $6, deploy_slug_pattern = $7, updated_at = NOW()
+     WHERE id = $8 RETURNING *`,
+    [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name, next.deploy_slug_pattern, id]
   );
   const t = result.rows[0];
+
+  // v1.0.8 Part B: warn (don't block — same "warn, don't block" pattern
+  // as the template placeholder/shape validation in PUT /:id/template)
+  // if the pattern references a field_key that doesn't exist for this
+  // website type. Checked AFTER saving, same as the template validation
+  // — the admin may be about to add the field next, and a slug pattern
+  // referencing a not-yet-created field is far more likely to be "field
+  // coming later" than "typo," given fields and the pattern are usually
+  // set up in the same sitting.
+  let deploySlugWarnings = [];
+  if (next.deploy_slug_pattern) {
+    const referencedKeys = extractFieldKeyReferences(next.deploy_slug_pattern);
+    if (referencedKeys.length > 0) {
+      const fieldsResult = await pool.query(
+        'SELECT field_key FROM template_fields WHERE website_type_id = $1',
+        [id]
+      );
+      const knownKeys = new Set(fieldsResult.rows.map(f => f.field_key));
+      deploySlugWarnings = referencedKeys
+        .filter(k => !knownKeys.has(k))
+        .map(k => `"${k}" is not a defined field for this website type — it will resolve to empty in the deploy slug until you add it`);
+    }
+  }
+
   res.json({
     id: t.id,
     slug: t.slug,
@@ -244,7 +272,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
     displayOrder: t.display_order,
     priceUsd: Number(t.price_usd) || 0,
     aiEnabled: t.ai_enabled,
-    iconName: t.icon_name
+    iconName: t.icon_name,
+    deploySlugPattern: t.deploy_slug_pattern,
+    deploySlugWarnings
   });
 });
 
@@ -295,8 +325,8 @@ router.post('/:id/fields', requireCsrf, async (req, res) => {
   const { id: websiteTypeId } = paramsParsed.data;
   const { fieldKey, fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = bodyParsed.data;
 
-  if (fieldType === 'dropdown' && !Array.isArray(dropdownOptions)) {
-    return res.status(400).json({ error: 'dropdownOptions must be an array when fieldType is "dropdown"' });
+  if (OPTION_BASED_FIELD_TYPES.includes(fieldType) && !Array.isArray(dropdownOptions)) {
+    return res.status(400).json({ error: `dropdownOptions must be an array when fieldType is "${fieldType}"` });
   }
 
   const pool = getPool();
@@ -337,7 +367,7 @@ router.post('/:id/fields', requireCsrf, async (req, res) => {
       fieldType,
       placeholderText || '',
       isRequired,
-      fieldType === 'dropdown' ? JSON.stringify(dropdownOptions) : null,
+      OPTION_BASED_FIELD_TYPES.includes(fieldType) ? JSON.stringify(dropdownOptions) : null,
       displayOrder
     ]
   );
@@ -367,8 +397,8 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
   const current = existing.rows[0];
 
   const nextType = fieldType !== undefined ? fieldType : current.field_type;
-  if (nextType === 'dropdown' && dropdownOptions !== undefined && !Array.isArray(dropdownOptions)) {
-    return res.status(400).json({ error: 'dropdownOptions must be an array when fieldType is "dropdown"' });
+  if (OPTION_BASED_FIELD_TYPES.includes(nextType) && dropdownOptions !== undefined && !Array.isArray(dropdownOptions)) {
+    return res.status(400).json({ error: `dropdownOptions must be an array when fieldType is "${nextType}"` });
   }
 
   const next = {
@@ -376,7 +406,7 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
     field_type: nextType,
     placeholder_text: placeholderText !== undefined ? placeholderText : current.placeholder_text,
     is_required: isRequired !== undefined ? isRequired : current.is_required,
-    dropdown_options: nextType === 'dropdown'
+    dropdown_options: OPTION_BASED_FIELD_TYPES.includes(nextType)
       ? JSON.stringify(dropdownOptions !== undefined ? dropdownOptions : current.dropdown_options)
       : null,
     display_order: displayOrder !== undefined ? displayOrder : current.display_order

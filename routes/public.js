@@ -10,6 +10,7 @@ const { getCurrencyForIp } = require('../lib/geolocation');
 const { getRate, convertUsdTo, getChargeCurrencyForCountry, formatMoney } = require('../lib/currency');
 const { getSiteSettings } = require('../lib/siteSettings');
 const { getActiveScriptsByPlacement } = require('../lib/siteScripts');
+const { getLandingContent } = require('../lib/landingContent');
 
 const router = express.Router();
 
@@ -22,20 +23,29 @@ const router = express.Router();
 // views/partials/public-head.ejs (and the body_start/footer script
 // partials) see `siteSettings`/`activeScripts` automatically in every
 // view rendered through this router, with no per-route wiring to forget.
+// v1.0.8: landingContent/landingFooterLinks joins this same middleware —
+// views/partials/public-footer.ejs (shared by landing.ejs AND explore.ejs)
+// needs the CMS-driven footer text/links on every public page, not just
+// the landing page itself, for the same "don't make every route
+// remember to fetch this" reason.
 router.use(async (req, res, next) => {
   try {
-    const [siteSettings, activeScripts] = await Promise.all([
+    const [siteSettings, activeScripts, landing] = await Promise.all([
       getSiteSettings(),
-      getActiveScriptsByPlacement()
+      getActiveScriptsByPlacement(),
+      getLandingContent()
     ]);
     res.locals.siteSettings = siteSettings;
     res.locals.activeScripts = activeScripts;
+    res.locals.landingContent = landing.content;
+    res.locals.landingSteps = landing.steps;
+    res.locals.landingFooterLinks = landing.footerLinks;
   } catch (err) {
-    // Both helpers already catch their own DB errors internally and fall
+    // These helpers already catch their own DB errors internally and fall
     // back to safe defaults — this catch is only for something more
     // exotic going wrong. Either way, a page render should never break
-    // over site settings/scripts specifically.
-    console.error('[PUBLIC] Failed to load site settings/scripts for request:', err.message);
+    // over site settings/scripts/landing content specifically.
+    console.error('[PUBLIC] Failed to load site settings/scripts/landing content for request:', err.message);
   }
   next();
 });
@@ -60,7 +70,19 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const checkoutBodySchema = z.object({
   renderedHtml: z.string().min(1).max(1000000),
   clientEmail: z.string().trim().email().max(254),
-  sitePassword: z.string().max(200).optional()
+  sitePassword: z.string().max(200).optional(),
+  // v1.0.8 Part B: the raw form field values from the build page, kept
+  // around through checkout so lib/deploySlug.js's pattern resolution has
+  // something to substitute {{field_key}} tokens with at actual deploy
+  // time (see lib/finalizeDeployment.js) — previously these only existed
+  // transiently during the /api/build/:slug/generate call and were never
+  // persisted anywhere past that point. Same shape as apiBuild.js's own
+  // generateBodySchema catchall: a string for every field type except
+  // checkboxes, which submits an array of strings.
+  rawFieldValues: z.record(
+    z.string(),
+    z.union([z.string().max(5000), z.array(z.string().max(500)).max(50)])
+  ).optional()
 });
 
 // Separate budget from the AI-generate limiter — different action,
@@ -307,7 +329,7 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
     const field = firstIssue ? firstIssue.path[0] : 'request';
     return res.status(400).json({ error: `Invalid ${field}` });
   }
-  const { renderedHtml, clientEmail: email, sitePassword } = parsed.data;
+  const { renderedHtml, clientEmail: email, sitePassword, rawFieldValues } = parsed.data;
 
   if (!EMAIL_RE.test(email)) {
     // zod's .email() already validated this; the house regex is kept as
@@ -350,10 +372,11 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
   await pool.query(
     `INSERT INTO pending_deployments
        (reference, website_type_id, client_email, site_password_hash, rendered_html,
-        charge_currency, charge_amount, exchange_rate_snapshot, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [reference, websiteType.id, email, sitePasswordHash, renderedHtml,
-      charge.currency, charge.amount, charge.rate, expiresAt]
+      charge.currency, charge.amount, charge.rate, expiresAt,
+      rawFieldValues ? JSON.stringify(rawFieldValues) : null]
   );
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/build/${websiteType.slug}/checkout/callback`;
