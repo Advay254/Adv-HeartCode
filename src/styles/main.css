@@ -22,6 +22,15 @@
   --hc-blue: #183fad;
   --hc-yellow: #F1BF0A;
   --hc-ink: #14151d;
+  /* v1.0.8: RGB-triplet form (space-separated, no commas/hex) — required
+     alongside the hex form above for Tailwind's opacity-modifier
+     utilities (bg-hc-blue/10 etc.) to actually work. See
+     tailwind.theme.js's comment for the full story; the hex properties
+     above stay as-is for direct plain-CSS `var(--hc-blue)` usage (e.g.
+     .hc-pill-btn:hover below), which doesn't need an alpha channel. */
+  --hc-blue-rgb: 24 63 173;
+  --hc-yellow-rgb: 241 191 10;
+  --hc-ink-rgb: 20 21 29;
 }
 
 @layer components {

@@ -1,0 +1,256 @@
+/* v1.0.8 Part D — admin dashboard design system source file, compiled to
+   public/dashboard-assets/admin.css via `npm run build:css:admin`.
+   ADMIN-facing views only; the public site keeps its own separate
+   stylesheet (src/styles/main.css), untouched by this file.
+
+   Same palette/fonts as the public site (hc-blue/hc-yellow/hc-ink, Anton +
+   Inter — see tailwind.theme.js, the shared source both configs pull
+   from) but a deliberately more restrained execution: rectangular
+   controls instead of pills, modest rounded-lg/xl corners instead of the
+   public site's asymmetric signature shape, tighter spacing throughout.
+   This is a working tool an admin uses on a phone at a bakery counter,
+   not a marketing surface — the visual language says so. */
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:opsz,wght@14..32,100..900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --hc-blue: #183fad;
+  --hc-yellow: #F1BF0A;
+  --hc-ink: #14151d;
+  /* v1.0.8: RGB-triplet form required for opacity-modifier utilities —
+     see tailwind.theme.js's comment and src/styles/main.css's matching
+     :root block for the full story (this admin bundle needed the exact
+     same fix). */
+  --hc-blue-rgb: 24 63 173;
+  --hc-yellow-rgb: 241 191 10;
+  --hc-ink-rgb: 20 21 29;
+}
+
+@layer components {
+  /* ---- layout shell ---- */
+
+  /* Desktop: fixed-width sidebar + main content side by side.
+     Mobile (<1024px, Tailwind's `lg`): sidebar becomes an off-canvas
+     drawer (see .admin-sidebar's translate transform below), and
+     .admin-topbar (hidden on desktop) provides the hamburger toggle. */
+  .admin-shell {
+    @apply flex min-h-screen flex-col bg-slate-50 lg:flex-row;
+  }
+
+  .admin-topbar {
+    @apply sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden;
+  }
+
+  .admin-sidebar {
+    @apply fixed inset-y-0 left-0 z-40 w-72 -translate-x-full overflow-y-auto border-r border-slate-200 bg-white p-4 transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:translate-x-0;
+  }
+  .admin-sidebar.is-open {
+    @apply translate-x-0;
+  }
+
+  .admin-sidebar-overlay {
+    @apply fixed inset-0 z-30 hidden bg-black/40 lg:hidden;
+  }
+  .admin-sidebar-overlay.is-open {
+    @apply block;
+  }
+
+  .admin-main {
+    @apply min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8;
+  }
+
+  /* ---- nav ---- */
+
+  .admin-nav-group-label {
+    @apply mb-2 mt-6 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 first:mt-0;
+  }
+
+  .admin-nav-link {
+    @apply flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-hc-ink [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0;
+  }
+  .admin-nav-link.active {
+    @apply bg-hc-blue/10 text-hc-blue;
+  }
+
+  /* ---- buttons — rectangular, not the public site's pills ---- */
+
+  .admin-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-hc-blue px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-hc-blue/90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .admin-btn-outline {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .admin-btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-3.5 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .admin-btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  /* ---- cards / surfaces ---- */
+
+  .admin-card {
+    @apply rounded-xl border border-slate-200 bg-white p-4 sm:p-5;
+  }
+
+  /* ---- form controls ---- */
+
+  .admin-label {
+    @apply mb-1 mt-3.5 block text-sm font-medium text-slate-700 first:mt-0;
+  }
+  .admin-input,
+  .admin-select,
+  .admin-textarea {
+    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-hc-ink placeholder:text-slate-400 focus:border-hc-blue focus:outline-none focus:ring-1 focus:ring-hc-blue;
+  }
+  .admin-textarea {
+    @apply min-h-[6rem];
+  }
+  .admin-checkbox-label {
+    @apply mt-3.5 flex items-center gap-2 text-sm text-slate-700;
+  }
+
+  /* ---- badges / status ---- */
+
+  .admin-badge {
+    @apply inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600;
+  }
+  .admin-badge-active {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+  .admin-badge-warn {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  /* ---- inline status messages ---- */
+
+  .admin-msg {
+    @apply mt-3 rounded-md px-3 py-2 text-sm;
+  }
+  .admin-msg-success {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+  .admin-msg-error {
+    @apply bg-red-50 text-red-700;
+  }
+  .admin-msg-warning {
+    @apply bg-amber-50 text-amber-800;
+  }
+
+  /* ---- tabs (website type detail page) ---- */
+
+  .admin-tabs {
+    @apply -mx-1 mb-4 flex gap-1 overflow-x-auto pb-1;
+  }
+  .admin-tab-btn {
+    @apply shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-hc-ink;
+  }
+  .admin-tab-btn.active {
+    @apply bg-hc-blue/10 text-hc-blue;
+  }
+
+  /* ---- responsive table -> card pattern ----
+     One semantic <table class="admin-table">; each <td> carries a
+     data-label="Column Name" attribute (set by admin.js when it builds
+     row HTML) matching its column header. Below the `sm` breakpoint
+     (640px), the table collapses into a stack of label/value rows per
+     record — no separate mobile-only markup or a second render path in
+     JS, CSS does the whole transform. */
+  .admin-table-wrap {
+    @apply admin-card overflow-x-auto p-0;
+  }
+  .admin-table {
+    @apply w-full min-w-[32rem] border-collapse text-left text-sm sm:min-w-0;
+  }
+  .admin-table th {
+    @apply border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .admin-table td {
+    @apply border-b border-slate-100 px-3 py-2.5 align-top text-slate-700;
+  }
+  .admin-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}
+
+@media (max-width: 639px) {
+  .admin-table-wrap {
+    overflow-x: visible;
+  }
+  .admin-table.is-responsive-stack thead {
+    display: none;
+  }
+  .admin-table.is-responsive-stack,
+  .admin-table.is-responsive-stack tbody,
+  .admin-table.is-responsive-stack tr,
+  .admin-table.is-responsive-stack td {
+    display: block;
+    width: 100%;
+  }
+  .admin-table.is-responsive-stack tr {
+    border-bottom: 8px solid theme('colors.slate.100');
+    padding: 0.75rem 0.25rem;
+  }
+  .admin-table.is-responsive-stack tr:last-child {
+    border-bottom: none;
+  }
+  .admin-table.is-responsive-stack td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    border-bottom: none;
+    padding: 0.35rem 0.25rem;
+    text-align: right;
+  }
+  .admin-table.is-responsive-stack td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: theme('colors.slate.400');
+  }
+  /* An action-only cell (buttons, no label-worthy value) reads oddly with
+     a label/value split — data-label="" on those cells (admin.js sets
+     this for action columns) suppresses the ::before entirely and just
+     right-aligns the buttons. */
+  .admin-table.is-responsive-stack td[data-label=""] {
+    justify-content: flex-end;
+  }
+  .admin-table.is-responsive-stack td[data-label=""]::before {
+    content: none;
+  }
+}
+
+/* ---- long-text truncation with a "Show more" toggle ----
+   Used for descriptions, script content previews, etc. — anywhere a
+   table/card cell could otherwise hold arbitrarily long admin-entered
+   text and blow out the layout. JS (admin.js's initTruncatedText) toggles
+   .is-expanded and swaps the trigger's label; this is just the two visual
+   states. */
+.truncate-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.truncate-text.is-expanded {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+.truncate-toggle {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--hc-blue);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
