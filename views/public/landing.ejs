@@ -16,13 +16,13 @@
         Live in minutes, not weeks
       </p>
       <h1 class="font-display text-5xl uppercase leading-[0.95] text-white sm:text-6xl lg:text-8xl">
-        <%= siteSettings.site_title %>
+        <%= landingContent.heroHeadline %>
       </h1>
       <p class="mt-6 text-lg text-white/80 sm:text-xl">
-        Pick a type, answer a short form, and get a real website — copy written, hosted, and live before you close the tab.
+        <%= landingContent.heroTagline %>
       </p>
       <div class="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
-        <a href="/explore" class="hc-pill-btn">Explore website types</a>
+        <a href="/explore" class="hc-pill-btn"><%= landingContent.heroCtaText %></a>
       </div>
     </div>
     <div class="w-full max-w-xl" data-reveal>
@@ -49,32 +49,19 @@
     <h2 class="mt-3 text-center font-display text-3xl uppercase text-hc-ink sm:text-4xl">Three steps. One live site.</h2>
 
     <div class="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
-      <div class="text-center" data-reveal>
-        <span class="font-display text-sm text-hc-blue/40">01</span>
-        <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
-          <%- getIconSvg('layout-template') %>
+      <% if (landingSteps.length === 0) { %>
+        <p class="text-center text-sm text-hc-ink/50 md:col-span-3">Steps coming soon.</p>
+      <% } %>
+      <% landingSteps.forEach(function (step, i) { %>
+        <div class="text-center" data-reveal>
+          <span class="font-display text-sm text-hc-blue/40"><%= String(i + 1).padStart(2, '0') %></span>
+          <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
+            <%- getIconSvg(step.iconName) %>
+          </div>
+          <h3 class="mt-5 text-lg font-semibold text-hc-ink"><%= step.title %></h3>
+          <p class="mt-2 text-sm text-hc-ink/60"><%= step.description %></p>
         </div>
-        <h3 class="mt-5 text-lg font-semibold text-hc-ink">Pick a type</h3>
-        <p class="mt-2 text-sm text-hc-ink/60">Choose the kind of site that fits your business — bakery, salon, studio, and more.</p>
-      </div>
-
-      <div class="text-center" data-reveal>
-        <span class="font-display text-sm text-hc-blue/40">02</span>
-        <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
-          <%- getIconSvg('pencil') %>
-        </div>
-        <h3 class="mt-5 text-lg font-semibold text-hc-ink">Fill in details</h3>
-        <p class="mt-2 text-sm text-hc-ink/60">A short form asks what makes your business yours. Real copy comes back, not a template.</p>
-      </div>
-
-      <div class="text-center" data-reveal>
-        <span class="font-display text-sm text-hc-blue/40">03</span>
-        <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
-          <%- getIconSvg('rocket') %>
-        </div>
-        <h3 class="mt-5 text-lg font-semibold text-hc-ink">Get your live site</h3>
-        <p class="mt-2 text-sm text-hc-ink/60">Pay once, and your site deploys live in minutes — no hosting to manage, ever.</p>
-      </div>
+      <% }); %>
     </div>
   </div>
 </section>
@@ -124,16 +111,16 @@
 </section>
 
 <!-- TRUST LINE -->
+<!-- v1.0.8: was two separate badges before this version ("Secure checkout
+     via Paystack" / "No account or registration required") -- the CMS
+     model (landing_content.trust_line_text) is a single text field, not a
+     list, so this is now one line combining both messages by default (see
+     db/init.js's seed value). Deliberate content/layout change, not an
+     oversight — flagged in the delivery notes. -->
 <section class="border-y border-black/5 bg-white px-4 py-8 sm:px-6">
-  <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 text-center sm:flex-row sm:justify-center sm:gap-10">
-    <span class="inline-flex items-center gap-2 text-sm text-hc-ink/70">
-      <span class="text-hc-blue [&>svg]:h-4 [&>svg]:w-4"><%- getIconSvg('shield-check') %></span>
-      Secure checkout via Paystack
-    </span>
-    <span class="inline-flex items-center gap-2 text-sm text-hc-ink/70">
-      <span class="text-hc-blue [&>svg]:h-4 [&>svg]:w-4"><%- getIconSvg('zap') %></span>
-      No account or registration required
-    </span>
+  <div class="mx-auto flex max-w-2xl items-center justify-center gap-2 text-center">
+    <span class="text-hc-blue [&>svg]:h-4 [&>svg]:w-4"><%- getIconSvg('shield-check') %></span>
+    <span class="text-sm text-hc-ink/70"><%= landingContent.trustLineText %></span>
   </div>
 </section>
 

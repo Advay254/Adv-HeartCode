@@ -33,6 +33,24 @@
                 <option value="<%= opt %>"><%= opt %></option>
               <% }); %>
             </select>
+          <% } else if (f.fieldType === 'radio') { %>
+            <span class="radio-group" data-field="<%= f.fieldKey %>">
+              <% (f.dropdownOptions || []).forEach(function (opt, i) { %>
+                <label class="option-label">
+                  <input type="radio" name="field_<%= f.fieldKey %>" value="<%= opt %>" <%= (f.isRequired && i === 0) ? 'required' : '' %>>
+                  <%= opt %>
+                </label>
+              <% }); %>
+            </span>
+          <% } else if (f.fieldType === 'checkboxes') { %>
+            <span class="checkbox-group" data-field="<%= f.fieldKey %>">
+              <% (f.dropdownOptions || []).forEach(function (opt) { %>
+                <label class="option-label">
+                  <input type="checkbox" name="field_<%= f.fieldKey %>" value="<%= opt %>">
+                  <%= opt %>
+                </label>
+              <% }); %>
+            </span>
           <% } else { %>
             <input type="<%= f.fieldType %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>">
           <% } %>
@@ -45,7 +63,7 @@
   </main>
 </div>
 
-<script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return f.fieldKey; })) %></script>
+<script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return { key: f.fieldKey, type: f.fieldType, required: f.isRequired }; })) %></script>
 <script src="/site.js" defer></script>
 <%- include('../partials/public-footer-scripts') %>
 </body>
