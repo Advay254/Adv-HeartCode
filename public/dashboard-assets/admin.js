@@ -26,14 +26,34 @@
   }
 
   // ---- shared nav/logout, present on every dashboard page ----
+  // v1.0.8 Part D: sidebar is a fixed column on desktop (lg:) and an
+  // off-canvas drawer on mobile, toggled via the topbar hamburger button,
+  // closed via the in-sidebar close button, the backdrop overlay, or the
+  // Escape key. All three (toggle/close/overlay) just add/remove the same
+  // .is-open class the CSS transform (see src/styles/admin.css) reads.
   function initNav() {
-    const toggle = document.getElementById('navToggle');
-    const links = document.getElementById('navLinks');
-    if (toggle && links) {
-      toggle.addEventListener('click', function () {
-        links.classList.toggle('open');
-      });
+    const sidebar = document.getElementById('adminSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const openBtn = document.getElementById('sidebarToggle');
+    const closeBtn = document.getElementById('sidebarClose');
+
+    function openSidebar() {
+      if (sidebar) sidebar.classList.add('is-open');
+      if (overlay) overlay.classList.add('is-open');
+      if (openBtn) openBtn.setAttribute('aria-expanded', 'true');
     }
+    function closeSidebar() {
+      if (sidebar) sidebar.classList.remove('is-open');
+      if (overlay) overlay.classList.remove('is-open');
+      if (openBtn) openBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    if (openBtn) openBtn.addEventListener('click', openSidebar);
+    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+    if (overlay) overlay.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeSidebar();
+    });
 
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
@@ -48,6 +68,42 @@
         window.location.href = slugSegment + '/login';
       });
     }
+
+    initTruncatedText();
+  }
+
+  // ---- long-text "Show more" toggle (v1.0.8 Part D) ----
+  // Applies to any element rendered with class="truncate-text" plus a
+  // sibling <button class="truncate-toggle">. Delegated to `document` (one
+  // listener, not one per truncated cell) since table content is
+  // re-rendered dynamically on every page that uses this — a per-element
+  // listener would leak on each re-render.
+  function initTruncatedText() {
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('.truncate-toggle');
+      if (!btn) return;
+      const target = document.getElementById(btn.dataset.target);
+      if (!target) return;
+      const expanded = target.classList.toggle('is-expanded');
+      btn.textContent = expanded ? 'Show less' : 'Show more';
+    });
+  }
+
+  // Builds a truncate-with-toggle cell's inner HTML for any text that
+  // might be long enough to blow out a table/card layout (descriptions,
+  // script content previews, etc.) — every table-row-rendering function
+  // below uses this instead of dropping raw (escaped) text straight in,
+  // so the "does this need a toggle" judgment call lives in one place.
+  let truncateIdCounter = 0;
+  function truncatedHtml(text) {
+    const safe = escapeHtml(text || '');
+    if (!text || text.length <= 120) return safe;
+    truncateIdCounter += 1;
+    const id = 'trunc-' + truncateIdCounter;
+    return (
+      '<span class="truncate-text" id="' + id + '">' + safe + '</span>' +
+      '<button type="button" class="truncate-toggle" data-target="' + id + '">Show more</button>'
+    );
   }
 
   // ---- login page ----
@@ -99,7 +155,7 @@
 
     function showStatus(text, type) {
       statusMsg.textContent = text;
-      statusMsg.className = 'msg msg-' + type;
+      statusMsg.className = 'admin-msg admin-msg-' + type;
       statusMsg.style.display = 'block';
     }
 
@@ -115,7 +171,7 @@
     function applyConfig(cfg) {
       document.getElementById('modeSelect').value = cfg.mode;
       modeBadge.textContent = cfg.mode;
-      modeBadge.className = 'badge ' + (cfg.mode === 'live' ? 'badge-live' : 'badge-test');
+      modeBadge.className = 'admin-badge ' + (cfg.mode === 'live' ? 'admin-badge-active' : 'admin-badge-warn');
       document.getElementById('publicKeyTest').value = cfg.publicKeyTest || '';
       document.getElementById('publicKeyLive').value = cfg.publicKeyLive || '';
       renderMasked(document.getElementById('secretTestMasked'), cfg.secretKeyTestMasked);
@@ -185,7 +241,7 @@
       });
       const statusEl = document.getElementById('kenyanCurrencyStatus');
       statusEl.style.display = 'block';
-      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+      statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
@@ -200,59 +256,65 @@
     function providerCard(p) {
       const keyRows = p.keys.map(k => `
         <tr>
-          <td>${escapeHtml(k.masked || 'unreadable')}</td>
-          <td>${escapeHtml(k.priority)}</td>
-          <td><button type="button" class="btn-danger remove-key" data-provider="${p.id}" data-key="${k.id}">Remove</button></td>
+          <td data-label="Key">${escapeHtml(k.masked || 'unreadable')}</td>
+          <td data-label="Priority">${escapeHtml(k.priority)}</td>
+          <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm remove-key" data-provider="${p.id}" data-key="${k.id}">Remove</button></td>
         </tr>`).join('');
 
       return `
-      <div class="card" data-provider-id="${p.id}">
-        <h2>${escapeHtml(p.label)} ${p.isActive ? '<span class="badge badge-active">active</span>' : ''}</h2>
-        <p style="color:var(--text-dim);">${escapeHtml(p.baseUrl)}</p>
+      <div class="admin-card ai-provider-card" data-provider-id="${p.id}">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="text-base font-semibold text-hc-ink">${escapeHtml(p.label)}</h2>
+          ${p.isActive ? '<span class="admin-badge admin-badge-active">active</span>' : ''}
+        </div>
+        <p class="mt-0.5 text-sm text-slate-400">${escapeHtml(p.baseUrl)}</p>
 
-        <label>Model
-          <select class="model-select">
-            ${p.selectedModel ? `<option value="${escapeHtml(p.selectedModel)}" selected>${escapeHtml(p.selectedModel)}</option>` : '<option value="">-- none selected --</option>'}
-          </select>
-        </label>
-        <button type="button" class="btn-secondary fetch-models">Load available models</button>
+        <label class="admin-label" for="model-select-${p.id}">Model</label>
+        <select class="admin-select model-select" id="model-select-${p.id}">
+          ${p.selectedModel ? `<option value="${escapeHtml(p.selectedModel)}" selected>${escapeHtml(p.selectedModel)}</option>` : '<option value="">-- none selected --</option>'}
+        </select>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2 fetch-models">Load available models</button>
 
-        <p style="margin-top:0.75rem;">
-          <button type="button" class="save-model">Save model</button>
-          <button type="button" class="${p.isActive ? 'btn-secondary' : ''} set-active">${p.isActive ? 'Active provider' : 'Set as active'}</button>
-          <button type="button" class="btn-danger delete-provider">Delete provider</button>
-        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="admin-btn-outline admin-btn-sm save-model">Save model</button>
+          <button type="button" class="admin-btn${p.isActive ? '-outline' : ''} admin-btn-sm set-active">${p.isActive ? 'Active provider' : 'Set as active'}</button>
+          <button type="button" class="admin-btn-danger admin-btn-sm delete-provider">Delete provider</button>
+        </div>
 
-        <h3>Keys</h3>
-        <table>
-          <thead><tr><th>Key</th><th>Priority</th><th></th></tr></thead>
-          <tbody>${keyRows || '<tr><td colspan="3">No keys yet</td></tr>'}</tbody>
-        </table>
-        <form class="add-key-form">
-          <label>New key <input type="password" name="key" required></label>
-          <label>Priority (lower = tried first) <input type="number" name="priority" value="0"></label>
-          <button type="submit" style="margin-top:0.5rem;">Add key</button>
+        <h3 class="mt-4 text-sm font-semibold text-hc-ink">Keys</h3>
+        <div class="admin-table-wrap mt-2">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Key</th><th>Priority</th><th></th></tr></thead>
+            <tbody>${keyRows || '<tr><td colspan="3" data-label="">No keys yet</td></tr>'}</tbody>
+          </table>
+        </div>
+        <form class="add-key-form mt-3">
+          <label class="admin-label" for="new-key-${p.id}">New key</label>
+          <input class="admin-input" type="password" name="key" id="new-key-${p.id}" required>
+          <label class="admin-label" for="new-priority-${p.id}">Priority (lower = tried first)</label>
+          <input class="admin-input" type="number" name="priority" id="new-priority-${p.id}" value="0">
+          <button type="submit" class="admin-btn admin-btn-sm mt-2">Add key</button>
         </form>
-        <p class="status-msg msg" style="display:none;"></p>
+        <p class="status-msg admin-msg" style="display:none;"></p>
       </div>`;
     }
 
     function showStatus(card, text, type) {
       const el = card.querySelector('.status-msg');
       el.textContent = text;
-      el.className = 'msg msg-' + type;
+      el.className = 'admin-msg admin-msg-' + type;
       el.style.display = 'block';
     }
 
     async function load() {
       const res = await window.adminFetch('/api/admin/ai-providers');
       const providers = await res.json();
-      providersList.innerHTML = providers.map(providerCard).join('') || '<p class="msg msg-warning">No providers configured yet.</p>';
+      providersList.innerHTML = providers.map(providerCard).join('') || '<p class="admin-msg admin-msg-warning">No providers configured yet.</p>';
       wireCards();
     }
 
     function wireCards() {
-      document.querySelectorAll('.card[data-provider-id]').forEach(card => {
+      document.querySelectorAll('.ai-provider-card[data-provider-id]').forEach(card => {
         const providerId = card.dataset.providerId;
 
         card.querySelector('.fetch-models').addEventListener('click', async () => {
@@ -338,13 +400,13 @@
       const types = await res.json();
       document.getElementById('typesTableBody').innerHTML = types.map(t => `
         <tr>
-          <td><a href="/${slug}/website-types/${t.id}">${escapeHtml(t.name)}</a></td>
-          <td><span class="badge ${t.isActive ? 'badge-active' : 'badge-inactive'}">${t.isActive ? 'active' : 'inactive'}</span></td>
-          <td>${t.fieldCount}</td>
-          <td>${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : '—'}</td>
-          <td>$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="badge badge-active">AI</span>' : ''}</td>
-          <td><button type="button" class="btn-danger delete-type" data-id="${t.id}">Delete</button></td>
-        </tr>`).join('') || '<tr><td colspan="6">No website types yet.</td></tr>';
+          <td data-label="Name"><a href="/${slug}/website-types/${t.id}" class="font-medium text-hc-blue">${escapeHtml(t.name)}</a></td>
+          <td data-label="Status"><span class="admin-badge ${t.isActive ? 'admin-badge-active' : ''}">${t.isActive ? 'active' : 'inactive'}</span></td>
+          <td data-label="Fields">${t.fieldCount}</td>
+          <td data-label="Template">${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : '—'}</td>
+          <td data-label="Price">$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="admin-badge admin-badge-active">AI</span>' : ''}</td>
+          <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm delete-type" data-id="${t.id}">Delete</button></td>
+        </tr>`).join('') || '<tr><td colspan="6" data-label="">No website types yet.</td></tr>';
 
       document.querySelectorAll('.delete-type').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -376,7 +438,7 @@
         load();
       } else {
         statusEl.textContent = data.error || 'Failed to create website type.';
-        statusEl.className = 'msg msg-error';
+        statusEl.className = 'admin-msg admin-msg-error';
         statusEl.style.display = 'block';
       }
     });
@@ -416,14 +478,30 @@
       document.getElementById('availablePlaceholders').textContent = tokens.length ? tokens.join(',  ') : 'none defined yet';
     }
 
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.querySelectorAll('.admin-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
         btn.classList.add('active');
         document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
       });
     });
+
+    // v1.0.8 Part A: the field-type select's dropdown-options row only
+    // makes sense for the three "pick from a list" types — hidden
+    // otherwise so a text/number/date field doesn't show an irrelevant
+    // "Options" input. OPTION_BASED_FIELD_TYPES mirrors
+    // lib/fieldTypes.js's own list (kept in sync by hand since this is
+    // client-side JS, not a shared module — small, stable list, low risk
+    // of drift).
+    const OPTION_BASED_FIELD_TYPES = ['dropdown', 'radio', 'checkboxes'];
+    function toggleDropdownOptionsRow() {
+      const isOptionBased = OPTION_BASED_FIELD_TYPES.includes(document.getElementById('fieldTypeSelect').value);
+      document.getElementById('dropdownOptionsRow').style.display = isOptionBased ? 'block' : 'none';
+      document.getElementById('fieldDropdownOptions').style.display = isOptionBased ? 'block' : 'none';
+    }
+    document.getElementById('fieldTypeSelect').addEventListener('change', toggleDropdownOptionsRow);
+    toggleDropdownOptionsRow();
 
     document.getElementById('detailsForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -436,13 +514,21 @@
           priceUsd: Number(form.priceUsd.value) || 0,
           displayOrder: Number(form.displayOrder.value) || 0,
           isActive: form.isActive.checked,
-          iconName: form.iconName.value
+          iconName: form.iconName.value,
+          deploySlugPattern: form.deploySlugPattern.value
         })
       });
+      const data = await res.json();
       const statusEl = document.getElementById('detailsStatus');
       statusEl.style.display = 'block';
-      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
-      statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+      if (!res.ok) {
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to save.';
+        return;
+      }
+      const warnings = data.deploySlugWarnings || [];
+      statusEl.className = 'admin-msg ' + (warnings.length ? 'admin-msg-warning' : 'admin-msg-success');
+      statusEl.textContent = warnings.length ? `Saved, but: ${warnings.join(' | ')}` : 'Saved.';
     });
 
     async function loadFields() {
@@ -451,12 +537,12 @@
       currentFields = fields;
       document.getElementById('fieldsTableBody').innerHTML = fields.map(f => `
         <tr>
-          <td>{{${escapeHtml(f.fieldKey)}}}</td>
-          <td>${escapeHtml(f.fieldLabel)}</td>
-          <td>${escapeHtml(f.fieldType)}</td>
-          <td>${f.isRequired ? 'yes' : 'no'}</td>
-          <td><button type="button" class="btn-danger remove-field" data-id="${f.id}">Remove</button></td>
-        </tr>`).join('') || '<tr><td colspan="5">No fields yet.</td></tr>';
+          <td data-label="Key">{{${escapeHtml(f.fieldKey)}}}</td>
+          <td data-label="Label">${escapeHtml(f.fieldLabel)}</td>
+          <td data-label="Type">${escapeHtml(f.fieldType)}</td>
+          <td data-label="Required">${f.isRequired ? 'yes' : 'no'}</td>
+          <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm remove-field" data-id="${f.id}">Remove</button></td>
+        </tr>`).join('') || '<tr><td colspan="5" data-label="">No fields yet.</td></tr>';
 
       renderPlaceholdersReference();
 
@@ -487,6 +573,7 @@
       });
       if (res.ok) {
         form.reset();
+        toggleDropdownOptionsRow();
         loadFields();
       } else {
         const data = await res.json();
@@ -501,10 +588,10 @@
       document.getElementById('htmlContent').value = data.active ? data.active.htmlContent : '';
       document.getElementById('historyTableBody').innerHTML = data.history.map(h => `
         <tr>
-          <td>v${h.version}</td>
-          <td>${new Date(h.createdAt).toLocaleString()}</td>
-          <td>${data.active && data.active.version === h.version ? '' : `<button type="button" class="btn-secondary rollback" data-version="${h.version}">Rollback to this</button>`}</td>
-        </tr>`).join('') || '<tr><td colspan="3">No versions yet.</td></tr>';
+          <td data-label="Version">v${h.version}</td>
+          <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
+          <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback" data-version="${h.version}">Rollback to this</button>`}</td>
+        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet.</td></tr>';
 
       document.querySelectorAll('.rollback').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -528,13 +615,13 @@
         const warnings = []
           .concat(data.undefinedPlaceholders.length ? [`no matching field: ${data.undefinedPlaceholders.join(', ')}`] : [])
           .concat(data.shapeWarnings || []);
-        statusEl.className = 'msg ' + (warnings.length ? 'msg-warning' : 'msg-success');
+        statusEl.className = 'admin-msg ' + (warnings.length ? 'admin-msg-warning' : 'admin-msg-success');
         statusEl.textContent = warnings.length
           ? `Saved as v${data.version}, but: ${warnings.join(' | ')}`
           : `Saved as v${data.version}.`;
         loadTemplate();
       } else {
-        statusEl.className = 'msg msg-error';
+        statusEl.className = 'admin-msg admin-msg-error';
         statusEl.textContent = data.error || 'Failed to save template.';
       }
     });
@@ -544,11 +631,11 @@
     function renderOutputFieldsTable() {
       document.getElementById('outputFieldsTableBody').innerHTML = currentOutputFields.map(f => `
         <tr>
-          <td>${escapeHtml(placeholderTokenForOutput(f))}</td>
-          <td>${escapeHtml(f.outputType)}</td>
-          <td>${escapeHtml(f.description || '')}</td>
-          <td><button type="button" class="btn-danger remove-output-field" data-id="${f.id}">Remove</button></td>
-        </tr>`).join('') || '<tr><td colspan="4">No output fields yet.</td></tr>';
+          <td data-label="Placeholder">${escapeHtml(placeholderTokenForOutput(f))}</td>
+          <td data-label="Type">${escapeHtml(f.outputType)}</td>
+          <td data-label="Description">${truncatedHtml(f.description || '')}</td>
+          <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm remove-output-field" data-id="${f.id}">Remove</button></td>
+        </tr>`).join('') || '<tr><td colspan="4" data-label="">No output fields yet.</td></tr>';
 
       document.querySelectorAll('.remove-output-field').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -594,7 +681,7 @@
       });
       const statusEl = document.getElementById('aiConfigStatus');
       statusEl.style.display = 'block';
-      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+      statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
@@ -644,39 +731,42 @@
       .then(stats => {
         const breakdownRows = stats.breakdown.map(b => `
           <tr>
-            <td>${escapeHtml(b.name)}</td>
-            <td>${b.deploymentCount}</td>
-            <td>$${b.revenueUsd.toFixed(2)}</td>
-          </tr>`).join('') || '<tr><td colspan="3">No website types yet.</td></tr>';
+            <td data-label="Type">${escapeHtml(b.name)}</td>
+            <td data-label="Deployments">${b.deploymentCount}</td>
+            <td data-label="Revenue">$${b.revenueUsd.toFixed(2)}</td>
+          </tr>`).join('') || '<tr><td colspan="3" data-label="">No website types yet.</td></tr>';
 
         container.innerHTML = `
-          <div class="card">
-            <h2>Payments</h2>
-            ${stats.paystackConfigured
-              ? `<p>Mode: <span class="badge ${stats.paystackMode === 'live' ? 'badge-live' : 'badge-test'}">${escapeHtml(stats.paystackMode)}</span></p>`
-              : '<p class="msg msg-warning">Paystack is not configured yet.</p>'}
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="admin-card">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payments</p>
+              ${stats.paystackConfigured
+                ? `<p class="mt-2"><span class="admin-badge ${stats.paystackMode === 'live' ? 'admin-badge-active' : 'admin-badge-warn'}">${escapeHtml(stats.paystackMode)}</span></p>`
+                : '<p class="admin-msg admin-msg-warning">Not configured yet.</p>'}
+            </div>
+
+            <div class="admin-card">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">AI Provider</p>
+              ${stats.activeProvider
+                ? `<p class="mt-2 text-sm text-slate-700">${escapeHtml(stats.activeProvider.label)}<br><span class="text-slate-400">${escapeHtml(stats.activeProvider.selectedModel || 'no model selected')}</span></p>`
+                : '<p class="admin-msg admin-msg-warning">No active provider.</p>'}
+            </div>
+
+            <div class="admin-card">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Website Types</p>
+              <p class="mt-2 text-2xl font-semibold text-hc-ink">${stats.activeTypeCount}</p>
+              <p class="text-sm text-slate-400">${stats.inactiveTypeCount} inactive</p>
+            </div>
+
+            <div class="admin-card">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Deployments</p>
+              <p class="mt-2 text-2xl font-semibold text-hc-ink">${stats.totalDeployments}</p>
+              <p class="text-sm text-slate-400">$${stats.totalRevenueUsd.toFixed(2)} revenue &middot; ${stats.subscriberCount} subscriber(s)</p>
+            </div>
           </div>
 
-          <div class="card">
-            <h2>AI Provider</h2>
-            ${stats.activeProvider
-              ? `<p>${escapeHtml(stats.activeProvider.label)} — model: ${escapeHtml(stats.activeProvider.selectedModel || 'not selected')}</p>`
-              : '<p class="msg msg-warning">No active AI provider configured.</p>'}
-          </div>
-
-          <div class="card">
-            <h2>Website Types</h2>
-            <p>${stats.activeTypeCount} active, ${stats.inactiveTypeCount} inactive</p>
-          </div>
-
-          <div class="card">
-            <h2>Deployments</h2>
-            <p>${stats.totalDeployments} total &middot; $${stats.totalRevenueUsd.toFixed(2)} revenue &middot; ${stats.subscriberCount} subscriber(s)</p>
-          </div>
-
-          <div class="card">
-            <h2>Revenue by website type</h2>
-            <table>
+          <div class="admin-table-wrap mt-6">
+            <table class="admin-table is-responsive-stack">
               <thead><tr><th>Type</th><th>Deployments</th><th>Revenue</th></tr></thead>
               <tbody>${breakdownRows}</tbody>
             </table>
@@ -684,7 +774,7 @@
         `;
       })
       .catch(() => {
-        container.innerHTML = '<p class="msg msg-error">Failed to load stats.</p>';
+        container.innerHTML = '<p class="admin-msg admin-msg-error">Failed to load stats.</p>';
       });
   }
 
@@ -720,12 +810,12 @@
 
       document.getElementById('deploymentsTableBody').innerHTML = data.deployments.map(d => `
         <tr>
-          <td>${escapeHtml(d.clientEmail)}</td>
-          <td>${escapeHtml(d.websiteTypeName || '—')}</td>
-          <td><a href="${escapeHtml(d.siteUrl)}" target="_blank" rel="noopener">${escapeHtml(d.siteUrl)}</a></td>
-          <td>${formatDeploymentAmount(d)}</td>
-          <td>${formatDate(d.deployedAt)}</td>
-        </tr>`).join('') || '<tr><td colspan="5">No deployments yet.</td></tr>';
+          <td data-label="Client">${escapeHtml(d.clientEmail)}</td>
+          <td data-label="Type">${escapeHtml(d.websiteTypeName || '—')}</td>
+          <td data-label="Site"><a href="${escapeHtml(d.siteUrl)}" target="_blank" rel="noopener" class="text-hc-blue underline">${escapeHtml(d.siteUrl)}</a></td>
+          <td data-label="Amount">${formatDeploymentAmount(d)}</td>
+          <td data-label="Deployed">${formatDate(d.deployedAt)}</td>
+        </tr>`).join('') || '<tr><td colspan="5" data-label="">No deployments yet.</td></tr>';
 
       document.getElementById('deploymentsPageInfo').textContent = `Page ${data.page} of ${data.totalPages} (${data.total} total)`;
       document.getElementById('deploymentsPrev').disabled = data.page <= 1;
@@ -739,11 +829,11 @@
 
       document.getElementById('subscribersTableBody').innerHTML = data.subscribers.map(s => `
         <tr>
-          <td>${escapeHtml(s.email)}</td>
-          <td>${formatDate(s.firstSeenAt)}</td>
-          <td><span class="badge ${s.optedOut ? 'badge-inactive' : 'badge-active'}">${s.optedOut ? 'opted out' : 'subscribed'}</span></td>
-          <td><button type="button" class="btn-secondary toggle-opt-out" data-email="${escapeHtml(s.email)}" data-opted-out="${s.optedOut}">${s.optedOut ? 'Re-subscribe' : 'Opt out'}</button></td>
-        </tr>`).join('') || '<tr><td colspan="4">No subscribers yet.</td></tr>';
+          <td data-label="Email">${escapeHtml(s.email)}</td>
+          <td data-label="First seen">${formatDate(s.firstSeenAt)}</td>
+          <td data-label="Status"><span class="admin-badge ${s.optedOut ? '' : 'admin-badge-active'}">${s.optedOut ? 'opted out' : 'subscribed'}</span></td>
+          <td data-label=""><button type="button" class="admin-btn-outline admin-btn-sm toggle-opt-out" data-email="${escapeHtml(s.email)}" data-opted-out="${s.optedOut}">${s.optedOut ? 'Re-subscribe' : 'Opt out'}</button></td>
+        </tr>`).join('') || '<tr><td colspan="4" data-label="">No subscribers yet.</td></tr>';
 
       document.getElementById('subscribersPageInfo').textContent = `Page ${data.page} of ${data.totalPages} (${data.total} total)`;
       document.getElementById('subscribersPrev').disabled = data.page <= 1;
@@ -824,7 +914,7 @@
       });
       const statusEl = document.getElementById('siteSettingsStatus');
       statusEl.style.display = 'block';
-      statusEl.className = 'msg ' + (res.ok ? 'msg-success' : 'msg-error');
+      statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
@@ -846,12 +936,17 @@
       document.getElementById(COUNT_IDS[placement]).textContent = `${scripts.length} / 3`;
       const container = document.getElementById(CONTAINER_IDS[placement]);
       container.innerHTML = scripts.map(s => `
-        <div class="card" style="margin-top:0.75rem;">
-          <p><strong>${escapeHtml(s.name)}</strong> ${s.isActive ? '<span class="badge badge-active">Active</span>' : '<span class="badge">Inactive</span>'}</p>
-          <pre style="white-space:pre-wrap; word-break:break-all; font-size:0.8rem; background:var(--bg); padding:0.5rem; border-radius:6px; overflow-x:auto;">${escapeHtml(s.scriptContent)}</pre>
-          <button type="button" class="toggle-script" data-id="${s.id}" data-active="${s.isActive}">${s.isActive ? 'Deactivate' : 'Activate'}</button>
-          <button type="button" class="btn-danger remove-script" data-id="${s.id}">Remove</button>
-        </div>`).join('') || '<p style="color:var(--text-dim); font-size:0.85rem;">No scripts in this section yet.</p>';
+        <div class="admin-card mt-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <strong class="text-sm text-hc-ink">${escapeHtml(s.name)}</strong>
+            ${s.isActive ? '<span class="admin-badge admin-badge-active">Active</span>' : '<span class="admin-badge">Inactive</span>'}
+          </div>
+          <pre class="mt-2 whitespace-pre-wrap break-all rounded-md bg-slate-50 p-2 font-mono text-xs">${truncatedHtml(s.scriptContent)}</pre>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" class="admin-btn-outline admin-btn-sm toggle-script" data-id="${s.id}" data-active="${s.isActive}">${s.isActive ? 'Deactivate' : 'Activate'}</button>
+            <button type="button" class="admin-btn-danger admin-btn-sm remove-script" data-id="${s.id}">Remove</button>
+          </div>
+        </div>`).join('') || '<p class="mt-2 text-sm text-slate-400">No scripts in this section yet.</p>';
 
       container.querySelectorAll('.toggle-script').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -886,14 +981,163 @@
       const statusEl = document.getElementById('addScriptStatus');
       statusEl.style.display = 'block';
       if (res.ok) {
-        statusEl.className = 'msg msg-success';
+        statusEl.className = 'admin-msg admin-msg-success';
         statusEl.textContent = 'Script added.';
         form.reset();
         load();
       } else {
         const data = await res.json();
-        statusEl.className = 'msg msg-error';
+        statusEl.className = 'admin-msg admin-msg-error';
         statusEl.textContent = data.error || 'Failed to add script.';
+      }
+    });
+
+    load();
+  }
+
+  // ---- landing page CMS (v1.0.8 Part C) ----
+  function initLandingPagePage() {
+    async function load() {
+      const res = await window.adminFetch('/api/admin/landing');
+      const data = await res.json();
+
+      const form = document.getElementById('contentForm');
+      form.heroHeadline.value = data.content.heroHeadline;
+      form.heroTagline.value = data.content.heroTagline;
+      form.heroCtaText.value = data.content.heroCtaText;
+      form.trustLineText.value = data.content.trustLineText;
+      form.footerText.value = data.content.footerText;
+
+      renderSteps(data.steps);
+      renderFooterLinks(data.footerLinks);
+    }
+
+    document.getElementById('contentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/landing/content', {
+        method: 'PUT',
+        body: JSON.stringify({
+          heroHeadline: form.heroHeadline.value,
+          heroTagline: form.heroTagline.value,
+          heroCtaText: form.heroCtaText.value,
+          trustLineText: form.trustLineText.value,
+          footerText: form.footerText.value
+        })
+      });
+      const statusEl = document.getElementById('contentStatus');
+      statusEl.style.display = 'block';
+      statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
+      statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+    });
+
+    // ---- steps ----
+    function renderSteps(steps) {
+      const list = document.getElementById('stepsList');
+      list.innerHTML = steps.map((s, i) => `
+        <div class="flex items-start gap-3 rounded-md border border-slate-200 p-3" data-id="${s.id}">
+          <div class="flex shrink-0 flex-col gap-1">
+            <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${s.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${s.id}" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-hc-ink">${escapeHtml(s.title)} <span class="font-mono text-xs font-normal text-slate-400">(${escapeHtml(s.iconName)})</span></p>
+            <p class="mt-1 text-sm text-slate-500">${escapeHtml(s.description)}</p>
+          </div>
+          <button type="button" class="admin-btn-danger admin-btn-sm shrink-0 remove-step" data-id="${s.id}">Remove</button>
+        </div>`).join('') || '<p class="text-sm text-slate-400">No steps yet.</p>';
+
+      list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => moveStep(btn.dataset.id, 'up')));
+      list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => moveStep(btn.dataset.id, 'down')));
+      list.querySelectorAll('.remove-step').forEach(btn => btn.addEventListener('click', () => removeStep(btn.dataset.id)));
+    }
+
+    async function moveStep(id, direction) {
+      const res = await window.adminFetch(`/api/admin/landing/steps/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+      if (res.ok) load();
+    }
+
+    async function removeStep(id) {
+      if (!confirm('Remove this step?')) return;
+      const res = await window.adminFetch(`/api/admin/landing/steps/${id}`, { method: 'DELETE' });
+      if (res.ok) load();
+    }
+
+    document.getElementById('addStepForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/landing/steps', {
+        method: 'POST',
+        body: JSON.stringify({
+          iconName: form.iconName.value,
+          title: form.title.value,
+          description: form.description.value
+        })
+      });
+      const statusEl = document.getElementById('stepStatus');
+      if (res.ok) {
+        form.reset();
+        statusEl.style.display = 'none';
+        load();
+      } else {
+        const data = await res.json();
+        statusEl.style.display = 'block';
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to add step.';
+      }
+    });
+
+    // ---- footer links ----
+    function renderFooterLinks(links) {
+      const list = document.getElementById('footerLinksList');
+      list.innerHTML = links.map((l, i) => `
+        <div class="flex items-center gap-3 rounded-md border border-slate-200 p-2.5" data-id="${l.id}">
+          <div class="flex shrink-0 flex-col gap-1">
+            <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${l.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${l.id}" ${i === links.length - 1 ? 'disabled' : ''}>↓</button>
+          </div>
+          <div class="min-w-0 flex-1 text-sm">
+            <span class="font-medium text-hc-ink">${escapeHtml(l.label)}</span>
+            <span class="ml-2 text-slate-400">${escapeHtml(l.url)}</span>
+          </div>
+          <button type="button" class="admin-btn-danger admin-btn-sm shrink-0 remove-footer-link" data-id="${l.id}">Remove</button>
+        </div>`).join('') || '<p class="text-sm text-slate-400">No footer links yet.</p>';
+
+      list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => moveFooterLink(btn.dataset.id, 'up')));
+      list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => moveFooterLink(btn.dataset.id, 'down')));
+      list.querySelectorAll('.remove-footer-link').forEach(btn => btn.addEventListener('click', () => removeFooterLink(btn.dataset.id)));
+    }
+
+    async function moveFooterLink(id, direction) {
+      const res = await window.adminFetch(`/api/admin/landing/footer-links/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+      if (res.ok) load();
+    }
+
+    async function removeFooterLink(id) {
+      if (!confirm('Remove this footer link?')) return;
+      const res = await window.adminFetch(`/api/admin/landing/footer-links/${id}`, { method: 'DELETE' });
+      if (res.ok) load();
+    }
+
+    document.getElementById('addFooterLinkForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/landing/footer-links', {
+        method: 'POST',
+        body: JSON.stringify({ label: form.label.value, url: form.url.value })
+      });
+      if (res.ok) {
+        form.reset();
+        load();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to add footer link.');
       }
     });
 
@@ -912,5 +1156,6 @@
     if (page === 'submissions') initSubmissionsPage();
     if (page === 'site-settings') initSiteSettingsPage();
     if (page === 'scripts') initScriptsPage();
+    if (page === 'landing-page') initLandingPagePage();
   });
 })();
