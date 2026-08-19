@@ -6,10 +6,11 @@
       </span>
       <span><%= siteSettings.site_title %></span>
     </div>
-    <nav class="flex gap-6 text-sm text-hc-ink/60">
-      <a href="/#how-it-works" class="transition-colors hover:text-hc-ink">How it works</a>
-      <a href="/explore" class="transition-colors hover:text-hc-ink">Explore types</a>
+    <nav class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-hc-ink/60">
+      <% (landingFooterLinks || []).forEach(function (link) { %>
+        <a href="<%= link.url %>" class="transition-colors hover:text-hc-ink"><%= link.label %></a>
+      <% }); %>
     </nav>
-    <p class="text-xs text-hc-ink/40">&copy; <%= new Date().getFullYear() %> <%= siteSettings.site_title %>. All rights reserved.</p>
+    <p class="text-xs text-hc-ink/40"><%= landingContent.footerText %></p>
   </div>
 </footer>

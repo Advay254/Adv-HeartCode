@@ -3,5 +3,11 @@
 <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
 <meta name="csrf-token" content="<%= csrfToken %>">
 <% } %>
+<!-- v1.0.8 Part D: same Anton + Inter pairing as the public site, same
+     preconnect-before-@import pattern (see views/partials/public-head.ejs
+     for the full reasoning) -- admin.css's own @import handles the actual
+     font request. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="/dashboard-assets/admin.css">
 <script src="/dashboard-assets/admin.js" defer></script>
