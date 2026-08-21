@@ -3,6 +3,11 @@
 
   function draftKey(slug) { return STORAGE_PREFIX + 'draft_' + slug; }
   function previewKey(slug) { return STORAGE_PREFIX + 'preview_' + slug; }
+  // v1.0.9: carries the AI's raw output JSON (when this type is
+  // AI-enabled) from the generate call through to checkout, the same way
+  // previewKey already carries the rendered html — see routes/apiBuild.js
+  // and lib/emailTemplates.js for why the email template needs this too.
+  function aiOutputKey(slug) { return STORAGE_PREFIX + 'aiout_' + slug; }
 
   // Deliberately simple — just enough to catch obvious typos before a
   // network round trip. The server re-validates properly and is the only
@@ -144,6 +149,14 @@
           }
           try {
             sessionStorage.setItem(previewKey(slug), result.data.html);
+            // aiOutputValues is only present for AI-enabled types (see
+            // routes/apiBuild.js) — clear any stale value from a previous
+            // draft/type before conditionally re-setting it, so a
+            // non-AI type never carries forward a leftover value.
+            sessionStorage.removeItem(aiOutputKey(slug));
+            if (result.data.aiOutputValues) {
+              sessionStorage.setItem(aiOutputKey(slug), JSON.stringify(result.data.aiOutputValues));
+            }
           } catch (err) {
             showError('Your browser blocked local storage, so the preview can\'t be shown. Please enable storage and try again.');
             resetSubmitButton();
@@ -233,12 +246,26 @@
         if (key !== 'client_email') rawFieldValues[key] = draft[key];
       });
 
+      // v1.0.9: only present for AI-enabled types (see initBuildPage above)
+      // — omitted from the payload entirely when absent, same as any other
+      // optional field, rather than sending an explicit null.
+      var aiOutputRaw = sessionStorage.getItem(aiOutputKey(slug));
+      var aiOutputValues = null;
+      if (aiOutputRaw) {
+        try {
+          aiOutputValues = JSON.parse(aiOutputRaw);
+        } catch (err) {
+          aiOutputValues = null;
+        }
+      }
+
       var payload = {
         renderedHtml: html,
         clientEmail: draft.client_email,
         sitePassword: sitePasswordInput ? sitePasswordInput.value : '',
         rawFieldValues: rawFieldValues
       };
+      if (aiOutputValues) payload.aiOutputValues = aiOutputValues;
 
       fetch('/build/' + encodeURIComponent(slug) + '/checkout', {
         method: 'POST',
