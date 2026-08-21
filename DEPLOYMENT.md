@@ -57,6 +57,7 @@ See the README's environment variables section for what each one does, its failu
 1. Resend dashboard → add and verify a domain you control (follow their DNS instructions — this can take a few minutes to propagate).
 2. Resend dashboard → **API Keys → Create API Key**. Paste it into `RESEND_API_KEY`.
 3. Set `EMAIL_FROM_ADDRESS` to any address on that verified domain (e.g. `deploys@yourdomain.com`). Sends from an unverified domain will fail.
+4. That's it — no per-website-type setup required. **v1.0.9:** any website type can optionally override this generic email with its own subject + HTML body from its dashboard page's new **Email** tab (Website Types → a type → Email). A type with nothing saved there keeps using the generic email above automatically; there's nothing to configure here to enable or disable that.
 
 **Paystack (after your first deploy, once you have a live URL):**
 1. Paystack dashboard → **Settings → API Keys & Webhooks**.

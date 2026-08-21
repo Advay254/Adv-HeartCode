@@ -240,10 +240,10 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: '1.0.8' });
+    res.json({ status: 'ok', db: 'connected', version: '1.0.9' });
   } catch (err) {
     console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.8' });
+    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.9' });
   }
 });
 
