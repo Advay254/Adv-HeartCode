@@ -101,6 +101,82 @@
   .hc-panel-hover {
     @apply hover:-translate-y-1 hover:shadow-xl;
   }
+
+  /* v1.0.9 Part B: form controls for the public build/checkout flow.
+     Deliberately separate class names from public/site.css's plain
+     input/select/textarea element selectors and .radio-group/
+     .checkbox-group/.option-label/.msg* classes — that stylesheet stays
+     untouched (views/public/preview.ejs still relies on it) and is still
+     loaded on every public page via views/partials/public-head.ejs, so
+     fresh names here mean zero specificity fights or accidental bleed in
+     either direction, regardless of load order. */
+  .hc-label {
+    @apply mb-1.5 mt-5 flex items-center gap-1.5 text-sm font-medium
+           text-hc-ink first:mt-0;
+  }
+  .hc-label-icon {
+    @apply inline-flex h-4 w-4 shrink-0 text-hc-blue [&>svg]:h-4 [&>svg]:w-4;
+  }
+  .hc-input,
+  .hc-select,
+  .hc-textarea {
+    @apply w-full rounded-xl border border-black/10 bg-white px-4 py-2.5
+           font-sans text-sm text-hc-ink placeholder:text-hc-ink/40
+           transition-colors duration-200 focus:border-hc-blue
+           focus:outline-none focus:ring-2 focus:ring-hc-blue/20;
+  }
+  .hc-textarea {
+    @apply min-h-[8rem] resize-y;
+  }
+  .hc-select {
+    @apply cursor-pointer appearance-none pr-10;
+  }
+  .hc-select-wrap {
+    @apply relative;
+  }
+  .hc-select-chevron {
+    @apply pointer-events-none absolute right-3 top-1/2 h-4 w-4
+           -translate-y-1/2 text-hc-ink/40 [&>svg]:h-4 [&>svg]:w-4;
+  }
+
+  /* Radio/checkbox option rows — a bordered "chip" per option rather than
+     a bare native input, so every field type (including the two that
+     previously had no styling at all) reads as one consistent system.
+     :has(:checked) tints the row on selection — a decorative touch that
+     degrades gracefully (just no tint) in a browser without :has()
+     support; the native input itself remains the real, always-functional
+     control underneath. */
+  .hc-option-list {
+    @apply mt-1 flex flex-col gap-2;
+  }
+  .hc-option-item {
+    @apply flex cursor-pointer items-center gap-3 rounded-xl border
+           border-black/10 bg-white px-4 py-2.5 text-sm text-hc-ink
+           transition-colors duration-200 hover:border-hc-blue/40;
+  }
+  .hc-option-item:has(:checked) {
+    @apply border-hc-blue bg-hc-blue/5;
+  }
+  .hc-option-item input[type="radio"],
+  .hc-option-item input[type="checkbox"] {
+    @apply h-4 w-4 shrink-0 accent-hc-blue;
+  }
+
+  /* Inline feedback messages — replaces the restyled pages' previous
+     reliance on public/site.css's .msg/.msg-error/.msg-warning classes,
+     which stay in place there for preview.ejs's continued use. */
+  .hc-msg {
+    @apply mt-4 rounded-xl px-4 py-3 text-sm;
+  }
+  .hc-msg-error {
+    @apply bg-red-50 text-red-700;
+  }
+  .hc-msg-warning {
+    @apply bg-amber-50 text-amber-800;
+  }
+  .hc-msg-success {
+    @apply bg-emerald-50 text-emerald-700;
+  }
 }
 
 @media (max-width: 480px) {
