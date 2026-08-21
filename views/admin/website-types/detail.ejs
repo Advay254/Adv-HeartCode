@@ -16,6 +16,7 @@
       <button type="button" class="admin-tab-btn" data-tab="fields">Fields</button>
       <button type="button" class="admin-tab-btn" data-tab="ai">AI</button>
       <button type="button" class="admin-tab-btn" data-tab="template">Template</button>
+      <button type="button" class="admin-tab-btn" data-tab="email">Email</button>
     </div>
 
     <section id="tab-details" class="tab-panel">
@@ -148,6 +149,33 @@
         <table class="admin-table is-responsive-stack">
           <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
           <tbody id="historyTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-email" class="tab-panel" style="display:none;">
+      <div class="admin-card max-w-2xl">
+        <p class="text-sm text-slate-500">Available variables: <span id="availableEmailPlaceholders" class="font-mono text-xs">—</span></p>
+        <p class="mt-2 text-xs text-slate-500">
+          <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>, and <code>site_password</code>
+          are always available (a field or AI output with the same name can't override them). There's no conditional syntax yet — a template that
+          always prints <code>Password: {{site_password}}</code> will show a blank password line for sites with no password set.
+          Loop syntax (<code>{{#each field}}...{{/each}}</code>) only works in the HTML body, not the subject line.
+          Leave this tab untouched to keep sending the original generic "your site is ready" email.
+        </p>
+        <form id="emailTemplateForm">
+          <label class="admin-label" for="emailSubject">Subject (current version: <span id="currentEmailVersion">—</span>)</label>
+          <input class="admin-input" type="text" id="emailSubject" required>
+          <label class="admin-label" for="emailHtmlBody">HTML body</label>
+          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="emailHtmlBody"></textarea>
+          <button type="submit" class="admin-btn mt-3">Save new version</button>
+        </form>
+        <p id="emailTemplateStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+      <div class="admin-table-wrap mt-6">
+        <table class="admin-table is-responsive-stack">
+          <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+          <tbody id="emailHistoryTableBody"></tbody>
         </table>
       </div>
     </section>
