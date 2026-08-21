@@ -3,31 +3,45 @@
 <head>
 <%- include('../partials/public-head') %>
 </head>
-<body data-page="checkout" data-slug="<%= websiteType.slug %>">
+<body class="bg-white font-sans text-hc-ink antialiased" data-page="checkout" data-slug="<%= websiteType.slug %>">
 <%- include('../partials/public-body-start-scripts') %>
-<div class="site-shell">
-  <header class="site-header">
-    <h1>Checkout</h1>
-  </header>
-  <main class="site-main">
-    <div class="type-card">
-      <p><%= websiteType.name %></p>
-      <p style="font-size:1.4rem; font-weight:600; margin:0.25rem 0 1rem;"><%= websiteType.chargeDisplay %></p>
 
-      <label>Password-protect this site (optional)
-        <input type="password" id="sitePassword" placeholder="Leave blank for no password">
+<%- include('../partials/public-nav') %>
+
+<section class="bg-hc-blue px-4 py-12 text-center sm:px-6 sm:py-16">
+  <div class="mx-auto max-w-2xl" data-reveal>
+    <p class="mb-3 inline-block rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-hc-yellow">
+      Almost there
+    </p>
+    <h1 class="font-display text-3xl uppercase text-white sm:text-4xl">Checkout</h1>
+  </div>
+</section>
+
+<main class="bg-white px-4 py-12 sm:px-6">
+  <div class="mx-auto max-w-md">
+    <div class="hc-panel border border-black/5 p-6 sm:p-8" data-reveal>
+      <p class="text-sm font-semibold uppercase tracking-widest text-hc-blue"><%= websiteType.name %></p>
+      <p class="mt-1 font-display text-4xl text-hc-ink"><%= websiteType.chargeDisplay %></p>
+
+      <label class="hc-label" for="sitePassword">
+        <span class="hc-label-icon"><%- getIconSvg('lock') %></span>
+        Password-protect this site (optional)
       </label>
-      <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.35rem;">
-        Note: this is a simple visitor gate, not strong security — anyone who views the page source can still see the content.
+      <input class="hc-input" type="password" id="sitePassword" placeholder="Leave blank for no password">
+      <p class="mt-2 text-xs text-hc-ink/50">
+        This is a simple visitor gate, not strong security — anyone who views the page source can still see the content.
       </p>
 
-      <p id="checkoutError" class="msg msg-error" style="display:none;"></p>
-      <button type="button" id="payBtn" style="margin-top:1rem; width:100%;">Pay Now</button>
+      <p id="checkoutError" class="hc-msg hc-msg-error" style="display:none;"></p>
+      <button type="button" id="payBtn" class="hc-pill-btn mt-6 w-full">Pay Now</button>
     </div>
-    <p style="margin-top:1rem;"><a href="/build/<%= websiteType.slug %>/preview">← Back to preview</a></p>
-  </main>
-</div>
-<script src="/site.js" defer></script>
+    <p class="mt-6 text-center">
+      <a href="/build/<%= websiteType.slug %>/preview" class="text-sm font-medium text-hc-blue hover:underline">← Back to preview</a>
+    </p>
+  </div>
+</main>
+
+<%- include('../partials/public-footer') %>
 <%- include('../partials/public-footer-scripts') %>
 </body>
 </html>

@@ -3,35 +3,49 @@
 <head>
 <%- include('../partials/public-head') %>
 </head>
-<body>
+<body class="bg-white font-sans text-hc-ink antialiased">
 <%- include('../partials/public-body-start-scripts') %>
-<div class="site-shell">
-  <main class="site-main" style="text-align:center; padding-top:3rem;">
+
+<%- include('../partials/public-nav') %>
+
+<main class="bg-white px-4 py-16 sm:px-6">
+  <div class="mx-auto max-w-md text-center" data-reveal>
     <% if (outcome === 'success') { %>
-      <h1>Your site is live! 🎉</h1>
-      <p><a href="<%= siteUrl %>" class="btn"><%= siteUrl %></a></p>
-      <p style="color:var(--text-dim);">We've also emailed you this link (and your site password, if you set one).</p>
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
+        <%- getIconSvg('circle-check') %>
+      </div>
+      <h1 class="mt-5 font-display text-3xl uppercase text-hc-ink">Your site is live!</h1>
+      <div class="hc-panel mt-6 border border-black/5 p-6">
+        <a href="<%= siteUrl %>" class="break-all text-sm font-semibold text-hc-blue hover:underline"><%= siteUrl %></a>
+      </div>
+      <p class="mt-4 text-sm text-hc-ink/60">We've also emailed you this link (and your site password, if you set one).</p>
+      <a href="<%= siteUrl %>" class="hc-pill-btn mt-6">Visit your site</a>
     <% } else if (outcome === 'not_paid') { %>
-      <h1>Payment not completed</h1>
-      <p class="msg msg-warning">It looks like this payment wasn't completed. You have not been charged.</p>
-      <% if (slug) { %><p><a href="/build/<%= slug %>/checkout" class="btn-secondary">Try again</a></p><% } %>
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700 [&>svg]:h-7 [&>svg]:w-7">
+        <%- getIconSvg('credit-card') %>
+      </div>
+      <h1 class="mt-5 font-display text-3xl uppercase text-hc-ink">Payment not completed</h1>
+      <p class="hc-msg hc-msg-warning">It looks like this payment wasn't completed. You have not been charged.</p>
+      <% if (slug) { %><a href="/build/<%= slug %>/checkout" class="hc-pill-btn-outline mt-6">Try again</a><% } %>
     <% } else if (outcome === 'expired') { %>
-      <h1>This checkout session expired</h1>
-      <p class="msg msg-warning">Checkout sessions are only valid for an hour. Please start over.</p>
-      <% if (slug) { %><p><a href="/build/<%= slug %>" class="btn-secondary">Start over</a></p><% } %>
+      <h1 class="font-display text-3xl uppercase text-hc-ink">This checkout session expired</h1>
+      <p class="hc-msg hc-msg-warning">Checkout sessions are only valid for an hour. Please start over.</p>
+      <% if (slug) { %><a href="/build/<%= slug %>" class="hc-pill-btn-outline mt-6">Start over</a><% } %>
     <% } else if (outcome === 'not_found') { %>
-      <h1>We couldn't find this checkout</h1>
-      <p class="msg msg-error">This reference doesn't match anything on file.</p>
-      <p><a href="/" class="btn-secondary">← Back home</a></p>
+      <h1 class="font-display text-3xl uppercase text-hc-ink">We couldn't find this checkout</h1>
+      <p class="hc-msg hc-msg-error">This reference doesn't match anything on file.</p>
+      <a href="/" class="hc-pill-btn-outline mt-6">← Back home</a>
     <% } else { %>
-      <h1>Something went wrong</h1>
-      <p class="msg msg-error">
+      <h1 class="font-display text-3xl uppercase text-hc-ink">Something went wrong</h1>
+      <p class="hc-msg hc-msg-error">
         We hit a problem finishing this deployment.
         <% if (reference) { %>If you were charged, contact support and quote this reference: <strong><%= reference %></strong><% } %>
       </p>
     <% } %>
-  </main>
-</div>
+  </div>
+</main>
+
+<%- include('../partials/public-footer') %>
 <%- include('../partials/public-footer-scripts') %>
 </body>
 </html>
