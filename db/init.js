@@ -330,9 +330,38 @@ SELECT * FROM (VALUES
   ('Explore types', '/explore', 2)
 ) AS seed(label, url, display_order)
 WHERE NOT EXISTS (SELECT 1 FROM landing_footer_links);
+
+-- v1.0.9 Part A: per-website-type email templates. Same versioning
+-- discipline as the site "templates" table above -- saving a new version
+-- inserts a new row and deactivates the previous active one for that
+-- type, never deletes history. A type with NO row here at all (the
+-- default, for every existing type until an admin visits the new Email
+-- tab) falls back to the original hardcoded generic email exactly as
+-- before -- see lib/finalizeDeployment.js.
+CREATE TABLE IF NOT EXISTS email_templates (
+  id SERIAL PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  html_body TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- v1.0.9 Part A: mirrors pending_deployments.raw_field_values (v1.0.8) --
+-- the AI's parsed structured output only ever existed transiently during
+-- the original /api/build/:slug/generate call, and by the time
+-- finalizeDeployment.js actually runs (at payment verification,
+-- potentially long after that call) it was already gone. An email
+-- template wants the SAME merged variable set the site template already
+-- had access to (raw fields + AI output), so this carries the AI's raw
+-- JSON output through checkout the same way raw_field_values already
+-- carries the raw form submission through. NULL for AI-disabled types,
+-- or for any deployment finalized before this version existed.
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS ai_output_values JSONB DEFAULT NULL;
 `;
 
-const CURRENT_VERSION = '1.0.8';
+const CURRENT_VERSION = '1.0.9';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
