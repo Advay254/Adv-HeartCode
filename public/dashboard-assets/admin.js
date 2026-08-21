@@ -478,6 +478,19 @@
       document.getElementById('availablePlaceholders').textContent = tokens.length ? tokens.join(',  ') : 'none defined yet';
     }
 
+    // v1.0.9: same reference list as the Template tab's, plus the five
+    // system variables that are always available to an email template on
+    // top of this type's own fields/outputs — kept in sync by hand with
+    // routes/adminWebsiteTypes.js's SYSTEM_EMAIL_VARIABLES (small, stable
+    // list, not worth a shared-module round trip for).
+    const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password'];
+    function renderEmailPlaceholdersReference() {
+      const tokens = SYSTEM_EMAIL_VARIABLES.map(v => `{{${v}}}`)
+        .concat(currentFields.map(placeholderTokenForField))
+        .concat(currentOutputFields.map(placeholderTokenForOutput));
+      document.getElementById('availableEmailPlaceholders').textContent = tokens.join(',  ');
+    }
+
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
@@ -545,6 +558,7 @@
         </tr>`).join('') || '<tr><td colspan="5" data-label="">No fields yet.</td></tr>';
 
       renderPlaceholdersReference();
+      renderEmailPlaceholdersReference();
 
       document.querySelectorAll('.remove-field').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -659,6 +673,7 @@
       currentOutputFields = data.outputFields || [];
       renderOutputFieldsTable();
       renderPlaceholdersReference();
+      renderEmailPlaceholdersReference();
     }
 
     document.getElementById('aiEnabledToggle').addEventListener('change', async (e) => {
@@ -718,8 +733,60 @@
       }
     });
 
+    // ---- Email tab (v1.0.9 Part A) ----
+
+    async function loadEmailTemplate() {
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/email-template`);
+      const data = await res.json();
+      document.getElementById('currentEmailVersion').textContent = data.active ? 'v' + data.active.version : 'none yet — generic fallback email is used';
+      document.getElementById('emailSubject').value = data.active ? data.active.subject : '';
+      document.getElementById('emailHtmlBody').value = data.active ? data.active.htmlBody : '';
+      document.getElementById('emailHistoryTableBody').innerHTML = data.history.map(h => `
+        <tr>
+          <td data-label="Version">v${h.version}</td>
+          <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
+          <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-email" data-version="${h.version}">Rollback to this</button>`}</td>
+        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet — the generic fallback email is used.</td></tr>';
+
+      document.querySelectorAll('.rollback-email').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm(`Roll back to version ${btn.dataset.version}?`)) return;
+          const res = await window.adminFetch(`/api/admin/website-types/${typeId}/email-template/rollback/${btn.dataset.version}`, { method: 'POST' });
+          if (res.ok) loadEmailTemplate();
+        });
+      });
+    }
+
+    document.getElementById('emailTemplateForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/email-template`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          subject: document.getElementById('emailSubject').value,
+          htmlBody: document.getElementById('emailHtmlBody').value
+        })
+      });
+      const data = await res.json();
+      const statusEl = document.getElementById('emailTemplateStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        const warnings = []
+          .concat(data.undefinedPlaceholders.length ? [`no matching field: ${data.undefinedPlaceholders.join(', ')}`] : [])
+          .concat(data.shapeWarnings || []);
+        statusEl.className = 'admin-msg ' + (warnings.length ? 'admin-msg-warning' : 'admin-msg-success');
+        statusEl.textContent = warnings.length
+          ? `Saved as v${data.version}, but: ${warnings.join(' | ')}`
+          : `Saved as v${data.version}.`;
+        loadEmailTemplate();
+      } else {
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to save email template.';
+      }
+    });
+
     loadFields().then(loadAiConfig);
     loadTemplate();
+    loadEmailTemplate();
   }
 
   // ---- overview page ----
