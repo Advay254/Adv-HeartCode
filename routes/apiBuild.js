@@ -428,7 +428,14 @@ ${JSON.stringify(outputSchema)}`;
   // markup, regardless of how much the AI provider is trusted.
   const html = substitutePlaceholders(templateHtml, flatValues, arrayValues);
 
-  res.json({ html });
+  // v1.0.9: also hand back the AI's raw parsed JSON output (unescaped,
+  // exactly as validated above) alongside the rendered html. This call is
+  // the only point in the whole pipeline where the AI's output actually
+  // exists — by the time finalizeDeployment.js runs (at payment
+  // verification, potentially long after this request), it's gone unless
+  // the client carries it through checkout the same way raw_field_values
+  // already does (v1.0.8). See public/site.js and routes/public.js.
+  res.json({ html, aiOutputValues: parsedOutput });
 });
 
 module.exports = router;

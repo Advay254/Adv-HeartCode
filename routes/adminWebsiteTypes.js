@@ -494,8 +494,21 @@ router.put('/:id/template', requireCsrf, async (req, res) => {
 
     // Validate placeholders against defined fields — warn, don't block:
     // the admin may be about to add the field next.
+    // v1.0.9 bug fix: this used to select field_key only, so a raw
+    // "checkboxes" field (array-shaped, submitted as multiple selections —
+    // see lib/fieldTypes.js and apiBuild.js's rawArrayValues) could never
+    // be recognized as array-shaped here. The shape-mismatch check below
+    // would then wrongly warn that a perfectly correct
+    // {{#each some_checkboxes_field}} "won't work" on a field where it's
+    // actually the loop syntax that's needed to render every selected
+    // option (a flat {{some_checkboxes_field}} still "works" too, just as
+    // a comma-joined string — the warning wasn't just noisy, it steered an
+    // admin toward the wrong syntax for what they were trying to do).
+    // AI output fields already got this right (see the object_shape
+    // handling just below); this brings raw fields in line with the same
+    // shape-awareness.
     const fieldsResult = await client.query(
-      'SELECT field_key FROM template_fields WHERE website_type_id = $1',
+      'SELECT field_key, field_type FROM template_fields WHERE website_type_id = $1',
       [websiteTypeId]
     );
     // v1.0.6: also pull AI output fields so the placeholder check covers
@@ -507,8 +520,12 @@ router.put('/:id/template', requireCsrf, async (req, res) => {
       [websiteTypeId]
     );
 
-    const flatKeys = new Set(fieldsResult.rows.map(f => f.field_key));
+    const flatKeys = new Set();
     const arrayKeys = new Set();
+    for (const f of fieldsResult.rows) {
+      if (f.field_type === 'checkboxes') arrayKeys.add(f.field_key);
+      else flatKeys.add(f.field_key);
+    }
     for (const f of outputFieldsResult.rows) {
       if (f.output_type === 'string') flatKeys.add(f.output_key);
       else arrayKeys.add(f.output_key);
@@ -635,6 +652,210 @@ router.post('/:id/template/rollback/:version', requireCsrf, async (req, res) => 
     await client.query('ROLLBACK');
     console.error('[TEMPLATE] Failed to rollback template:', err.message);
     res.status(500).json({ error: 'Failed to rollback template' });
+  } finally {
+    client.release();
+  }
+});
+
+// ---- email templates (v1.0.9 Part A) ----
+//
+// Same versioning discipline as ---- template (site) ---- above: PUT
+// inserts a new version and deactivates the previous active one, rollback
+// is a pointer-flip, nothing is ever deleted. A type with no row here at
+// all uses the original hardcoded generic email — see
+// lib/finalizeDeployment.js and lib/emailTemplates.js.
+
+// Reserved variable names always available to an email template, on top of
+// this type's own raw fields / AI output fields — see
+// lib/emailTemplates.js's SYSTEM_EMAIL_VARIABLES (kept in sync manually;
+// this file doesn't import from lib/emailTemplates.js purely to avoid a
+// route file depending on a lib whose only other consumer is the finalize
+// pipeline, not because the list is expected to diverge).
+const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password'];
+
+const emailTemplateSchema = z.object({
+  subject: z.string().trim().min(1).max(500),
+  htmlBody: z.string().min(1).max(500000)
+});
+
+router.get('/:id/email-template', async (req, res) => {
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const { id } = parsed.data;
+
+  const pool = getPool();
+  const active = await pool.query(
+    'SELECT * FROM email_templates WHERE website_type_id = $1 AND is_active = true LIMIT 1',
+    [id]
+  );
+  const history = await pool.query(
+    'SELECT version, created_at FROM email_templates WHERE website_type_id = $1 ORDER BY version DESC LIMIT 5',
+    [id]
+  );
+
+  res.json({
+    active: active.rowCount > 0
+      ? { subject: active.rows[0].subject, htmlBody: active.rows[0].html_body, version: active.rows[0].version }
+      : null,
+    history: history.rows.map(h => ({ version: h.version, createdAt: h.created_at }))
+  });
+});
+
+router.put('/:id/email-template', requireCsrf, async (req, res) => {
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const bodyParsed = emailTemplateSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    const message = bodyParsed.error.issues[0] ? bodyParsed.error.issues[0].message : 'subject and htmlBody are required';
+    return res.status(400).json({ error: message });
+  }
+  const { id: websiteTypeId } = paramsParsed.data;
+  const { subject, htmlBody } = bodyParsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const typeCheck = await client.query('SELECT id FROM website_types WHERE id = $1 FOR UPDATE', [websiteTypeId]);
+    if (typeCheck.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Website type not found' });
+    }
+
+    const fieldsResult = await client.query(
+      'SELECT field_key, field_type FROM template_fields WHERE website_type_id = $1',
+      [websiteTypeId]
+    );
+    const outputFieldsResult = await client.query(
+      'SELECT output_key, output_type FROM ai_output_fields WHERE website_type_id = $1',
+      [websiteTypeId]
+    );
+
+    const flatKeys = new Set(SYSTEM_EMAIL_VARIABLES);
+    const arrayKeys = new Set();
+    for (const f of fieldsResult.rows) {
+      if (f.field_type === 'checkboxes') arrayKeys.add(f.field_key);
+      else flatKeys.add(f.field_key);
+    }
+    for (const f of outputFieldsResult.rows) {
+      if (f.output_type === 'string') flatKeys.add(f.output_key);
+      else arrayKeys.add(f.output_key);
+    }
+    const knownKeys = new Set([...flatKeys, ...arrayKeys]);
+
+    // Loop scan on htmlBody only — {{#each}} has no effect in the
+    // plain-text subject line (lib/emailTemplates.js's renderEmailContent
+    // substitutes the subject via substitutePlainText, the same
+    // loop-free engine used for AI prompts). A subject containing
+    // {{#each ...}} isn't specially warned about here; it just won't
+    // expand, same as any other engine limitation the admin UI documents
+    // as copy rather than a save-time error.
+    const foundEachKeys = new Set();
+    let match;
+    EACH_BLOCK_RE.lastIndex = 0;
+    while ((match = EACH_BLOCK_RE.exec(htmlBody)) !== null) {
+      foundEachKeys.add(match[1]);
+    }
+    const htmlBodyWithoutLoopBodies = htmlBody.replace(EACH_BLOCK_RE, '');
+
+    const foundFlatKeys = new Set();
+    PLACEHOLDER_RE.lastIndex = 0;
+    while ((match = PLACEHOLDER_RE.exec(htmlBodyWithoutLoopBodies)) !== null) {
+      foundFlatKeys.add(match[1]);
+    }
+    PLACEHOLDER_RE.lastIndex = 0;
+    while ((match = PLACEHOLDER_RE.exec(subject)) !== null) {
+      foundFlatKeys.add(match[1]);
+    }
+    const undefinedPlaceholders = [...foundFlatKeys].filter(k => !knownKeys.has(k));
+
+    const shapeWarnings = [];
+    for (const k of foundFlatKeys) {
+      if (arrayKeys.has(k)) {
+        shapeWarnings.push(`"${k}" is a list field — use {{#each ${k}}}...{{/each}} in the HTML body instead of {{${k}}}`);
+      }
+    }
+    for (const k of foundEachKeys) {
+      if (flatKeys.has(k)) {
+        shapeWarnings.push(`"${k}" is a single-value field, not a list — {{#each ${k}}} won't work, use {{${k}}} instead`);
+      } else if (!knownKeys.has(k)) {
+        shapeWarnings.push(`"${k}" (used in {{#each ${k}}}) is not a defined field or AI output`);
+      }
+    }
+
+    const maxVersionResult = await client.query(
+      'SELECT COALESCE(MAX(version), 0) AS max_version FROM email_templates WHERE website_type_id = $1',
+      [websiteTypeId]
+    );
+    const nextVersion = Number(maxVersionResult.rows[0].max_version) + 1;
+
+    await client.query(
+      'UPDATE email_templates SET is_active = false WHERE website_type_id = $1 AND is_active = true',
+      [websiteTypeId]
+    );
+
+    const inserted = await client.query(
+      `INSERT INTO email_templates (website_type_id, subject, html_body, version, is_active)
+       VALUES ($1, $2, $3, $4, true) RETURNING *`,
+      [websiteTypeId, subject, htmlBody, nextVersion]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      version: inserted.rows[0].version,
+      undefinedPlaceholders,
+      shapeWarnings
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[EMAIL TEMPLATE] Failed to save email template:', err.message);
+    res.status(500).json({ error: 'Failed to save email template' });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/:id/email-template/rollback/:version', requireCsrf, async (req, res) => {
+  const parsed = rollbackParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id or version' });
+  }
+  const { id: websiteTypeId, version } = parsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const target = await client.query(
+      'SELECT id FROM email_templates WHERE website_type_id = $1 AND version = $2 FOR UPDATE',
+      [websiteTypeId, version]
+    );
+    if (target.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'That email template version does not exist' });
+    }
+
+    await client.query(
+      'UPDATE email_templates SET is_active = false WHERE website_type_id = $1 AND is_active = true',
+      [websiteTypeId]
+    );
+    await client.query('UPDATE email_templates SET is_active = true WHERE id = $1', [target.rows[0].id]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, activeVersion: version });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[EMAIL TEMPLATE] Failed to rollback email template:', err.message);
+    res.status(500).json({ error: 'Failed to rollback email template' });
   } finally {
     client.release();
   }

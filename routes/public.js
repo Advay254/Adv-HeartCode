@@ -82,6 +82,27 @@ const checkoutBodySchema = z.object({
   rawFieldValues: z.record(
     z.string(),
     z.union([z.string().max(5000), z.array(z.string().max(500)).max(50)])
+  ).optional(),
+  // v1.0.9: the AI's own raw output for this submission (present only for
+  // AI-enabled types — see routes/apiBuild.js), carried through checkout
+  // for the same reason rawFieldValues is: lib/finalizeDeployment.js needs
+  // it at deploy time to build the merged variable set a custom email
+  // template can reference, and by then the original /generate response is
+  // long gone. Shape mirrors ai_output_fields' three possible output
+  // types: a flat string, an array of strings, or an array of objects with
+  // string sub-properties (object_shape is admin-defined but always
+  // string-valued — see routes/adminWebsiteTypes.js's AI output field
+  // validation). Note this is, like renderedHtml and rawFieldValues above
+  // it, client-supplied and not re-verified against what the AI actually
+  // produced — the same trust boundary this whole endpoint has always had
+  // for the rendered site content itself, not a new one introduced here.
+  aiOutputValues: z.record(
+    z.string(),
+    z.union([
+      z.string().max(5000),
+      z.array(z.string().max(2000)).max(200),
+      z.array(z.record(z.string(), z.string().max(2000))).max(200)
+    ])
   ).optional()
 });
 
@@ -329,7 +350,7 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
     const field = firstIssue ? firstIssue.path[0] : 'request';
     return res.status(400).json({ error: `Invalid ${field}` });
   }
-  const { renderedHtml, clientEmail: email, sitePassword, rawFieldValues } = parsed.data;
+  const { renderedHtml, clientEmail: email, sitePassword, rawFieldValues, aiOutputValues } = parsed.data;
 
   if (!EMAIL_RE.test(email)) {
     // zod's .email() already validated this; the house regex is kept as
@@ -372,11 +393,13 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
   await pool.query(
     `INSERT INTO pending_deployments
        (reference, website_type_id, client_email, site_password_hash, rendered_html,
-        charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values,
+        ai_output_values)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [reference, websiteType.id, email, sitePasswordHash, renderedHtml,
       charge.currency, charge.amount, charge.rate, expiresAt,
-      rawFieldValues ? JSON.stringify(rawFieldValues) : null]
+      rawFieldValues ? JSON.stringify(rawFieldValues) : null,
+      aiOutputValues ? JSON.stringify(aiOutputValues) : null]
   );
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/build/${websiteType.slug}/checkout/callback`;
