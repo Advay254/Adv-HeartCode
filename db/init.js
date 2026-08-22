@@ -359,9 +359,63 @@ CREATE TABLE IF NOT EXISTS email_templates (
 -- carries the raw form submission through. NULL for AI-disabled types,
 -- or for any deployment finalized before this version existed.
 ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS ai_output_values JSONB DEFAULT NULL;
+
+-- v1.1.0 Part A: pending-deployment recovery. server.js's cleanup interval
+-- now keeps a pending_deployments row for a full 7 days past expires_at
+-- (was: deleted almost immediately) so an admin has a real window to
+-- recover a payment that succeeded but whose webhook never fired AND
+-- whose client never landed back on the callback page -- see
+-- routes/adminRecovery.js. No new table needed for that; expires_at
+-- itself is UNCHANGED (still set at checkout time to now + 1 hour) and
+-- keeps its original meaning ("is this checkout session still fresh
+-- enough for the client's own browser to complete it") -- only the
+-- CLEANUP interval's deletion threshold moved. See
+-- lib/finalizeDeployment.js's skipExpiryCheck parameter for how the new
+-- admin retry path distinguishes "expired for a normal client-facing
+-- callback" from "expired but an admin is deliberately asking us to
+-- re-check anyway".
+--
+-- v1.1.0 Part B: carries the client's anonymous funnel session_id
+-- (public/funnel.js) through checkout, for exactly the same structural
+-- reason raw_field_values (v1.0.8) and ai_output_values (v1.0.9) already
+-- carry THEIR data through checkout -- the payment_completed funnel event
+-- is fired server-side from inside lib/finalizeDeployment.js (deliberately
+-- never trusted from a client-submitted event -- see routes/events.js),
+-- which runs later, in a separate request, after the session_id's
+-- original point of origin (the build/checkout page load) is long gone
+-- unless something carries it forward. NULL-safe: if this wasn't
+-- captured (old pending row, JS blocked, sendBeacon unsupported), the
+-- payment_completed event for that one deployment is simply skipped
+-- rather than inserting a NULL into funnel_events.session_id's NOT NULL
+-- column -- an analytics gap, never a reason to fail a real deployment.
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS funnel_session_id TEXT DEFAULT NULL;
+
+-- v1.1.0 Part B: lightweight, first-party, fully anonymous funnel event
+-- log. session_id is a random client-generated identifier
+-- (crypto.randomUUID(), see public/funnel.js) living only in
+-- sessionStorage -- NOT a persistent cookie, NOT tied to an email
+-- address, IP, or any other identifying information, gone the moment the
+-- browser tab/session ends. Its only purpose is letting the admin Funnel
+-- page count how many (anonymous) visits reached each stage of the
+-- client journey within a date range -- see routes/adminFunnel.js. No
+-- personal data of any kind is ever written to this table.
+CREATE TABLE IF NOT EXISTS funnel_events (
+  id SERIAL PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  website_type_id INTEGER REFERENCES website_types(id),
+  session_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Supports both the admin Funnel page's per-stage COUNT(*) queries
+-- (filtered by event_type + a created_at range, optionally further
+-- filtered by website_type_id) and the periodic 90-day pruning sweep
+-- (server.js) that deletes purely by created_at.
+CREATE INDEX IF NOT EXISTS idx_funnel_events_type_created ON funnel_events(event_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_funnel_events_website_type ON funnel_events(website_type_id);
 `;
 
-const CURRENT_VERSION = '1.0.9';
+const CURRENT_VERSION = '1.1.0';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
