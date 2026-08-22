@@ -954,6 +954,199 @@
     loadSubscribers();
   }
 
+  // ---- recovery page (v1.1.0 Part A) ----
+  function initRecoveryPage() {
+    let page = 1;
+    let search = '';
+    let searchDebounceTimer = null;
+
+    function formatDate(iso) {
+      return new Date(iso).toLocaleString();
+    }
+
+    function formatAmount(r) {
+      return r.chargeCurrency && r.chargeAmount !== null
+        ? `${escapeHtml(r.chargeCurrency)} ${Number(r.chargeAmount).toFixed(2)}`
+        : '—';
+    }
+
+    function statusBadge(status) {
+      return status === 'needs_attention'
+        ? '<span class="admin-badge admin-badge-warn">Needs attention</span>'
+        : '<span class="admin-badge admin-badge-active">Active</span>';
+    }
+
+    async function load() {
+      const url = '/api/admin/pending-deployments?page=' + page + '&search=' + encodeURIComponent(search);
+      const res = await window.adminFetch(url);
+      const data = await res.json();
+
+      document.getElementById('recoveryTableBody').innerHTML = data.pending.map(p => `
+        <tr data-reference="${escapeHtml(p.reference)}">
+          <td data-label="Reference" class="font-mono text-xs">${escapeHtml(p.reference)}</td>
+          <td data-label="Client">${escapeHtml(p.clientEmail)}</td>
+          <td data-label="Type">${escapeHtml(p.websiteTypeName || '—')}</td>
+          <td data-label="Amount">${formatAmount(p)}</td>
+          <td data-label="Created">${formatDate(p.createdAt)}</td>
+          <td data-label="Status">${statusBadge(p.status)}</td>
+          <td data-label="">
+            <div class="flex flex-col items-end gap-1.5">
+              <div class="flex gap-2">
+                <button type="button" class="admin-btn-outline admin-btn-sm retry-btn" data-reference="${escapeHtml(p.reference)}">Check &amp; Deploy</button>
+                <button type="button" class="admin-btn-danger admin-btn-sm delete-btn" data-reference="${escapeHtml(p.reference)}">Delete</button>
+              </div>
+              <p class="retry-result text-xs" style="display:none;"></p>
+            </div>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7" data-label="">No pending deployments.</td></tr>';
+
+      document.getElementById('recoveryPageInfo').textContent = `Page ${data.page} of ${data.totalPages} (${data.total} total)`;
+      document.getElementById('recoveryPrev').disabled = data.page <= 1;
+      document.getElementById('recoveryNext').disabled = data.page >= data.totalPages;
+
+      document.querySelectorAll('.retry-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const reference = btn.dataset.reference;
+          const row = document.querySelector(`tr[data-reference="${CSS.escape(reference)}"]`);
+          const resultEl = row.querySelector('.retry-result');
+          btn.disabled = true;
+          btn.textContent = 'Checking…';
+
+          const res = await window.adminFetch(`/api/admin/pending-deployments/${encodeURIComponent(reference)}/retry`, { method: 'POST' });
+          const data = await res.json();
+
+          resultEl.style.display = 'block';
+          if (data.outcome === 'deployed') {
+            resultEl.className = 'retry-result text-xs text-emerald-600';
+            resultEl.innerHTML = `Deployed: <a href="${escapeHtml(data.siteUrl)}" target="_blank" rel="noopener" class="underline">${escapeHtml(data.siteUrl)}</a>`;
+            setTimeout(load, 1500);
+          } else if (data.outcome === 'not_paid') {
+            resultEl.className = 'retry-result text-xs text-amber-600';
+            resultEl.textContent = 'Payment not verified — nothing was changed.';
+            btn.disabled = false;
+            btn.textContent = 'Check & Deploy';
+          } else if (data.outcome === 'not_found') {
+            resultEl.className = 'retry-result text-xs text-amber-600';
+            resultEl.textContent = 'This reference no longer exists.';
+            btn.disabled = false;
+            btn.textContent = 'Check & Deploy';
+          } else {
+            resultEl.className = 'retry-result text-xs text-red-600';
+            resultEl.textContent = data.error || 'Something went wrong — nothing was changed.';
+            btn.disabled = false;
+            btn.textContent = 'Check & Deploy';
+          }
+        });
+      });
+
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const reference = btn.dataset.reference;
+          if (!confirm(`Permanently delete this pending deployment (${reference})? This can't be undone.`)) return;
+          const res = await window.adminFetch(`/api/admin/pending-deployments/${encodeURIComponent(reference)}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+    }
+
+    document.getElementById('recoverySearch').addEventListener('input', (e) => {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        search = e.target.value;
+        page = 1;
+        load();
+      }, 300);
+    });
+    document.getElementById('recoveryPrev').addEventListener('click', () => {
+      if (page > 1) { page--; load(); }
+    });
+    document.getElementById('recoveryNext').addEventListener('click', () => {
+      page++; load();
+    });
+
+    load();
+  }
+
+  // ---- funnel page (v1.1.0 Part B) ----
+  function initFunnelPage() {
+    const rangeSelect = document.getElementById('funnelRange');
+    const typeSelect = document.getElementById('funnelTypeFilter');
+    const typeNote = document.getElementById('funnelTypeNote');
+    const chartEl = document.getElementById('funnelChart');
+    const emptyEl = document.getElementById('funnelEmpty');
+
+    async function loadTypes() {
+      const res = await window.adminFetch('/api/admin/website-types');
+      const data = await res.json();
+      const types = Array.isArray(data) ? data : (data.websiteTypes || []);
+      types.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        typeSelect.appendChild(opt);
+      });
+    }
+
+    function renderChart(stages) {
+      const maxCount = Math.max(1, ...stages.map(s => s.count));
+      const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
+
+      if (totalCount === 0) {
+        chartEl.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      chartEl.innerHTML = stages.map(s => {
+        const widthPct = Math.round((s.count / maxCount) * 100);
+        // v1.1.0: page_view_home and page_view_explore are actually two
+        // PARALLEL entry points into the site (a visitor can land directly
+        // on /explore, or on a shared /build/:slug link, without ever
+        // visiting /home first) rather than sequential funnel steps — so
+        // the count can genuinely go UP from one to the next, producing a
+        // negative "drop-off". That's real data, not a bug — shown as a
+        // neutral "grew X%" rather than folded into "no drop-off", which
+        // would silently hide that the two aren't strictly sequential.
+        const dropOffHtml = s.dropOffPct === null
+          ? ''
+          : s.dropOffPct > 0
+            ? `<span class="ml-2 text-xs font-medium text-red-500">↓ ${s.dropOffPct}% drop-off</span>`
+            : s.dropOffPct < 0
+              ? `<span class="ml-2 text-xs font-medium text-hc-blue">↑ grew ${Math.abs(s.dropOffPct)}%</span>`
+              : `<span class="ml-2 text-xs font-medium text-emerald-600">no drop-off</span>`;
+        return `
+          <div class="mb-4 last:mb-0">
+            <div class="mb-1 flex items-baseline justify-between">
+              <span class="text-sm font-medium text-hc-ink">${escapeHtml(s.label)}</span>
+              <span class="text-sm text-slate-500">${s.count}${dropOffHtml}</span>
+            </div>
+            <div class="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+              <div class="h-full rounded-full bg-hc-blue" style="width:${widthPct}%"></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function load() {
+      const days = rangeSelect.value;
+      const websiteTypeId = typeSelect.value;
+      typeNote.style.display = websiteTypeId ? 'block' : 'none';
+
+      let url = '/api/admin/funnel/stats?days=' + encodeURIComponent(days);
+      if (websiteTypeId) url += '&websiteTypeId=' + encodeURIComponent(websiteTypeId);
+
+      const res = await window.adminFetch(url);
+      const data = await res.json();
+      renderChart(data.stages);
+    }
+
+    rangeSelect.addEventListener('change', load);
+    typeSelect.addEventListener('change', load);
+
+    loadTypes().then(load);
+  }
+
   // ---- site settings page (v1.0.7) ----
   function initSiteSettingsPage() {
     async function load() {
@@ -1221,6 +1414,8 @@
     if (page === 'website-types-detail') initWebsiteTypesDetailPage();
     if (page === 'overview') initOverviewPage();
     if (page === 'submissions') initSubmissionsPage();
+    if (page === 'recovery') initRecoveryPage();
+    if (page === 'funnel') initFunnelPage();
     if (page === 'site-settings') initSiteSettingsPage();
     if (page === 'scripts') initScriptsPage();
     if (page === 'landing-page') initLandingPagePage();
