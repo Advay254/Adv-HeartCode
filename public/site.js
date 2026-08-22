@@ -162,6 +162,13 @@
             resetSubmitButton();
             return;
           }
+          // v1.1.0 Part B: fired only on an actually-successful generate
+          // response, from public/funnel.js's globally-exposed helper —
+          // guarded in case that script somehow failed to load, since
+          // analytics must never be what breaks the build flow.
+          if (typeof window.hcTrackEvent === 'function') {
+            window.hcTrackEvent('preview_generated', document.body.dataset.websiteTypeId);
+          }
           window.location.href = '/build/' + encodeURIComponent(slug) + '/preview';
         })
         .catch(function () {
@@ -266,6 +273,17 @@
         rawFieldValues: rawFieldValues
       };
       if (aiOutputValues) payload.aiOutputValues = aiOutputValues;
+      // v1.1.0 Part B: threads this visit's anonymous funnel session id
+      // through to pending_deployments.funnel_session_id, so the
+      // server-side 'payment_completed' event (lib/finalizeDeployment.js
+      // — deliberately never accepted from a client-submitted event, see
+      // routes/events.js) can be attached to the same session as the rest
+      // of this visit's funnel. Guarded the same way as hcTrackEvent
+      // above — omitted entirely if funnel.js somehow isn't loaded, never
+      // a reason to block checkout.
+      if (typeof window.hcGetSessionId === 'function') {
+        payload.sessionId = window.hcGetSessionId();
+      }
 
       fetch('/build/' + encodeURIComponent(slug) + '/checkout', {
         method: 'POST',
