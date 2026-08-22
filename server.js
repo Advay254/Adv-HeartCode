@@ -16,8 +16,11 @@ const adminSettingsRouter = require('./routes/adminSettings');
 const adminSiteSettingsRouter = require('./routes/adminSiteSettings');
 const adminScriptsRouter = require('./routes/adminScripts');
 const adminLandingRouter = require('./routes/adminLanding');
+const adminRecoveryRouter = require('./routes/adminRecovery');
+const adminFunnelRouter = require('./routes/adminFunnel');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
+const eventsRouter = require('./routes/events');
 const webhooksRouter = require('./routes/webhooks');
 const sitePasswordCache = require('./lib/sitePasswordCache');
 const { createRateLimiter } = require('./lib/rateLimit');
@@ -229,6 +232,16 @@ app.use('/api/admin/settings', adminSettingsRouter);
 app.use('/api/admin/site-settings', adminSiteSettingsRouter);
 app.use('/api/admin/scripts', adminScriptsRouter);
 app.use('/api/admin/landing', adminLandingRouter);
+app.use('/api/admin/pending-deployments', adminRecoveryRouter);
+app.use('/api/admin/funnel', adminFunnelRouter);
+
+// Public event beacon (v1.1.0 Part B): not session-gated (fired from
+// anonymous client-side JS on every public page — see public/funnel.js),
+// rate-limited per IP inside the router instead. CORS: same-origin only,
+// same reasoning as /api/build below — there's no legitimate reason
+// another origin's JS posts events into this app's funnel data.
+app.use('/api/events', cors({ origin: false }));
+app.use('/api/events', eventsRouter);
 
 // Public build API: not session-gated (there's no session for a client
 // filling out a form), rate-limited per IP inside the router instead.
@@ -240,34 +253,78 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: '1.0.9' });
+    res.json({ status: 'ok', db: 'connected', version: '1.1.0' });
   } catch (err) {
     console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.0.9' });
+    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.1.0' });
   }
 });
 
-// Periodic cleanup: sweeps pending_deployments rows past their 1-hour
-// expiry (abandoned checkouts that never completed payment) and prunes
-// the matching entries out of the in-memory site-password cache. Runs
-// every 15 minutes; only started after initDB() succeeds.
+// Periodic cleanup: sweeps old pending_deployments and funnel_events rows,
+// and prunes the matching entries out of the in-memory site-password
+// cache. Runs every 15 minutes; only started after initDB() succeeds.
+//
+// v1.1.0: pending_deployments' deletion threshold moved from "expires_at
+// already passed" (rows lived ~1h15m at most) to "expires_at passed more
+// than 7 DAYS ago" — see the migration comment in db/init.js for the full
+// "why" (pending-deployment recovery). expires_at itself still means
+// exactly what it always did (a checkout session is only fresh enough for
+// the CLIENT'S OWN browser to complete for 1 hour); what changed is only
+// how long the row survives AFTER that for an ADMIN to manually recover it
+// via routes/adminRecovery.js. Deliberately kept as two SEPARATE try/catch
+// blocks below (was one) so a failure sweeping one table never prevents
+// the other from running.
 const CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
-const PENDING_DEPLOYMENT_MAX_AGE_MS = 60 * 60 * 1000;
+const PENDING_DEPLOYMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const FUNNEL_EVENT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+
+// Deliberately UNRELATED to the two constants above, despite the similar
+// name: this is how long a PLAINTEXT site password sits in the in-memory
+// bridge cache (lib/sitePasswordCache.js) between checkout and the
+// confirmation email, not how long the DB row survives. It stays at its
+// original 1 hour regardless of pending_deployments' new 7-day DB
+// retention — a plaintext password has no business sitting in memory for
+// a week. One real, accepted consequence: if an admin recovers a payment
+// via the new "Check & Deploy" retry button more than ~1 hour after the
+// original checkout attempt, this cache entry will already be gone, so
+// the confirmation email won't be able to remind the client of a password
+// they set. The deployment itself is completely unaffected either way —
+// the password gate baked into the deployed page checks against the hash
+// stored in pending_deployments.site_password_hash, never against
+// anything in this cache.
+const SITE_PASSWORD_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 
 function startCleanupJob() {
   setInterval(async () => {
+    const pool = getPool();
+
     try {
-      const pool = getPool();
+      const pendingCutoff = new Date(Date.now() - PENDING_DEPLOYMENT_RETENTION_MS);
       const result = await pool.query(
-        'DELETE FROM pending_deployments WHERE expires_at < NOW() RETURNING reference'
+        'DELETE FROM pending_deployments WHERE expires_at < $1 RETURNING reference',
+        [pendingCutoff]
       );
       if (result.rowCount > 0) {
-        console.log(`[CLEANUP] Removed ${result.rowCount} expired pending deployment(s).`);
+        console.log(`[CLEANUP] Removed ${result.rowCount} pending deployment(s) past the 7-day recovery window.`);
       }
     } catch (err) {
-      console.error('[CLEANUP] Failed to sweep expired pending_deployments:', err.message);
+      console.error('[CLEANUP] Failed to sweep old pending_deployments:', err.message);
     }
-    sitePasswordCache.pruneExpired(PENDING_DEPLOYMENT_MAX_AGE_MS);
+
+    try {
+      const funnelCutoff = new Date(Date.now() - FUNNEL_EVENT_RETENTION_MS);
+      const funnelResult = await pool.query(
+        'DELETE FROM funnel_events WHERE created_at < $1',
+        [funnelCutoff]
+      );
+      if (funnelResult.rowCount > 0) {
+        console.log(`[CLEANUP] Pruned ${funnelResult.rowCount} funnel event(s) older than 90 days.`);
+      }
+    } catch (err) {
+      console.error('[CLEANUP] Failed to prune old funnel_events:', err.message);
+    }
+
+    sitePasswordCache.pruneExpired(SITE_PASSWORD_CACHE_MAX_AGE_MS);
   }, CLEANUP_INTERVAL_MS);
 }
 
