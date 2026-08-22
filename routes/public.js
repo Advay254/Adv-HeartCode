@@ -103,7 +103,14 @@ const checkoutBodySchema = z.object({
       z.array(z.string().max(2000)).max(200),
       z.array(z.record(z.string(), z.string().max(2000))).max(200)
     ])
-  ).optional()
+  ).optional(),
+  // v1.1.0 Part B: the client's anonymous funnel session_id
+  // (public/funnel.js), carried through checkout so lib/finalizeDeployment.js
+  // can attach it to the server-side 'payment_completed' funnel event —
+  // see db/init.js's migration comment on pending_deployments.funnel_session_id
+  // for the full "why". Not personally identifying — just an opaque,
+  // client-generated string living in sessionStorage.
+  sessionId: z.string().trim().min(1).max(200).optional()
 });
 
 // Separate budget from the AI-generate limiter — different action,
@@ -261,7 +268,7 @@ router.get('/build/:slug', async (req, res) => {
 
   res.render('public/build', {
     pageTitle: websiteType.name,
-    websiteType: { slug: websiteType.slug, name: websiteType.name, ...priceFor(priceUsd) },
+    websiteType: { id: websiteType.id, slug: websiteType.slug, name: websiteType.name, ...priceFor(priceUsd) },
     fields: fieldsResult.rows.map(f => ({
       fieldKey: f.field_key,
       fieldLabel: f.field_label,
@@ -319,7 +326,7 @@ router.get('/build/:slug/checkout', async (req, res) => {
 
   res.render('public/checkout', {
     pageTitle: `Checkout — ${t.name}`,
-    websiteType: { slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) }
+    websiteType: { id: t.id, slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) }
   });
 });
 
@@ -350,7 +357,7 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
     const field = firstIssue ? firstIssue.path[0] : 'request';
     return res.status(400).json({ error: `Invalid ${field}` });
   }
-  const { renderedHtml, clientEmail: email, sitePassword, rawFieldValues, aiOutputValues } = parsed.data;
+  const { renderedHtml, clientEmail: email, sitePassword, rawFieldValues, aiOutputValues, sessionId } = parsed.data;
 
   if (!EMAIL_RE.test(email)) {
     // zod's .email() already validated this; the house regex is kept as
@@ -394,12 +401,13 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
     `INSERT INTO pending_deployments
        (reference, website_type_id, client_email, site_password_hash, rendered_html,
         charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values,
-        ai_output_values)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        ai_output_values, funnel_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [reference, websiteType.id, email, sitePasswordHash, renderedHtml,
       charge.currency, charge.amount, charge.rate, expiresAt,
       rawFieldValues ? JSON.stringify(rawFieldValues) : null,
-      aiOutputValues ? JSON.stringify(aiOutputValues) : null]
+      aiOutputValues ? JSON.stringify(aiOutputValues) : null,
+      sessionId || null]
   );
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/build/${websiteType.slug}/checkout/callback`;

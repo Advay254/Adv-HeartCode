@@ -57,6 +57,14 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {
   res.render('admin/submissions');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/recovery`, (req, res) => {
+  res.render('admin/recovery');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/funnel`, (req, res) => {
+  res.render('admin/funnel');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/site-settings`, (req, res) => {
   res.render('admin/site-settings');
 });
