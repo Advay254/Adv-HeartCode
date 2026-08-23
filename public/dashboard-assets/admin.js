@@ -613,6 +613,141 @@
     load();
   }
 
+  // ---- Notifications page (v1.1.2 Part B) ----
+  function initNotificationsPage() {
+    const channelsList = document.getElementById('channelsList');
+
+    function applyFieldVisibility() {
+      const type = document.getElementById('channelType').value;
+      document.querySelectorAll('#addChannelForm [data-fields]').forEach(el => {
+        el.style.display = (el.dataset.fields === type) ? 'block' : 'none';
+      });
+    }
+    document.getElementById('channelType').addEventListener('change', applyFieldVisibility);
+    applyFieldVisibility();
+
+    function channelConfigSummary(c) {
+      if (c.channelType === 'email') return `To: ${escapeHtml(c.config.address || '(not set)')}`;
+      if (c.channelType === 'webhook') return `URL: ${escapeHtml(c.config.url || '(not set)')}`;
+      if (c.channelType === 'gotify') return `Server: ${escapeHtml(c.config.serverUrl || '(not set)')} · Token: ${escapeHtml(c.config.tokenMasked || 'unreadable')}`;
+      return '';
+    }
+
+    function channelCard(c) {
+      return `
+      <div class="admin-card notification-channel-card" data-channel-id="${c.id}">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="text-base font-semibold text-hc-ink">${escapeHtml(c.label)}</h2>
+          <span class="admin-badge">${escapeHtml(c.channelType)}</span>
+          ${c.isActive ? '<span class="admin-badge admin-badge-active">enabled</span>' : '<span class="admin-badge">disabled</span>'}
+        </div>
+        <p class="mt-1 text-sm text-slate-500">${channelConfigSummary(c)}</p>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="admin-btn-outline admin-btn-sm send-test">Send test notification</button>
+          <button type="button" class="admin-btn-outline admin-btn-sm toggle-active">${c.isActive ? 'Disable' : 'Enable'}</button>
+          <button type="button" class="admin-btn-danger admin-btn-sm delete-channel">Delete</button>
+        </div>
+        <p class="status-msg admin-msg" style="display:none;"></p>
+      </div>`;
+    }
+
+    function showStatus(card, text, type) {
+      const el = card.querySelector('.status-msg');
+      el.textContent = text;
+      el.className = 'admin-msg admin-msg-' + type;
+      el.style.display = 'block';
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/notifications');
+      const channels = await res.json();
+      channelsList.innerHTML = channels.map(channelCard).join('') || '<p class="admin-msg admin-msg-warning">No notification channels configured yet — you won\'t be alerted when a sale completes.</p>';
+      wireCards();
+    }
+
+    function wireCards() {
+      document.querySelectorAll('.notification-channel-card[data-channel-id]').forEach(card => {
+        const channelId = card.dataset.channelId;
+
+        card.querySelector('.send-test').addEventListener('click', async () => {
+          const btn = card.querySelector('.send-test');
+          const originalText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Sending…';
+          try {
+            const res = await window.adminFetch(`/api/admin/notifications/${channelId}/test`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              showStatus(card, 'Test notification sent.', 'success');
+            } else {
+              showStatus(card, data.error || 'Test send failed.', 'error');
+            }
+          } catch (err) {
+            showStatus(card, 'Network error sending test notification.', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+          }
+        });
+
+        card.querySelector('.toggle-active').addEventListener('click', async () => {
+          const isCurrentlyActive = card.querySelector('.admin-badge-active') !== null;
+          const res = await window.adminFetch(`/api/admin/notifications/${channelId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: !isCurrentlyActive })
+          });
+          if (res.ok) load();
+        });
+
+        card.querySelector('.delete-channel').addEventListener('click', async () => {
+          if (!confirm('Delete this notification channel?')) return;
+          const res = await window.adminFetch(`/api/admin/notifications/${channelId}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+    }
+
+    document.getElementById('addChannelForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('addChannelError');
+      errorEl.style.display = 'none';
+
+      const channelType = document.getElementById('channelType').value;
+      const label = document.getElementById('channelLabel').value;
+
+      let payload;
+      if (channelType === 'email') {
+        payload = { channelType, label, address: document.getElementById('emailAddress').value };
+      } else if (channelType === 'webhook') {
+        payload = { channelType, label, url: document.getElementById('webhookUrl').value };
+      } else {
+        payload = {
+          channelType,
+          label,
+          serverUrl: document.getElementById('gotifyServerUrl').value,
+          token: document.getElementById('gotifyToken').value
+        };
+      }
+
+      const res = await window.adminFetch('/api/admin/notifications', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        e.target.reset();
+        applyFieldVisibility();
+        load();
+      } else {
+        const data = await res.json();
+        errorEl.textContent = (data.details && data.details[0] && data.details[0].message) || data.error || 'Failed to add channel.';
+        errorEl.style.display = 'block';
+      }
+    });
+
+    load();
+  }
+
   // ---- website types: list page ----
   function initWebsiteTypesIndexPage() {
     const slug = document.body.dataset.slug;
@@ -750,7 +885,9 @@
           displayOrder: Number(form.displayOrder.value) || 0,
           isActive: form.isActive.checked,
           iconName: form.iconName.value,
-          deploySlugPattern: form.deploySlugPattern.value
+          deploySlugPattern: form.deploySlugPattern.value,
+          seoTitle: form.seoTitle.value,
+          seoDescription: form.seoDescription.value
         })
       });
       const data = await res.json();
@@ -1400,7 +1537,27 @@
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
+    // v1.1.2 Part C: resend-details daily rate limit.
+    async function loadResendDetailsRateLimit() {
+      const res = await window.adminFetch('/api/admin/settings/resend-details-rate-limit');
+      const data = await res.json();
+      document.getElementById('resendDetailsRateLimit').value = data.value;
+    }
+
+    document.getElementById('saveResendDetailsRateLimitBtn').addEventListener('click', async () => {
+      const value = Number(document.getElementById('resendDetailsRateLimit').value) || 1;
+      const res = await window.adminFetch('/api/admin/settings/resend-details-rate-limit', {
+        method: 'PUT',
+        body: JSON.stringify({ value })
+      });
+      const statusEl = document.getElementById('resendDetailsRateLimitStatus');
+      statusEl.style.display = 'block';
+      statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
+      statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+    });
+
     load();
+    loadResendDetailsRateLimit();
   }
 
   // ---- script injection manager page (v1.0.7) ----
@@ -1633,6 +1790,7 @@
     if (page === 'payments') initPaymentsPage();
     if (page === 'ai-provider') initAiProviderPage();
     if (page === 'email-providers') initEmailProvidersPage();
+    if (page === 'notifications') initNotificationsPage();
     if (page === 'website-types-index') initWebsiteTypesIndexPage();
     if (page === 'website-types-detail') initWebsiteTypesDetailPage();
     if (page === 'overview') initOverviewPage();
