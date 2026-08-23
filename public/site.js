@@ -309,10 +309,66 @@
     });
   }
 
+  /**
+   * v1.1.1 Part B: gates the deployment success page's site link(s) behind
+   * a short countdown before they're actually clickable. The deployment
+   * itself already finished server-side before this page ever rendered —
+   * this is purely a buffer against a client tapping through the instant
+   * the page loads and landing on a Cloudflare Pages edge that hasn't
+   * finished propagating the new deployment yet, which would just look
+   * like a broken link to them for no visible reason.
+   *
+   * Both the raw-URL text link and the "Visit your site" pill button share
+   * the .hc-site-link class (see views/public/checkout-callback.ejs) so
+   * there's exactly one enabled/disabled state, not two links that could
+   * disagree. `aria-disabled`/`tabindex="-1"` are removed once the
+   * countdown ends so keyboard/screen-reader users get the same gating as
+   * a mouse click would (removed, not just toggled to "false", since a
+   * plain link has neither attribute when enabled).
+   */
+  function initCheckoutCallbackPage() {
+    var links = document.querySelectorAll('.hc-site-link');
+    if (!links.length) return;
+
+    var secondsEl = document.getElementById('siteLinkCountdownSeconds');
+    var countdownEl = document.getElementById('siteLinkCountdown');
+    var remaining = 20;
+
+    function enableLinks() {
+      links.forEach(function (link) {
+        link.classList.remove('is-disabled');
+        link.removeAttribute('aria-disabled');
+        link.removeAttribute('tabindex');
+      });
+      if (countdownEl) countdownEl.textContent = 'Ready — tap above to visit your site.';
+    }
+
+    // Defense in depth alongside the CSS (pointer-events: none) and the
+    // aria-disabled/tabindex attributes above — belt-and-suspenders in
+    // case any of those don't apply for some reason (e.g. a browser
+    // extension or assistive tech that dispatches a click directly).
+    links.forEach(function (link) {
+      link.addEventListener('click', function (event) {
+        if (link.classList.contains('is-disabled')) event.preventDefault();
+      });
+    });
+
+    var timer = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        enableLinks();
+        return;
+      }
+      if (secondsEl) secondsEl.textContent = String(remaining);
+    }, 1000);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var page = document.body.dataset.page;
     if (page === 'build') initBuildPage();
     if (page === 'preview') initPreviewPage();
     if (page === 'checkout') initCheckoutPage();
+    if (page === 'checkout-callback') initCheckoutCallbackPage();
   });
 })();
