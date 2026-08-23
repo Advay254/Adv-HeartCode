@@ -364,11 +364,76 @@
     }, 1000);
   }
 
+  /**
+   * v1.1.2 Part C: resend-details public page. Deliberately renders
+   * whatever generic message the server responds with verbatim — even on
+   * a network/unexpected error, this shows a message rather than letting
+   * the person infer anything from a blank state or a differently-worded
+   * error, though a genuine network failure (no response at all) is the
+   * one case where a distinct "something went wrong, try again" message
+   * is shown, since at that point there's no server response to leak
+   * anything from either way.
+   */
+  function initResendDetailsPage() {
+    var form = document.getElementById('resendDetailsForm');
+    var resultBox = document.getElementById('resendDetailsResult');
+    var errorEl = document.getElementById('resendDetailsError');
+    var submitBtn = document.getElementById('resendDetailsSubmitBtn');
+    var emailInput = document.getElementById('resendEmail');
+
+    submitBtn.addEventListener('click', function () {
+      var email = emailInput.value.trim();
+      errorEl.style.display = 'none';
+
+      if (!email) {
+        errorEl.textContent = 'Enter your email address.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending…';
+
+      fetch('/api/resend-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { status: res.status, ok: res.ok, data: data }; });
+        })
+        .then(function (result) {
+          if (result.status === 429) {
+            errorEl.textContent = result.data.error || "You've reached today's check limit — try again tomorrow.";
+            errorEl.style.display = 'block';
+            return;
+          }
+          if (!result.ok) {
+            errorEl.textContent = result.data.error || 'Something went wrong. Please try again.';
+            errorEl.style.display = 'block';
+            return;
+          }
+          form.style.display = 'none';
+          resultBox.querySelector('p').textContent = result.data.message;
+          resultBox.style.display = 'block';
+        })
+        .catch(function () {
+          errorEl.textContent = 'Network error. Please try again.';
+          errorEl.style.display = 'block';
+        })
+        .then(function () {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Resend my site details';
+        });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var page = document.body.dataset.page;
     if (page === 'build') initBuildPage();
     if (page === 'preview') initPreviewPage();
     if (page === 'checkout') initCheckoutPage();
     if (page === 'checkout-callback') initCheckoutCallbackPage();
+    if (page === 'resend-details') initResendDetailsPage();
   });
 })();
