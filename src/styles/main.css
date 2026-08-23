@@ -206,3 +206,21 @@
     transition: none;
   }
 }
+
+/* v1.1.1 Part B: deployment success page's "Finishing up..." countdown
+   gate (public/site.js's initCheckoutCallbackPage). Deployment itself
+   already finished server-side before this page ever renders — this is a
+   deliberate short buffer so the client can't click through the instant
+   the page loads and land on a Cloudflare Pages edge that hasn't finished
+   propagating yet, which would just look broken to them. Applied to BOTH
+   the raw-URL text link and the "Visit your site" pill button (shared
+   .hc-site-link class) so there's exactly one enabled/disabled state to
+   reason about, not two links that could disagree. Kept as a plain
+   JS-toggled class (matching this codebase's existing .is-open/.is-visible
+   pattern elsewhere) rather than a Tailwind aria-variant, for consistency. */
+.hc-site-link.is-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  cursor: default;
+}
+
