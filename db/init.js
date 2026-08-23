@@ -413,9 +413,52 @@ CREATE TABLE IF NOT EXISTS funnel_events (
 -- (server.js) that deletes purely by created_at.
 CREATE INDEX IF NOT EXISTS idx_funnel_events_type_created ON funnel_events(event_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_funnel_events_website_type ON funnel_events(website_type_id);
+
+-- v1.1.1 Part C: multi-provider email configuration, moving email sending
+-- off the single hardcoded RESEND_API_KEY env var and into the admin
+-- dashboard — same "admin adds one or more, picks one active, tests
+-- before relying on it" shape as ai_providers above, not a new pattern.
+--
+-- config is JSONB because the two provider_types genuinely need
+-- different shapes (a bare API key + from address vs. a full SMTP host/
+-- port/credentials/security tuple) — see lib/emailProvider.js for exactly
+-- which sub-fields each type expects. Only the SENSITIVE sub-field(s)
+-- within config are encrypted (api_key_encrypted / password_encrypted, via
+-- the existing lib/crypto.js) — non-sensitive fields (host, port, from
+-- address) are left as plain JSON so they stay readable/editable in the
+-- admin UI without a decrypt round-trip, exactly like paystack_config's
+-- public keys sitting alongside its encrypted secret keys.
+--
+-- is_active enforcement follows ai_providers' existing pattern: SELECT ...
+-- FOR UPDATE inside a transaction in routes/adminEmailProviders.js, not a
+-- DB-level constraint here.
+--
+-- Graceful migration (see lib/emailProvider.js's seedEmailProviderFromEnvIfNeeded,
+-- called once at server boot in server.js): if this table has zero rows
+-- AND process.env.RESEND_API_KEY is set, one 'resend' row is auto-seeded
+-- from that env var, marked active, labeled "Resend (migrated from
+-- environment)" — so upgrading to this version doesn't silently stop email
+-- from sending for anyone who already had RESEND_API_KEY configured. That
+-- seed check runs on EVERY boot (not just once-ever) since it's driven by
+-- "does this table currently have zero rows", the same idempotency style
+-- as every other seed in this file (e.g. the landing_content/landing_steps
+-- seeds above) — see server.js and this version's delivery notes for the
+-- one real consequence worth knowing: if every provider row is later
+-- deleted while RESEND_API_KEY is still set in Render's environment, it
+-- WILL be re-seeded on the next restart. That's a deliberate safety net,
+-- not a bug — remove the env var once you're fully relying on DB-configured
+-- providers if you don't want this fallback anymore.
+CREATE TABLE IF NOT EXISTS email_providers (
+  id SERIAL PRIMARY KEY,
+  provider_type TEXT NOT NULL CHECK (provider_type IN ('resend', 'smtp')),
+  label TEXT NOT NULL,
+  config JSONB NOT NULL,
+  is_active BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
-const CURRENT_VERSION = '1.1.0';
+const CURRENT_VERSION = '1.1.1';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
