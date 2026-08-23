@@ -1,10 +1,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' — ' + siteSettings.site_title : siteSettings.site_title %></title>
-<meta name="description" content="<%= siteSettings.meta_description %>">
+<%
+  // v1.1.2 Part A: per-page meta description override, same fallback shape
+  // as pageTitle above -- a route can pass `pageDescription` (e.g. a
+  // website type's seo_description) to target that page's own search
+  // intent; any page that doesn't set it keeps today's exact behavior
+  // (the global siteSettings.meta_description).
+  var effectiveDescription = (typeof pageDescription !== 'undefined' && pageDescription) ? pageDescription : siteSettings.meta_description;
+%>
+<meta name="description" content="<%= effectiveDescription %>">
 <meta property="og:type" content="website">
 <meta property="og:title" content="<%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' — ' + siteSettings.site_title : siteSettings.site_title %>">
-<meta property="og:description" content="<%= siteSettings.meta_description %>">
+<meta property="og:description" content="<%= effectiveDescription %>">
 <% if (siteSettings.og_image_url) { %><meta property="og:image" content="<%= siteSettings.og_image_url %>"><% } %>
 <% if (siteSettings.favicon_url) { %><link rel="icon" href="<%= siteSettings.favicon_url %>"><% } %>
 
@@ -27,5 +35,25 @@
     lib/siteScripts.js for why this never reaches an admin-authenticated render. %>
 <% activeScripts.head.forEach(function (scriptContent) { %>
 <%- scriptContent %>
+<% }); %>
+<% } %>
+
+<% if (typeof structuredData !== 'undefined' && structuredData && structuredData.length) { %>
+<%#
+  v1.1.2 Part A: JSON-LD structured data. A route passes an ARRAY of plain
+  JS objects (never a pre-built string -- JSON.stringify below is what
+  actually serializes it, so there's no way for this to end up
+  double-encoded or hand-assembled). publicCsp already allows
+  'unsafe-inline' script-src (see server.js's comment on that policy,
+  added in v1.0.7 for the script-injection manager) so a plain inline
+  <script type="application/ld+json"> block here needs no further CSP
+  changes -- 'unsafe-inline' covers any inline script content, not just
+  the admin-pasted kind above.
+  Each object is expected to be one complete schema.org entity (e.g. one
+  Organization, one Product) -- see routes/public.js for what's actually
+  built for the homepage vs. a /build/:slug page.
+%>
+<% structuredData.forEach(function (entity) { %>
+<script type="application/ld+json"><%- JSON.stringify(entity) %></script>
 <% }); %>
 <% } %>
