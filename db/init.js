@@ -456,9 +456,79 @@ CREATE TABLE IF NOT EXISTS email_providers (
   is_active BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v1.1.2 Part A: per-website-type SEO overrides. Both NULL by default and
+-- left NULL for every existing row -- routes/public.js's GET /build/:slug
+-- falls back to site_settings' global site_title/meta_description when
+-- either is unset, so this is purely additive: an admin doesn't have to
+-- fill these in for a single existing type for anything to keep working
+-- exactly as it already does today.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS seo_title TEXT DEFAULT NULL;
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS seo_description TEXT DEFAULT NULL;
+
+-- v1.1.2 Part C: a real, pre-existing gap found while building the resend-
+-- details feature, not something this feature introduces -- flagged here
+-- rather than silently worked around. deployed_sites has NEVER recorded
+-- whether a site was password-protected: the only copy of that fact was
+-- pending_deployments.site_password_hash, and that row is deleted the
+-- moment a deployment finalizes (see lib/finalizeDeployment.js's final
+-- DELETE, right before COMMIT). The password gate itself never needed a
+-- database copy to keep working post-deployment -- the hash is baked
+-- directly into the deployed static HTML and checked client-side (see
+-- injectPasswordGate in lib/finalizeDeployment.js) -- so this was never a
+-- problem until now, when a genuinely new use case (telling a client via
+-- the resend-details email whether their site has a password) needs to
+-- know that fact long after the original checkout. Populated going
+-- forward at deploy time (lib/finalizeDeployment.js's INSERT); defaults to
+-- false for every row that already exists. HONEST LIMITATION, stated
+-- plainly rather than glossed over: there is no way to retroactively know
+-- whether a site deployed BEFORE this column existed had a password set —
+-- the original hash is long gone for those rows. Any resend-details email
+-- covering a pre-v1.1.2 password-protected site will incorrectly omit the
+-- "password can't be recovered" notice, not because the code is wrong, but
+-- because the underlying fact was never persisted anywhere retrievable.
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS has_password BOOLEAN NOT NULL DEFAULT false;
+
+-- v1.1.2 Part B: real-time admin sale notifications, across up to three
+-- simultaneous channel types. Same "config JSONB, encrypt only the
+-- sensitive sub-field(s)" shape as email_providers above:
+--   - email:   { address }                              -- nothing sensitive to encrypt
+--   - webhook: { url_encrypted }                         -- the URL itself may embed a secret token in its query string
+--   - gotify:  { server_url, token_encrypted }           -- server_url is not sensitive on its own, the token is
+-- is_active here means "included when a sale notification fires" (an
+-- enable/disable toggle per channel, per the admin UI spec) -- NOT a
+-- single-active-row invariant like ai_providers/email_providers. Multiple
+-- channels, of mixed types, can be active simultaneously by design: the
+-- whole point of this feature is fanning one event out to up to three
+-- channels at once, not picking exactly one.
+-- Per-type row caps (3 email / 1 webhook / 1 gotify) are enforced in
+-- routes/adminNotifications.js at insert time via the same row-locked
+-- count-then-insert pattern as v1.0.7's script manager (site_scripts,
+-- MAX_PER_PLACEMENT = 3) -- not a DB-level constraint here, consistent
+-- with how every other per-type cap in this app is enforced.
+CREATE TABLE IF NOT EXISTS notification_channels (
+  id SERIAL PRIMARY KEY,
+  channel_type TEXT NOT NULL CHECK (channel_type IN ('email', 'webhook', 'gotify')),
+  label TEXT NOT NULL,
+  config JSONB NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- v1.1.2 Part C: admin-configurable daily cap on GET/POST /resend-details
+-- lookups per IP -- deliberately a real site_settings row (read fresh at
+-- request time by lib/rateLimit.js's new createDynamicRateLimiter) rather
+-- than a hardcoded constant, since this is the first rate limit in the
+-- app an admin can actually tune without a code change. Default of 1 is
+-- deliberately strict: this endpoint's whole purpose is looking up
+-- deployment history by email address, so a low default cap matters more
+-- for anti-enumeration/anti-abuse here than it would for, say, a checkout
+-- attempt limiter.
+INSERT INTO site_settings (key, value) VALUES ('resend_details_rate_limit_per_day', '1')
+ON CONFLICT (key) DO NOTHING;
 `;
 
-const CURRENT_VERSION = '1.1.1';
+const CURRENT_VERSION = '1.1.2';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
