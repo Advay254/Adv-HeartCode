@@ -33,6 +33,22 @@ function adminSlugMiddleware(adminPageRouter) {
     const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
     req.url = INTERNAL_ADMIN_PREFIX + remainder + queryString;
 
+    // v1.1.2 (revised): tells any well-behaved crawler not to index this
+    // page, WITHOUT ever publishing the admin path anywhere public — the
+    // alternative (listing it in robots.txt's Disallow rules) works for
+    // the same "keep it out of Google" goal, but robots.txt is a public,
+    // unauthenticated file, so that approach hands the exact "secret"
+    // path to anyone who thinks to check, not just search crawlers. This
+    // header achieves the same outcome with no such disclosure: only
+    // someone who already reached this exact URL (i.e. already knows the
+    // slug) ever sees it, since it's set here — after the slug match
+    // above already succeeded — not on some public, guessable route.
+    // Applied unconditionally at this single point (before auth is even
+    // checked) so it covers the login page itself, not just pages behind
+    // a session — the login page is the one actually reachable, and
+    // therefore indexable, without credentials.
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+
     return adminPageRouter(req, res, next);
   };
 }
