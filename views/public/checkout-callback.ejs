@@ -3,7 +3,7 @@
 <head>
 <%- include('../partials/public-head') %>
 </head>
-<body class="bg-white font-sans text-hc-ink antialiased">
+<body class="bg-white font-sans text-hc-ink antialiased" data-page="checkout-callback">
 <%- include('../partials/public-body-start-scripts') %>
 
 <%- include('../partials/public-nav') %>
@@ -16,11 +16,16 @@
       </div>
       <h1 class="mt-5 font-display text-3xl uppercase text-hc-ink">Your site is live!</h1>
       <div class="hc-panel mt-6 border border-black/5 p-6">
-        <a href="<%= siteUrl %>" class="break-all text-sm font-semibold text-hc-blue hover:underline"><%= siteUrl %></a>
+        <a href="<%= siteUrl %>" class="hc-site-link break-all text-sm font-semibold text-hc-blue hover:underline" aria-disabled="true" tabindex="-1"><%= siteUrl %></a>
       </div>
       <p class="mt-4 text-sm text-hc-ink/60">We've also emailed you this link (and your site password, if you set one).</p>
-      <a href="<%= siteUrl %>" class="hc-pill-btn mt-6">Visit your site</a>
+      <a href="<%= siteUrl %>" id="visitSiteBtn" class="hc-site-link hc-pill-btn mt-6" aria-disabled="true" tabindex="-1">Visit your site</a>
+      <p id="siteLinkCountdown" class="mt-2 text-xs font-medium uppercase tracking-wide text-hc-ink/50">Finishing up… <span id="siteLinkCountdownSeconds">20</span>s</p>
+      <p class="mt-6 text-xs text-hc-ink/50">
+        Didn't get the email? Check your spam or junk folder — and if it's there, mark it as "not spam" so future updates from us land in your inbox instead.
+      </p>
     <% } else if (outcome === 'not_paid') { %>
+
       <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700 [&>svg]:h-7 [&>svg]:w-7">
         <%- getIconSvg('credit-card') %>
       </div>
