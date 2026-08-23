@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Notifications — HeartCode Admin</title>
+</head>
+<body data-page="notifications">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'notifications' }) %>
+  <main class="admin-main">
+    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Notifications</h1>
+    <p class="mb-6 max-w-2xl text-sm text-slate-500">
+      Get notified the moment a sale completes and a site deploys — across up to 3 email addresses, one webhook, and one Gotify server, all at once. Each channel fires independently: one being down or misconfigured never blocks the others, and never affects the deployment itself. Test a channel before relying on it.
+    </p>
+
+    <div class="admin-card max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Add channel</h2>
+      <form id="addChannelForm">
+        <label class="admin-label" for="channelType">Channel type</label>
+        <select class="admin-select" id="channelType">
+          <option value="email">Email (up to 3)</option>
+          <option value="webhook">Webhook (1)</option>
+          <option value="gotify">Gotify (1)</option>
+        </select>
+
+        <label class="admin-label" for="channelLabel">Label</label>
+        <input class="admin-input" type="text" id="channelLabel" required placeholder="e.g. My phone">
+
+        <div data-fields="email">
+          <label class="admin-label" for="emailAddress">Email address</label>
+          <input class="admin-input" type="email" id="emailAddress" placeholder="you@example.com">
+          <p class="mt-1 text-xs text-slate-500">Sent through whichever email provider is currently active on the Email Providers page.</p>
+        </div>
+
+        <div data-fields="webhook">
+          <label class="admin-label" for="webhookUrl">Webhook URL</label>
+          <input class="admin-input" type="url" id="webhookUrl" placeholder="https://example.com/hooks/heartcode">
+          <p class="mt-1 text-xs text-slate-500">Receives a POST with JSON: <code>{ event, websiteType, clientEmail, siteUrl, amount, currency, deployedAt }</code>. Include any auth token directly in the URL's query string if the endpoint needs one.</p>
+        </div>
+
+        <div data-fields="gotify">
+          <label class="admin-label" for="gotifyServerUrl">Gotify server URL</label>
+          <input class="admin-input" type="url" id="gotifyServerUrl" placeholder="https://gotify.example.com">
+          <label class="admin-label" for="gotifyToken">Application token</label>
+          <input class="admin-input" type="password" id="gotifyToken" placeholder="From Gotify → Apps → your app's token">
+        </div>
+
+        <p id="addChannelError" class="admin-msg admin-msg-error" style="display:none;"></p>
+        <button type="submit" class="admin-btn mt-3">Add channel</button>
+      </form>
+    </div>
+
+    <div id="channelsList" class="mt-6 space-y-4"></div>
+  </main>
+</div>
+</body>
+</html>

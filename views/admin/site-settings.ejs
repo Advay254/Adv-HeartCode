@@ -36,6 +36,22 @@
       </form>
       <p id="siteSettingsStatus" class="admin-msg" style="display:none;"></p>
     </div>
+
+    <!-- v1.1.2 Part C: separate small card + its own save button, same
+         pattern as the Payments page's Kenyan-currency toggle — this is a
+         single standalone setting, not part of the bulk site-settings
+         form above (which is scoped to the public <head>/landing-page
+         values in lib/siteSettings.js's DEFAULTS). -->
+    <div class="admin-card mt-6 max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Resend site details — daily limit</h2>
+      <p class="mt-1 text-sm text-slate-500">
+        Caps how many times a single visitor (by IP) can use the public <a href="/resend-details" class="text-hc-blue">/resend-details</a> lookup per day. Kept low by default since this endpoint's job is looking up deployment history by email address.
+      </p>
+      <label class="admin-label" for="resendDetailsRateLimit">Lookups per IP per day</label>
+      <input class="admin-input" type="number" id="resendDetailsRateLimit" min="1" max="1000" step="1">
+      <button type="button" id="saveResendDetailsRateLimitBtn" class="admin-btn mt-4">Save</button>
+      <p id="resendDetailsRateLimitStatus" class="admin-msg" style="display:none;"></p>
+    </div>
   </main>
 </div>
 </body>
