@@ -84,9 +84,10 @@ See the README's environment variables section for what each one does, its failu
    If `initDB()` throws, the process exits immediately by design — it won't serve traffic against a broken database — and you'll see the actual Postgres error logged just before the crash. The `[CURRENCY]` line (added in v1.0.6) comes from a separate, non-blocking exchange-rate fetch right after boot — if that line instead reads "Failed to refresh exchange rates", the app is still healthy; currency conversion just falls back to plain USD everywhere until the next refresh succeeds.
 3. Hit `https://<your-app>.onrender.com/health`. You should get:
    ```json
-   { "status": "ok", "db": "connected", "version": "1.0.8" }
+   { "status": "ok", "db": "connected", "version": "1.1.2" }
    ```
 4. Visit `https://<your-app>.onrender.com/` and confirm the landing page is actually styled (Anton headline font, blue hero section), then visit `/<ADMIN_PATH_SLUG>/login` and confirm that's styled too (as of v1.0.8, the admin dashboard has its own separate Tailwind bundle — see step 4 in section 1 above) — not a plain unstyled HTML page either. An unstyled page means the build command wasn't updated and the relevant CSS bundle was never (re)generated on this deploy. This delivery ships with both bundles already built and committed as a fallback, so this specific deploy should still look right regardless — but confirm anyway, and fix the build command before your next deploy either way, since that fallback goes stale the moment anything changes.
+5. (v1.1.2+) Hit `https://<your-app>.onrender.com/sitemap.xml` and `.../robots.txt` and confirm both return real content, not an error page — both are generated dynamically on every request, so a broken one usually means the DB connection is down, not a build issue.
 
 ## 6. Log into the admin dashboard for the first time
 
@@ -96,7 +97,9 @@ See the README's environment variables section for what each one does, its failu
 4. **Site Settings** — set your site title, meta description, and optionally a favicon/social-share image URL and the landing page's stats number/label. Takes effect on the very next public page load, no redeploy needed.
 5. **Landing Page** (new in v1.0.8) — edit the marketing page's hero text, "how it works" steps (add/remove/reorder with the ↑/↓ buttons), trust line, and footer links, all without touching a template file.
 6. **Scripts** — if you use an analytics tool (Umami, etc.) or any other third-party snippet, paste it here rather than editing any template file. Choose which of the three placements it needs (usually `<head>` for analytics), up to 3 scripts per placement. Public pages only — nothing pasted here ever appears on this dashboard.
-7. **Website Types → a type → Details tab** — as of v1.0.8, you can set a custom deploy slug pattern here (e.g. `happybirthday-from{{user_name}}-to{{recepient_name}}`) instead of the default random one. Leave it blank to keep the default. See the README's v1.0.8 changelog entry for the full token syntax.
+7. **Website Types → a type → Details tab** — as of v1.0.8, you can set a custom deploy slug pattern here (e.g. `happybirthday-from{{user_name}}-to{{recepient_name}}`) instead of the default random one. Leave it blank to keep the default. See the README's v1.0.8 changelog entry for the full token syntax. As of v1.1.2, the same tab also has optional SEO title/description overrides for that type's `/build/:slug` page — leave both blank to keep using your site-wide title/description.
+8. **Notifications** (new in v1.1.2) — add up to 3 email addresses, 1 webhook, and 1 Gotify server to get pinged the moment a sale completes. Send a real test notification from each channel's card before relying on it. Optional — the app works fine with zero channels configured, you just won't be alerted.
+9. **Site Settings → Resend site details** (new in v1.1.2) — controls how many times per day a single visitor can use the public `/resend-details` page (default: once). Raise it if 1/day feels too strict for your traffic; effective on the very next request, no redeploy needed.
 
 ## Troubleshooting
 

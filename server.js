@@ -11,6 +11,7 @@ const adminPagesRouter = require('./routes/adminPages');
 const adminPaystackRouter = require('./routes/adminPaystack');
 const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
+const adminNotificationsRouter = require('./routes/adminNotifications');
 const adminWebsiteTypesRouter = require('./routes/adminWebsiteTypes');
 const adminDashboardRouter = require('./routes/adminDashboard');
 const adminSettingsRouter = require('./routes/adminSettings');
@@ -229,6 +230,7 @@ app.use('/api/admin', adminAuthApiRouter);
 app.use('/api/admin/paystack', adminPaystackRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
+app.use('/api/admin/notifications', adminNotificationsRouter);
 app.use('/api/admin/website-types', adminWebsiteTypesRouter);
 app.use('/api/admin/dashboard', adminDashboardRouter);
 app.use('/api/admin/settings', adminSettingsRouter);
@@ -256,10 +258,10 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: '1.1.1' });
+    res.json({ status: 'ok', db: 'connected', version: '1.1.2' });
   } catch (err) {
     console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.1.1' });
+    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.1.2' });
   }
 });
 
