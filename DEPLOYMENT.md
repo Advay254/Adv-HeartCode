@@ -24,8 +24,8 @@ In Render's dashboard, under the service's **Environment** tab, add the followin
 | `ENCRYPTION_KEY` | Required |
 | `CLOUDFLARE_API_TOKEN` | Required |
 | `CLOUDFLARE_ACCOUNT_ID` | Required |
-| `RESEND_API_KEY` | Required |
-| `EMAIL_FROM_ADDRESS` | Required |
+| `RESEND_API_KEY` | Optional (v1.1.1+) — one-time migration only, see below |
+| `EMAIL_FROM_ADDRESS` | Optional (v1.1.1+) — one-time migration only, see below |
 | `NODE_ENV` | Optional — not read by any of HeartCode's own code, but set it to `production` anyway as standard practice |
 | `PORT` | Optional — Render injects this automatically; don't set it manually |
 
@@ -53,11 +53,13 @@ See the README's environment variables section for what each one does, its failu
 3. On any domain's **Overview** page in the Cloudflare dashboard, find your Account ID in the right-hand sidebar under "API". Paste it into `CLOUDFLARE_ACCOUNT_ID`.
 4. Nothing else to set up — HeartCode creates a new Cloudflare Pages project per paid deployment automatically.
 
-**Resend (sends the "your site is ready" email):**
-1. Resend dashboard → add and verify a domain you control (follow their DNS instructions — this can take a few minutes to propagate).
-2. Resend dashboard → **API Keys → Create API Key**. Paste it into `RESEND_API_KEY`.
-3. Set `EMAIL_FROM_ADDRESS` to any address on that verified domain (e.g. `deploys@yourdomain.com`). Sends from an unverified domain will fail.
-4. That's it — no per-website-type setup required. **v1.0.9:** any website type can optionally override this generic email with its own subject + HTML body from its dashboard page's new **Email** tab (Website Types → a type → Email). A type with nothing saved there keeps using the generic email above automatically; there's nothing to configure here to enable or disable that.
+**Email (as of v1.1.1 — configured in the dashboard, not env vars):**
+1. Log into the admin dashboard once your first deploy is live, and go to **Email Providers** (System section of the sidebar).
+2. Add a provider — Resend, Gmail SMTP, Brevo SMTP, or Generic SMTP (see the README's "Configuring email providers" section for exactly what each one needs).
+3. Use the **Send test email** button on that provider's card before activating it.
+4. Tap **Set as active**.
+5. If you already had `RESEND_API_KEY`/`EMAIL_FROM_ADDRESS` set from before v1.1.1, you can skip all of the above the first time — they're automatically migrated into an active Resend provider on first boot after upgrading. Remove those two env vars from Render once you've confirmed email is working (either the migrated one, or a provider you added yourself).
+6. Any website type can still optionally override the active provider's generic email with its own subject + HTML body from its dashboard page's **Email** tab (Website Types → a type → Email) — unchanged since v1.0.9, and independent of which provider is active.
 
 **Paystack (after your first deploy, once you have a live URL):**
 1. Paystack dashboard → **Settings → API Keys & Webhooks**.
