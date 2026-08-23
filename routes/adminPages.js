@@ -40,6 +40,10 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/ai-provider`, (req, res) => {
   res.render('admin/ai-providers');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/email-providers`, (req, res) => {
+  res.render('admin/email-providers');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/website-types`, (req, res) => {
   res.render('admin/website-types/index');
 });
