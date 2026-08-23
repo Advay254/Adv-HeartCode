@@ -45,6 +45,15 @@
           <label class="admin-label" for="detailsDeploySlugPattern">Pattern</label>
           <input class="admin-input font-mono" type="text" name="deploySlugPattern" id="detailsDeploySlugPattern" value="<%= websiteType.deploy_slug_pattern || '' %>" placeholder="e.g. happybirthday-from{{user_name}}-to{{recepient_name}}">
 
+          <h2 class="mt-5 text-sm font-semibold text-hc-ink">SEO overrides <span class="font-normal text-slate-400">(optional)</span></h2>
+          <p class="mt-1 text-xs text-slate-500">
+            Lets this type's <code>/build/<%= websiteType.slug %></code> page target its own specific search intent — e.g. "Birthday Website Generator" instead of your site's generic title. Leave blank to keep using your site-wide title/description (Site Settings page) for this type.
+          </p>
+          <label class="admin-label" for="detailsSeoTitle">Page title override</label>
+          <input class="admin-input" type="text" name="seoTitle" id="detailsSeoTitle" value="<%= websiteType.seo_title || '' %>" placeholder="e.g. Birthday Website Generator">
+          <label class="admin-label" for="detailsSeoDescription">Meta description override</label>
+          <textarea class="admin-textarea" name="seoDescription" id="detailsSeoDescription" placeholder="e.g. Build a custom birthday website in minutes — pick a style, add your details, and share a link."><%= websiteType.seo_description || '' %></textarea>
+
           <button type="submit" class="admin-btn mt-4">Save details</button>
         </form>
         <p id="detailsStatus" class="admin-msg" style="display:none;"></p>
