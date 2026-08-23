@@ -227,32 +227,24 @@ router.get('/sitemap.xml', async (req, res) => {
   res.send(xml);
 });
 
-// v1.1.2 Part A: Disallow rules below intentionally include the admin
-// path (/${ADMIN_PATH_SLUG}/*) — worth flagging plainly rather than
-// leaving as a silent side effect: robots.txt is a PUBLIC, unauthenticated
-// file anyone can fetch, not something only crawlers see. Listing the
-// slug here means anyone who thinks to check /robots.txt learns the exact
-// "secret" admin path, which is one full layer of the obscurity
-// middleware/adminSlug.js was built to provide (see HANDOFF.md's v1.0.1
-// decision). It does NOT expose the login itself — session auth, the real
-// password, CSRF, and the brute-force lockout are all still fully intact
-// regardless of whether the path is known — so this trades away
-// "attacker doesn't know where to even try" while leaving every other
-// layer untouched. This is implemented exactly as specified; if that
-// tradeoff isn't wanted, the alternative is dropping this line and
-// instead sending an `X-Robots-Tag: noindex` response header from the
-// admin router (achieves "keep it out of Google" without ever publishing
-// the path anywhere public) — flagging this here rather than silently
-// picking one or the other.
+// Revised per Advay's explicit choice: the admin path is deliberately NOT
+// listed here (see middleware/adminSlug.js for where "keep it out of
+// Google" is now actually handled instead, via an X-Robots-Tag header
+// sent on every admin response). robots.txt is a public, unauthenticated
+// file — anyone can fetch it, not just crawlers — so listing the exact
+// secret slug here would hand it to anyone who thinks to check, which is
+// exactly the tradeoff this revision avoids. Plain "/admin" is still
+// listed below purely as a courtesy/red-herring for the well-known
+// generic path — it was never real (see middleware/adminSlug.js's own
+// comment: /admin and /__internal_admin always 404), so there's nothing
+// to leak by naming it.
 router.get('/robots.txt', (req, res) => {
   const rootUrl = `${req.protocol}://${req.get('host')}`;
-  const adminSlug = process.env.ADMIN_PATH_SLUG;
 
   const lines = [
     'User-agent: *',
     'Allow: /',
     'Disallow: /api/*',
-    ...(adminSlug ? [`Disallow: /${adminSlug}/*`] : []),
     'Disallow: /admin',
     'Disallow: /build/*/preview',
     'Disallow: /build/*/checkout',
