@@ -5,12 +5,14 @@ const { getPool } = require('../db/init');
 const { getActivePaystackKeys } = require('../lib/paystack');
 const { finalizeDeployment } = require('../lib/finalizeDeployment');
 const sitePasswordCache = require('../lib/sitePasswordCache');
-const { createRateLimiter } = require('../lib/rateLimit');
+const { createRateLimiter, createDynamicRateLimiter } = require('../lib/rateLimit');
 const { getCurrencyForIp } = require('../lib/geolocation');
 const { getRate, convertUsdTo, getChargeCurrencyForCountry, formatMoney } = require('../lib/currency');
 const { getSiteSettings } = require('../lib/siteSettings');
 const { getActiveScriptsByPlacement } = require('../lib/siteScripts');
 const { getLandingContent } = require('../lib/landingContent');
+const { escapeHtml } = require('../lib/template');
+const { sendResendDetailsEmail } = require('../lib/email');
 
 const router = express.Router();
 
@@ -189,6 +191,80 @@ async function resolveChargeForCheckout(req, priceUsd) {
   return convertUsdTo(priceUsd, currency); // { amount, currency, rate }
 }
 
+// v1.1.2 Part A: dynamically generated from live DB state on every
+// request — no caching, deliberately, at this scale (a handful of active
+// website types, changing rarely) a fresh query per request is simpler
+// and cheaper than reasoning about cache invalidation for something a
+// crawler hits infrequently anyway. Only currently-ACTIVE website types
+// are listed — an inactive type's /build/:slug page 404s (see that route
+// below), so listing it in the sitemap would just be an invitation for a
+// crawler to index a dead end.
+router.get('/sitemap.xml', async (req, res) => {
+  const rootUrl = `${req.protocol}://${req.get('host')}`;
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT slug, updated_at FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC'
+  );
+
+  const urls = [
+    { loc: `${rootUrl}/`, changefreq: 'weekly', priority: '1.0' },
+    { loc: `${rootUrl}/explore`, changefreq: 'weekly', priority: '0.8' },
+    ...result.rows.map(t => ({
+      loc: `${rootUrl}/build/${t.slug}`,
+      changefreq: 'weekly',
+      priority: '0.7',
+      lastmod: t.updated_at ? new Date(t.updated_at).toISOString().slice(0, 10) : null
+    }))
+  ];
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => (
+    `  <url>\n    <loc>${escapeHtml(u.loc)}</loc>\n` +
+    (u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>\n` : '') +
+    `    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+  )).join('\n')}\n</urlset>`;
+
+  res.set('Content-Type', 'application/xml');
+  res.send(xml);
+});
+
+// v1.1.2 Part A: Disallow rules below intentionally include the admin
+// path (/${ADMIN_PATH_SLUG}/*) — worth flagging plainly rather than
+// leaving as a silent side effect: robots.txt is a PUBLIC, unauthenticated
+// file anyone can fetch, not something only crawlers see. Listing the
+// slug here means anyone who thinks to check /robots.txt learns the exact
+// "secret" admin path, which is one full layer of the obscurity
+// middleware/adminSlug.js was built to provide (see HANDOFF.md's v1.0.1
+// decision). It does NOT expose the login itself — session auth, the real
+// password, CSRF, and the brute-force lockout are all still fully intact
+// regardless of whether the path is known — so this trades away
+// "attacker doesn't know where to even try" while leaving every other
+// layer untouched. This is implemented exactly as specified; if that
+// tradeoff isn't wanted, the alternative is dropping this line and
+// instead sending an `X-Robots-Tag: noindex` response header from the
+// admin router (achieves "keep it out of Google" without ever publishing
+// the path anywhere public) — flagging this here rather than silently
+// picking one or the other.
+router.get('/robots.txt', (req, res) => {
+  const rootUrl = `${req.protocol}://${req.get('host')}`;
+  const adminSlug = process.env.ADMIN_PATH_SLUG;
+
+  const lines = [
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /api/*',
+    ...(adminSlug ? [`Disallow: /${adminSlug}/*`] : []),
+    'Disallow: /admin',
+    'Disallow: /build/*/preview',
+    'Disallow: /build/*/checkout',
+    'Disallow: /build/*/checkout/callback',
+    '',
+    `Sitemap: ${rootUrl}/sitemap.xml`
+  ];
+
+  res.set('Content-Type', 'text/plain');
+  res.send(lines.join('\n'));
+});
+
 router.get('/', async (req, res) => {
   const pool = getPool();
   const result = await pool.query(
@@ -204,9 +280,34 @@ router.get('/', async (req, res) => {
   // attribute in a form that could confuse it).
   const statsNumber = String(res.locals.siteSettings.manual_stats_number || '').replace(/[^0-9]/g, '') || '0';
 
+  // v1.1.2 Part A: Organization + WebSite JSON-LD on the homepage only —
+  // this is the canonical page for "what is this business/site", which is
+  // exactly what these two schema.org types describe. Built entirely from
+  // existing site_settings values (already loaded onto res.locals by this
+  // router's own middleware above) plus the request's own root URL — no
+  // new admin input required for this to work out of the box.
+  const rootUrl = `${req.protocol}://${req.get('host')}`;
+  const structuredData = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: res.locals.siteSettings.site_title,
+      url: rootUrl,
+      ...(res.locals.siteSettings.og_image_url ? { logo: res.locals.siteSettings.og_image_url } : {})
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: res.locals.siteSettings.site_title,
+      url: rootUrl,
+      description: res.locals.siteSettings.meta_description
+    }
+  ];
+
   res.render('public/landing', {
     pageTitle: null,
     statsNumber,
+    structuredData,
     typeTeasers: result.rows.map(t => {
       const priceUsd = Number(t.price_usd) || 0;
       return {
@@ -266,8 +367,36 @@ router.get('/build/:slug', async (req, res) => {
   const priceFor = await resolveVisitorPricing(req);
   const priceUsd = Number(websiteType.price_usd) || 0;
 
+  // v1.1.2 Part A: per-type SEO overrides, falling back to nothing (which
+  // views/partials/public-head.ejs itself then falls back from — pageTitle
+  // to the global site_title, pageDescription to the global
+  // meta_description) if the admin hasn't set one for this specific type.
+  // Product JSON-LD ALWAYS uses the real, canonical USD price — unlike
+  // priceFor() above (which adjusts display for the visitor's local
+  // currency), search engines indexing this markup need one stable,
+  // currency-explicit value, not something that varies by who/where the
+  // crawler happens to be.
+  const rootUrl = `${req.protocol}://${req.get('host')}`;
+  const structuredData = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: websiteType.name,
+      description: websiteType.seo_description || websiteType.description || '',
+      url: `${rootUrl}/build/${websiteType.slug}`,
+      offers: {
+        '@type': 'Offer',
+        price: priceUsd.toFixed(2),
+        priceCurrency: 'USD',
+        url: `${rootUrl}/build/${websiteType.slug}`
+      }
+    }
+  ];
+
   res.render('public/build', {
-    pageTitle: websiteType.name,
+    pageTitle: websiteType.seo_title || websiteType.name,
+    pageDescription: websiteType.seo_description || null,
+    structuredData,
     websiteType: { id: websiteType.id, slug: websiteType.slug, name: websiteType.name, ...priceFor(priceUsd) },
     fields: fieldsResult.rows.map(f => ({
       fieldKey: f.field_key,
@@ -485,6 +614,103 @@ router.get('/build/:slug/checkout/callback', async (req, res) => {
   }
 
   res.render('public/checkout-callback', { pageTitle: 'Checkout result', outcome, siteUrl, reference, slug: req.params.slug });
+});
+
+// v1.1.2 Part C: resend site details, client self-service, no account
+// system needed. Rate limited per IP using an ADMIN-CONFIGURABLE daily cap
+// (site_settings' resend_details_rate_limit_per_day, default '1') — read
+// fresh from the DB on every single request via createDynamicRateLimiter
+// (see lib/rateLimit.js), never cached, so a change the admin makes on the
+// Site Settings page takes effect on the very next request.
+const resendDetailsLimiter = createDynamicRateLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  getMax: async () => {
+    const pool = getPool();
+    const result = await pool.query(
+      "SELECT value FROM site_settings WHERE key = 'resend_details_rate_limit_per_day'"
+    );
+    const raw = result.rowCount > 0 ? result.rows[0].value : '1';
+    const parsed = parseInt(raw, 10);
+    // A corrupted/non-numeric setting value fails safe to the strict
+    // original default (1) rather than either rejecting every request
+    // (parsed <= 0 would make tryConsume impossible to satisfy) or, worse,
+    // silently becoming unlimited.
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  }
+});
+
+router.get('/resend-details', (req, res) => {
+  res.render('public/resend-details', { pageTitle: 'Resend site details' });
+});
+
+const resendDetailsBodySchema = z.object({
+  email: z.string().trim().email().max(254)
+});
+
+// ANTI-ENUMERATION, read this before changing anything below: the
+// response body and status code for a MATCH and a NO-MATCH must be
+// BYTE-FOR-BYTE IDENTICAL (both 200, both this exact message). If they
+// ever differ, this endpoint becomes a free tool for checking whether any
+// given email address has ever purchased a site here — a match/no-match
+// oracle is exactly the kind of information this form must never reveal.
+// This is why: the try/catch below swallows a DB error or an email-send
+// failure into the SAME generic response rather than surfacing a
+// different one, and why there is deliberately no "email not found"
+// branch anywhere in this handler. A future edit that makes this message
+// "more helpful" by being specific about whether a match was found would
+// reintroduce exactly this leak — don't.
+const RESEND_DETAILS_GENERIC_MESSAGE =
+  "If that email matches a site we've deployed, we've sent the details to it — check your spam folder if it doesn't arrive shortly.";
+
+router.post('/api/resend-details', express.json({ limit: '10kb' }), async (req, res) => {
+  if (!(await resendDetailsLimiter.tryConsume(req.ip))) {
+    return res.status(429).json({
+      error: "You've reached today's check limit — try again tomorrow."
+    });
+  }
+
+  const parsed = resendDetailsBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    // A malformed EMAIL FORMAT (not "no matching account") is a genuinely
+    // different, safe-to-reveal kind of error — it says nothing about
+    // whether any real address has ever purchased anything here, so this
+    // one case is allowed to respond differently from the generic message
+    // above without reintroducing the enumeration risk that message
+    // exists to prevent.
+    return res.status(400).json({ error: 'Enter a valid email address.' });
+  }
+  const email = parsed.data.email;
+
+  try {
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT ds.*, wt.name AS website_type_name
+       FROM deployed_sites ds
+       LEFT JOIN website_types wt ON wt.id = ds.website_type_id
+       WHERE ds.client_email = $1
+       ORDER BY ds.deployed_at DESC`,
+      [email]
+    );
+
+    if (result.rowCount > 0) {
+      try {
+        await sendResendDetailsEmail(email, result.rows);
+      } catch (err) {
+        console.error('[RESEND-DETAILS] Failed to send resend-details email:', err.message);
+        // Deliberately falls through to the SAME generic response below —
+        // see the anti-enumeration comment above. A delivery failure here
+        // is a real, worth-fixing problem (logged), but the requester
+        // must never be able to distinguish it from "no match found."
+      }
+    }
+  } catch (err) {
+    console.error('[RESEND-DETAILS] Lookup failed:', err.message);
+    // Same reasoning — a DB hiccup must not produce a response
+    // distinguishable from "no match," or its mere occurrence becomes a
+    // signal in itself. Fails safe to the generic message either way.
+  }
+
+  res.status(200).json({ message: RESEND_DETAILS_GENERIC_MESSAGE });
 });
 
 module.exports = router;

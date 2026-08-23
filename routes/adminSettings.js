@@ -43,6 +43,38 @@ router.put('/kenyan-payment-currency', requireCsrf, async (req, res) => {
   res.json({ value: parsed.data.value });
 });
 
+// v1.1.2 Part C: admin-configurable daily-per-IP cap on the public
+// resend-details lookup (routes/public.js's POST /api/resend-details) —
+// read fresh from this same row on every single request via
+// lib/rateLimit.js's createDynamicRateLimiter, never cached, so a change
+// here takes effect on the very next request.
+const updateResendDetailsRateLimitSchema = z.object({
+  value: z.coerce.number().int().min(1).max(1000)
+});
+
+router.get('/resend-details-rate-limit', async (req, res) => {
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT value FROM site_settings WHERE key = 'resend_details_rate_limit_per_day'"
+  );
+  res.json({ value: result.rowCount > 0 ? result.rows[0].value : '1' });
+});
+
+router.put('/resend-details-rate-limit', requireCsrf, async (req, res) => {
+  const parsed = updateResendDetailsRateLimitSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'value must be a whole number between 1 and 1000' });
+  }
+
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO site_settings (key, value, updated_at) VALUES ('resend_details_rate_limit_per_day', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [String(parsed.data.value)]
+  );
+  res.json({ value: parsed.data.value });
+});
+
 // v1.1.1 Part D: lets Advay get REAL evidence of whether ip-api.com (and,
 // if that fails, the ipwho.is fallback added this version) is actually
 // reachable from Render's network — by tapping a button in the dashboard

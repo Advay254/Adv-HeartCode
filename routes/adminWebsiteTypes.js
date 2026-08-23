@@ -70,7 +70,17 @@ const updateTypeSchema = z.object({
   // admin config secrets (see HANDOFF.md): omitted = don't change,
   // empty string = clear it (stored as NULL, reverting to today's random
   // slug behavior), non-empty string = set/replace the pattern.
-  deploySlugPattern: z.string().max(500).optional()
+  deploySlugPattern: z.string().max(500).optional(),
+  // v1.1.2 Part A: per-type SEO overrides. Same "omitted = don't change,
+  // '' = clear back to the global site_settings fallback" convention —
+  // see routes/public.js's GET /build/:slug for where the fallback
+  // actually happens. Length caps loosely follow common on-page SEO
+  // guidance (a title well past ~60-70 characters just gets truncated in
+  // search results, a description past ~160 similarly) without hard-
+  // enforcing those exact numbers — an admin who wants to type something
+  // longer isn't blocked, just past the point where it stops helping.
+  seoTitle: z.string().max(200).optional(),
+  seoDescription: z.string().max(500).optional()
 });
 
 const createFieldSchema = z.object({
@@ -209,7 +219,7 @@ router.put('/:id', requireCsrf, async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const { id } = paramsParsed.data;
-  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern } = bodyParsed.data;
+  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -229,14 +239,20 @@ router.put('/:id', requireCsrf, async (req, res) => {
     // unchanged; a non-empty string sets/replaces it.
     deploy_slug_pattern: deploySlugPattern !== undefined
       ? (deploySlugPattern === '' ? null : deploySlugPattern)
-      : current.deploy_slug_pattern
+      : current.deploy_slug_pattern,
+    // Same '' clears / omitted keeps convention — clearing means "fall
+    // back to the global site_settings title/description again."
+    seo_title: seoTitle !== undefined ? (seoTitle === '' ? null : seoTitle) : current.seo_title,
+    seo_description: seoDescription !== undefined ? (seoDescription === '' ? null : seoDescription) : current.seo_description
   };
 
   const result = await pool.query(
     `UPDATE website_types SET name = $1, description = $2, is_active = $3,
-       price_usd = $4, display_order = $5, icon_name = $6, deploy_slug_pattern = $7, updated_at = NOW()
-     WHERE id = $8 RETURNING *`,
-    [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name, next.deploy_slug_pattern, id]
+       price_usd = $4, display_order = $5, icon_name = $6, deploy_slug_pattern = $7,
+       seo_title = $8, seo_description = $9, updated_at = NOW()
+     WHERE id = $10 RETURNING *`,
+    [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name,
+      next.deploy_slug_pattern, next.seo_title, next.seo_description, id]
   );
   const t = result.rows[0];
 
@@ -274,7 +290,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
     aiEnabled: t.ai_enabled,
     iconName: t.icon_name,
     deploySlugPattern: t.deploy_slug_pattern,
-    deploySlugWarnings
+    deploySlugWarnings,
+    seoTitle: t.seo_title,
+    seoDescription: t.seo_description
   });
 });
 

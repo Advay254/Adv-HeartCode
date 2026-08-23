@@ -44,6 +44,10 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/email-providers`, (req, res) => {
   res.render('admin/email-providers');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/notifications`, (req, res) => {
+  res.render('admin/notifications');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/website-types`, (req, res) => {
   res.render('admin/website-types/index');
 });
