@@ -247,6 +247,61 @@
 
     load();
     loadKenyanCurrency();
+
+    // v1.1.1 Part D: geolocation health check panel.
+    document.getElementById('runGeoDiagnosticBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('runGeoDiagnosticBtn');
+      const resultEl = document.getElementById('geoDiagnosticResult');
+      const ip = document.getElementById('geoDiagnosticIp').value.trim();
+
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<p class="text-sm text-slate-500">Running a live lookup — this can take a few seconds if a provider is slow or unreachable…</p>';
+
+      try {
+        const url = '/api/admin/settings/geo-diagnostic' + (ip ? '?ip=' + encodeURIComponent(ip) : '');
+        const res = await window.adminFetch(url);
+        const data = await res.json();
+
+        if (!res.ok) {
+          resultEl.innerHTML = `<p class="admin-msg admin-msg-error">${escapeHtml(data.error || 'Diagnostic failed to run.')}</p>`;
+          return;
+        }
+
+        if (data.note) {
+          resultEl.innerHTML = `<p class="admin-msg admin-msg-warning">${escapeHtml(data.note)}</p>`;
+          return;
+        }
+
+        const rows = data.attempts.map(a => `
+          <tr>
+            <td data-label="Provider">${escapeHtml(a.provider)}</td>
+            <td data-label="Result">${a.success ? '<span class="admin-badge admin-badge-active">ok</span>' : '<span class="admin-badge admin-badge-warn">failed</span>'}</td>
+            <td data-label="Latency">${escapeHtml(a.latencyMs)}ms</td>
+            <td data-label="Details">${escapeHtml(a.error || (a.success ? `country=${a.countryCode || 'n/a'} currency=${a.currency || 'n/a'}` : ''))}</td>
+          </tr>
+        `).join('');
+
+        const finalOk = data.finalResult.countryCode !== null || data.finalResult.currency !== 'USD';
+        resultEl.innerHTML = `
+          <p class="text-sm text-hc-ink">Tested IP: <strong>${escapeHtml(data.ip)}</strong> — current Kenyan-visitor toggle: <strong>${escapeHtml(data.kenyanPaymentCurrency)}</strong></p>
+          <table class="admin-table mt-3">
+            <thead><tr><th>Provider</th><th>Result</th><th>Latency</th><th>Details</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p class="mt-3 text-sm ${finalOk ? 'text-emerald-700' : 'text-amber-700'}">
+            Final result: currency=${escapeHtml(data.finalResult.currency)}, countryCode=${escapeHtml(data.finalResult.countryCode || 'null')}
+            ${finalOk ? '' : ' — every provider failed for this IP, so USD was used as the safe default.'}
+          </p>
+        `;
+      } catch (err) {
+        resultEl.innerHTML = '<p class="admin-msg admin-msg-error">Network error running the diagnostic.</p>';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run diagnostic';
+      }
+    });
   }
 
   // ---- AI provider page ----
@@ -386,6 +441,173 @@
         body: JSON.stringify({ label: form.label.value, baseUrl: form.baseUrl.value })
       });
       if (res.ok) { form.reset(); load(); }
+    });
+
+    load();
+  }
+
+  // ---- Email Providers page (v1.1.1 Part C) ----
+  function initEmailProvidersPage() {
+    const providersList = document.getElementById('providersList');
+
+    // Gmail/Brevo are just presets that pre-fill known SMTP settings —
+    // both submit as provider_type: 'smtp' underneath (see
+    // routes/adminEmailProviders.js). Nothing server-side ever sees which
+    // preset was picked, only the resulting host/port/security fields.
+    const SMTP_PRESETS = {
+      gmail: { host: 'smtp.gmail.com', port: 587, security: 'STARTTLS' },
+      brevo: { host: 'smtp-relay.brevo.com', port: 587, security: 'STARTTLS' },
+      smtp: { host: '', port: 587, security: 'STARTTLS' }
+    };
+
+    function applyPreset() {
+      const preset = document.getElementById('providerPreset').value;
+      document.querySelectorAll('#addProviderForm [data-fields]').forEach(el => {
+        el.style.display = (el.dataset.fields === (preset === 'resend' ? 'resend' : 'smtp')) ? 'block' : 'none';
+      });
+      if (preset !== 'resend') {
+        const p = SMTP_PRESETS[preset];
+        document.getElementById('smtpHost').value = p.host;
+        document.getElementById('smtpPort').value = p.port;
+        document.getElementById('smtpSecurity').value = p.security;
+      }
+    }
+    document.getElementById('providerPreset').addEventListener('change', applyPreset);
+    applyPreset();
+
+    function providerCard(p) {
+      const configRows = p.providerType === 'resend'
+        ? `<p class="mt-1 text-sm text-slate-500">From: ${escapeHtml(p.config.fromAddress || '(not set)')} · API key: ${escapeHtml(p.config.apiKeyMasked || 'unreadable')}</p>`
+        : `<p class="mt-1 text-sm text-slate-500">${escapeHtml(p.config.host || '(no host)')}:${escapeHtml(p.config.port || '?')} (${escapeHtml(p.config.connectionSecurity)}) · From: ${escapeHtml(p.config.fromAddress || '(not set)')} · Password: ${escapeHtml(p.config.passwordMasked || 'unreadable')}</p>`;
+
+      return `
+      <div class="admin-card email-provider-card" data-provider-id="${p.id}">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="text-base font-semibold text-hc-ink">${escapeHtml(p.label)}</h2>
+          <span class="admin-badge">${escapeHtml(p.providerType)}</span>
+          ${p.isActive ? '<span class="admin-badge admin-badge-active">active</span>' : ''}
+        </div>
+        ${configRows}
+
+        <div class="mt-3 flex flex-wrap items-end gap-2">
+          <div>
+            <label class="admin-label" for="test-to-${p.id}">Send test email to</label>
+            <input class="admin-input" type="email" id="test-to-${p.id}" placeholder="you@example.com">
+          </div>
+          <button type="button" class="admin-btn-outline admin-btn-sm send-test">Send test</button>
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="admin-btn${p.isActive ? '-outline' : ''} admin-btn-sm set-active">${p.isActive ? 'Active provider' : 'Set as active'}</button>
+          <button type="button" class="admin-btn-danger admin-btn-sm delete-provider">Delete provider</button>
+        </div>
+        <p class="status-msg admin-msg" style="display:none;"></p>
+      </div>`;
+    }
+
+    function showStatus(card, text, type) {
+      const el = card.querySelector('.status-msg');
+      el.textContent = text;
+      el.className = 'admin-msg admin-msg-' + type;
+      el.style.display = 'block';
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/email-providers');
+      const providers = await res.json();
+      providersList.innerHTML = providers.map(providerCard).join('') || '<p class="admin-msg admin-msg-warning">No email providers configured yet — nothing will be able to send email until one is added and activated.</p>';
+      wireCards();
+    }
+
+    function wireCards() {
+      document.querySelectorAll('.email-provider-card[data-provider-id]').forEach(card => {
+        const providerId = card.dataset.providerId;
+
+        card.querySelector('.send-test').addEventListener('click', async () => {
+          const btn = card.querySelector('.send-test');
+          const to = card.querySelector(`#test-to-${providerId}`).value.trim();
+          if (!to) { showStatus(card, 'Enter a destination email address first.', 'error'); return; }
+          const originalText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Sending…';
+          try {
+            const res = await window.adminFetch(`/api/admin/email-providers/${providerId}/test`, {
+              method: 'POST',
+              body: JSON.stringify({ to })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              showStatus(card, `Test email sent to ${to}.`, 'success');
+            } else {
+              showStatus(card, data.error || 'Test send failed.', 'error');
+            }
+          } catch (err) {
+            showStatus(card, 'Network error sending test email.', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+          }
+        });
+
+        card.querySelector('.set-active').addEventListener('click', async () => {
+          const res = await window.adminFetch(`/api/admin/email-providers/${providerId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: true })
+          });
+          if (res.ok) load();
+        });
+
+        card.querySelector('.delete-provider').addEventListener('click', async () => {
+          if (!confirm('Delete this email provider?')) return;
+          const res = await window.adminFetch(`/api/admin/email-providers/${providerId}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+    }
+
+    document.getElementById('addProviderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('addProviderError');
+      errorEl.style.display = 'none';
+
+      const preset = document.getElementById('providerPreset').value;
+      const label = document.getElementById('providerLabel').value;
+
+      let payload;
+      if (preset === 'resend') {
+        payload = {
+          providerType: 'resend',
+          label,
+          apiKey: document.getElementById('resendApiKey').value,
+          fromAddress: document.getElementById('resendFromAddress').value
+        };
+      } else {
+        payload = {
+          providerType: 'smtp',
+          label,
+          host: document.getElementById('smtpHost').value,
+          port: Number(document.getElementById('smtpPort').value) || 587,
+          username: document.getElementById('smtpUsername').value,
+          password: document.getElementById('smtpPassword').value,
+          fromAddress: document.getElementById('smtpFromAddress').value,
+          fromName: document.getElementById('smtpFromName').value,
+          connectionSecurity: document.getElementById('smtpSecurity').value
+        };
+      }
+
+      const res = await window.adminFetch('/api/admin/email-providers', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        e.target.reset();
+        applyPreset();
+        load();
+      } else {
+        const data = await res.json();
+        errorEl.textContent = (data.details && data.details[0] && data.details[0].message) || data.error || 'Failed to add provider.';
+        errorEl.style.display = 'block';
+      }
     });
 
     load();
@@ -1410,6 +1632,7 @@
     if (page === 'login') initLoginPage();
     if (page === 'payments') initPaymentsPage();
     if (page === 'ai-provider') initAiProviderPage();
+    if (page === 'email-providers') initEmailProvidersPage();
     if (page === 'website-types-index') initWebsiteTypesIndexPage();
     if (page === 'website-types-detail') initWebsiteTypesDetailPage();
     if (page === 'overview') initOverviewPage();
