@@ -428,8 +428,41 @@
     });
   }
 
+  /**
+   * v1.1.3: the Skilline-styled landing page's mobile nav toggle
+   * (views/partials/landing-sections/nav.ejs). The source template uses
+   * Alpine.js (`x-data="{ open: false }"`) for this; this app has no
+   * Alpine dependency anywhere else, so this is the plain-JS equivalent —
+   * toggle a `.hidden` class on both the desktop-panel-hidden-on-mobile
+   * nav and the separate stacked mobile panel, flip aria-expanded, and
+   * swap which of the two icon <svg>s inside the toggle button is
+   * visible. Two separate nav elements (not one reused via CSS) because
+   * the desktop version needs a horizontal pill layout and the mobile
+   * one needs a stacked list — see nav.ejs's own comment.
+   */
+  function initHomePage() {
+    var toggleBtn = document.querySelector('[data-landing-nav-toggle]');
+    if (!toggleBtn) return;
+    var mobilePanel = document.getElementById('landing-nav-links-mobile');
+    var iconOpen = document.querySelector('[data-landing-nav-icon-open]');
+    var iconClose = document.querySelector('[data-landing-nav-icon-close]');
+
+    toggleBtn.addEventListener('click', function () {
+      var isOpen = toggleBtn.getAttribute('aria-expanded') === 'true';
+      var next = !isOpen;
+      toggleBtn.setAttribute('aria-expanded', String(next));
+      if (mobilePanel) {
+        mobilePanel.classList.toggle('hidden', !next);
+        mobilePanel.classList.toggle('flex', next);
+      }
+      if (iconOpen) iconOpen.classList.toggle('hidden', next);
+      if (iconClose) iconClose.classList.toggle('hidden', !next);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var page = document.body.dataset.page;
+    if (page === 'home') initHomePage();
     if (page === 'build') initBuildPage();
     if (page === 'preview') initPreviewPage();
     if (page === 'checkout') initCheckoutPage();
