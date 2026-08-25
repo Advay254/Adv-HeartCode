@@ -1635,19 +1635,21 @@
   }
 
   // ---- landing page CMS (v1.0.8 Part C) ----
+  // v1.1.3: trimmed to footer-only — hero text and steps used to live
+  // here too, but nothing reads landing_content's hero_headline/
+  // hero_tagline/hero_cta_text/trust_line_text or landing_steps anymore
+  // now that the homepage renders from landing_sections instead (see
+  // db/init.js's v1.1.3 migration comment). footerText and footer links
+  // are still real: views/partials/public-footer.ejs (/explore) reads
+  // both. routes/adminLanding.js's now-unreachable hero/step endpoints
+  // are left as-is server-side — see this version's delivery notes for
+  // why removing them too felt like unnecessary extra surface area for a
+  // vestigial-but-harmless capability.
   function initLandingPagePage() {
     async function load() {
       const res = await window.adminFetch('/api/admin/landing');
       const data = await res.json();
-
-      const form = document.getElementById('contentForm');
-      form.heroHeadline.value = data.content.heroHeadline;
-      form.heroTagline.value = data.content.heroTagline;
-      form.heroCtaText.value = data.content.heroCtaText;
-      form.trustLineText.value = data.content.trustLineText;
-      form.footerText.value = data.content.footerText;
-
-      renderSteps(data.steps);
+      document.getElementById('contentForm').footerText.value = data.content.footerText;
       renderFooterLinks(data.footerLinks);
     }
 
@@ -1656,77 +1658,12 @@
       const form = e.target;
       const res = await window.adminFetch('/api/admin/landing/content', {
         method: 'PUT',
-        body: JSON.stringify({
-          heroHeadline: form.heroHeadline.value,
-          heroTagline: form.heroTagline.value,
-          heroCtaText: form.heroCtaText.value,
-          trustLineText: form.trustLineText.value,
-          footerText: form.footerText.value
-        })
+        body: JSON.stringify({ footerText: form.footerText.value })
       });
       const statusEl = document.getElementById('contentStatus');
       statusEl.style.display = 'block';
       statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
-    });
-
-    // ---- steps ----
-    function renderSteps(steps) {
-      const list = document.getElementById('stepsList');
-      list.innerHTML = steps.map((s, i) => `
-        <div class="flex items-start gap-3 rounded-md border border-slate-200 p-3" data-id="${s.id}">
-          <div class="flex shrink-0 flex-col gap-1">
-            <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${s.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
-            <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${s.id}" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-hc-ink">${escapeHtml(s.title)} <span class="font-mono text-xs font-normal text-slate-400">(${escapeHtml(s.iconName)})</span></p>
-            <p class="mt-1 text-sm text-slate-500">${escapeHtml(s.description)}</p>
-          </div>
-          <button type="button" class="admin-btn-danger admin-btn-sm shrink-0 remove-step" data-id="${s.id}">Remove</button>
-        </div>`).join('') || '<p class="text-sm text-slate-400">No steps yet.</p>';
-
-      list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => moveStep(btn.dataset.id, 'up')));
-      list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => moveStep(btn.dataset.id, 'down')));
-      list.querySelectorAll('.remove-step').forEach(btn => btn.addEventListener('click', () => removeStep(btn.dataset.id)));
-    }
-
-    async function moveStep(id, direction) {
-      const res = await window.adminFetch(`/api/admin/landing/steps/${id}/move`, {
-        method: 'PUT',
-        body: JSON.stringify({ direction })
-      });
-      if (res.ok) load();
-    }
-
-    async function removeStep(id) {
-      if (!confirm('Remove this step?')) return;
-      const res = await window.adminFetch(`/api/admin/landing/steps/${id}`, { method: 'DELETE' });
-      if (res.ok) load();
-    }
-
-    document.getElementById('addStepForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-      const res = await window.adminFetch('/api/admin/landing/steps', {
-        method: 'POST',
-        body: JSON.stringify({
-          iconName: form.iconName.value,
-          title: form.title.value,
-          description: form.description.value
-        })
-      });
-      const statusEl = document.getElementById('stepStatus');
-      if (res.ok) {
-        form.reset();
-        statusEl.style.display = 'none';
-        load();
-      } else {
-        const data = await res.json();
-        statusEl.style.display = 'block';
-        statusEl.className = 'admin-msg admin-msg-error';
-        statusEl.textContent = data.error || 'Failed to add step.';
-      }
     });
 
     // ---- footer links ----
@@ -1783,6 +1720,470 @@
     load();
   }
 
+  /**
+   * v1.1.3: Landing Sections admin page. Unlike every other admin list
+   * page in this file, one section's "edit form" has a genuinely
+   * different shape depending on section_type — rather than 7 near-
+   * duplicate hand-written forms, each type gets a small
+   * render+collect function pair (renderXForm/collectXForm) sharing one
+   * repeatable-row convention: an array field's container carries
+   * data-array="fieldName", each row inside it carries data-row, and each
+   * input/select/textarea inside a row carries data-field="subFieldName"
+   * — collectXForm() walks the DOM to rebuild the array on save rather
+   * than tracking state in JS alongside it, so there's exactly one
+   * source of truth (the form itself) at save time.
+   *
+   * image_asset_key (wherever a type has one) is deliberately never
+   * rendered as an input anywhere below — see
+   * lib/landingSectionTypes.js's preserveImageAssetKeys() comment. The
+   * server strips/overwrites it regardless, but not exposing a control
+   * for it here avoids implying it's editable at all.
+   */
+  function initLandingSectionsPage() {
+    const config = JSON.parse(document.getElementById('landingSectionsConfigData').textContent);
+    const listEl = document.getElementById('sectionsList');
+    let sections = [];
+
+    function iconOptionsHtml(selected) {
+      return config.iconNames.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
+    }
+    function colorOptionsHtml(selected) {
+      return config.accentColors.map(c => `<option value="${escapeHtml(c)}" ${c === selected ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+    }
+    function textField(label, name, value) {
+      return `<label class="admin-label">${label}</label>
+        <input class="admin-input" type="text" data-field="${name}" value="${escapeHtml(value || '')}">`;
+    }
+    function textareaField(label, name, value) {
+      return `<label class="admin-label">${label}</label>
+        <textarea class="admin-textarea" data-field="${name}">${escapeHtml(value || '')}</textarea>`;
+    }
+    function readField(panel, name) {
+      const el = panel.querySelector(`[data-field="${name}"]`);
+      return el ? el.value.trim() : '';
+    }
+    function readRows(panel, arrayName) {
+      const container = panel.querySelector(`[data-array="${arrayName}"]`);
+      if (!container) return [];
+      return Array.from(container.querySelectorAll(':scope > [data-row]')).map(row => {
+        const obj = {};
+        row.querySelectorAll('[data-field]').forEach(el => { obj[el.dataset.field] = el.value.trim(); });
+        return obj;
+      });
+    }
+    // Row add/remove wiring for all array fields happens later via
+    // wirePanelRows() below, which also handles nesting (footer's
+    // link_columns rows each need their own inner "add link" wiring) —
+    // see that function's comment.
+
+    // ---- summary text for the collapsed card ----
+    function summaryFor(section) {
+      const c = section.content || {};
+      if (section.sectionType === 'hero') return c.headline || '';
+      if (section.sectionType === 'feature_cards') return `${c.heading || ''} — ${(c.cards || []).length} card(s)`;
+      if (section.sectionType === 'split_image_text') return c.heading || '';
+      if (section.sectionType === 'cta_image_cards') return `${c.heading || ''} — ${(c.cards || []).length} card(s)`;
+      if (section.sectionType === 'bullet_list') return `${c.heading || ''} — ${(c.items || []).length} item(s)`;
+      if (section.sectionType === 'testimonials') return `${c.heading || ''} — ${(c.items || []).length} testimonial(s)`;
+      if (section.sectionType === 'footer') return `${(c.link_columns || []).length} link column(s)`;
+      return '';
+    }
+
+    // ---- hero ----
+    function renderHeroForm(c) {
+      return `
+        ${textField('Headline', 'headline', c.headline)}
+        ${textField('Highlighted word (must match a word/phrase in the headline exactly)', 'highlighted_word', c.highlighted_word)}
+        ${textareaField('Tagline', 'tagline', c.tagline)}
+        ${textField('Primary button text', 'primary_cta_text', c.primary_cta_text)}
+        ${textField('Primary button link', 'primary_cta_url', c.primary_cta_url)}
+        ${textField('Secondary button text (optional)', 'secondary_cta_text', c.secondary_cta_text)}
+        ${textField('Secondary button link', 'secondary_cta_url', c.secondary_cta_url)}`;
+    }
+    function collectHeroForm(panel) {
+      return {
+        headline: readField(panel, 'headline'),
+        highlighted_word: readField(panel, 'highlighted_word'),
+        tagline: readField(panel, 'tagline'),
+        primary_cta_text: readField(panel, 'primary_cta_text'),
+        primary_cta_url: readField(panel, 'primary_cta_url'),
+        secondary_cta_text: readField(panel, 'secondary_cta_text'),
+        secondary_cta_url: readField(panel, 'secondary_cta_url')
+      };
+    }
+
+    // ---- feature_cards ----
+    function featureCardRowHtml(card) {
+      card = card || {};
+      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+        <label class="admin-label">Icon</label>
+        <select class="admin-select" data-field="icon_name">${iconOptionsHtml(card.icon_name)}</select>
+        <label class="admin-label">Icon color</label>
+        <select class="admin-select" data-field="icon_color">${colorOptionsHtml(card.icon_color)}</select>
+        ${textField('Title', 'title', card.title)}
+        ${textareaField('Description', 'description', card.description)}
+        <button type="button" class="admin-btn-danger admin-btn-sm mt-2" data-remove-row>Remove card</button>
+      </div>`;
+    }
+    function renderFeatureCardsForm(c) {
+      return `
+        ${textField('Heading', 'heading', c.heading)}
+        ${textField('Highlighted word', 'highlighted_word', c.highlighted_word)}
+        <p class="admin-label">Cards</p>
+        <div data-array="cards">${(c.cards || []).map(featureCardRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-cards>Add card</button>`;
+    }
+    function collectFeatureCardsForm(panel) {
+      return { heading: readField(panel, 'heading'), highlighted_word: readField(panel, 'highlighted_word'), cards: readRows(panel, 'cards') };
+    }
+
+    // ---- split_image_text ----
+    function renderSplitImageTextForm(c) {
+      return `
+        ${textField('Heading', 'heading', c.heading)}
+        ${textField('Highlighted word', 'highlighted_word', c.highlighted_word)}
+        ${textareaField('Body text', 'body_text', c.body_text)}
+        <label class="admin-label">Image side</label>
+        <select class="admin-select" data-field="image_side">
+          <option value="left" ${c.image_side === 'left' ? 'selected' : ''}>Left</option>
+          <option value="right" ${c.image_side === 'right' ? 'selected' : ''}>Right</option>
+        </select>
+        <label class="admin-label">Accent color</label>
+        <select class="admin-select" data-field="decorative_accent_color">${colorOptionsHtml(c.decorative_accent_color)}</select>
+        ${textField('Button text (optional)', 'cta_text', c.cta_text)}
+        ${textField('Button link', 'cta_url', c.cta_url)}
+        <p class="mt-2 text-xs text-slate-400">Image: ${escapeHtml(c.image_asset_key || 'none — fixed, not editable here')}</p>`;
+    }
+    function collectSplitImageTextForm(panel) {
+      return {
+        heading: readField(panel, 'heading'),
+        highlighted_word: readField(panel, 'highlighted_word'),
+        body_text: readField(panel, 'body_text'),
+        image_side: readField(panel, 'image_side'),
+        decorative_accent_color: readField(panel, 'decorative_accent_color'),
+        cta_text: readField(panel, 'cta_text'),
+        cta_url: readField(panel, 'cta_url')
+      };
+    }
+
+    // ---- cta_image_cards ----
+    function ctaCardRowHtml(card) {
+      card = card || {};
+      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+        ${textField('Overlay label', 'overlay_label', card.overlay_label)}
+        ${textField('Button text', 'button_text', card.button_text)}
+        ${textField('Button link', 'button_url', card.button_url)}
+        <p class="mt-1 text-xs text-slate-400">Image: ${escapeHtml(card.image_asset_key || 'none — fixed, not editable here')}</p>
+        <button type="button" class="admin-btn-danger admin-btn-sm mt-2" data-remove-row>Remove card</button>
+      </div>`;
+    }
+    function renderCtaImageCardsForm(c) {
+      return `
+        ${textField('Heading', 'heading', c.heading)}
+        <p class="admin-label">Cards</p>
+        <div data-array="cards">${(c.cards || []).map(ctaCardRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-cards>Add card</button>`;
+    }
+    function collectCtaImageCardsForm(panel) {
+      return { heading: readField(panel, 'heading'), cards: readRows(panel, 'cards') };
+    }
+
+    // ---- bullet_list ----
+    function bulletItemRowHtml(item) {
+      item = item || {};
+      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+        <label class="admin-label">Icon color</label>
+        <select class="admin-select" data-field="icon_color">${colorOptionsHtml(item.icon_color)}</select>
+        ${textField('Text', 'text', item.text)}
+        <button type="button" class="admin-btn-danger admin-btn-sm mt-2" data-remove-row>Remove item</button>
+      </div>`;
+    }
+    function renderBulletListForm(c) {
+      return `
+        ${textField('Heading', 'heading', c.heading)}
+        ${textField('Highlighted word', 'highlighted_word', c.highlighted_word)}
+        ${textareaField('Body text', 'body_text', c.body_text)}
+        <p class="admin-label">Checklist items</p>
+        <div data-array="items">${(c.items || []).map(bulletItemRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-items>Add item</button>
+        <p class="mt-2 text-xs text-slate-400">Image: ${escapeHtml(c.image_asset_key || 'none — fixed, not editable here')}</p>`;
+    }
+    function collectBulletListForm(panel) {
+      return {
+        heading: readField(panel, 'heading'),
+        highlighted_word: readField(panel, 'highlighted_word'),
+        body_text: readField(panel, 'body_text'),
+        items: readRows(panel, 'items')
+      };
+    }
+
+    // ---- testimonials ----
+    function testimonialRowHtml(item) {
+      item = item || {};
+      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+        ${textareaField('Quote', 'quote', item.quote)}
+        ${textField('Author name', 'author_name', item.author_name)}
+        ${textField('Author role (optional)', 'author_role', item.author_role)}
+        <button type="button" class="admin-btn-danger admin-btn-sm mt-2" data-remove-row>Remove testimonial</button>
+      </div>`;
+    }
+    function renderTestimonialsForm(c) {
+      return `
+        ${textField('Heading', 'heading', c.heading)}
+        ${textField('Eyebrow text', 'eyebrow_text', c.eyebrow_text)}
+        <p class="admin-label">Testimonials (section shows nothing on the live page until at least one exists)</p>
+        <div data-array="items">${(c.items || []).map(testimonialRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-items>Add testimonial</button>`;
+    }
+    function collectTestimonialsForm(panel) {
+      return { heading: readField(panel, 'heading'), eyebrow_text: readField(panel, 'eyebrow_text'), items: readRows(panel, 'items') };
+    }
+
+    // ---- footer (the one doubly-nested type: link_columns[].links[]) ----
+    function footerLinkRowHtml(link) {
+      link = link || {};
+      return `<div class="mt-2 flex gap-2" data-row>
+        <input class="admin-input" type="text" data-field="label" placeholder="Label" value="${escapeHtml(link.label || '')}">
+        <input class="admin-input" type="text" data-field="url" placeholder="URL" value="${escapeHtml(link.url || '')}">
+        <button type="button" class="admin-btn-danger admin-btn-sm" data-remove-row>&times;</button>
+      </div>`;
+    }
+    function footerColumnRowHtml(column) {
+      column = column || {};
+      const links = column.links || [];
+      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+        ${textField('Column heading', 'heading', column.heading)}
+        <p class="admin-label">Links</p>
+        <div data-array="links">${links.map(footerLinkRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-links>Add link</button>
+        <button type="button" class="admin-btn-danger admin-btn-sm mt-2 ml-2" data-remove-row>Remove column</button>
+      </div>`;
+    }
+    function renderFooterForm(c) {
+      return `
+        ${textareaField('Bottom copyright line (shown at the very bottom of the footer — leave blank to fall back to a computed © line)', 'tagline', c.tagline)}
+        <p class="admin-label">Link columns</p>
+        <div data-array="link_columns">${(c.link_columns || []).map(footerColumnRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-link_columns>Add column</button>`;
+    }
+    // footer's collect can't use the generic readRows() (which only reads
+    // one flat level) — link_columns rows each contain their OWN nested
+    // "links" array, so each column row is read individually here instead.
+    function collectFooterForm(panel) {
+      const columnsContainer = panel.querySelector('[data-array="link_columns"]');
+      const columns = Array.from(columnsContainer.querySelectorAll(':scope > [data-row]')).map(colRow => {
+        const heading = colRow.querySelector('[data-field="heading"]').value.trim();
+        const linksContainer = colRow.querySelector('[data-array="links"]');
+        const links = Array.from(linksContainer.querySelectorAll(':scope > [data-row]')).map(linkRow => ({
+          label: linkRow.querySelector('[data-field="label"]').value.trim(),
+          url: linkRow.querySelector('[data-field="url"]').value.trim()
+        }));
+        return { heading, links };
+      });
+      return { tagline: readField(panel, 'tagline'), link_columns: columns };
+    }
+
+    // Wires an array field's "Add row" button and every row's own
+    // "Remove" button, scoped to `containerEl` specifically (not the
+    // whole panel) — this is what makes footer's per-column nested
+    // "links" arrays safe to wire individually below: there can be
+    // several `[data-array="links"]` containers in one footer panel (one
+    // per column), and scoping strictly to the one actually passed in
+    // means each gets exactly its own listener, never a panel-wide
+    // querySelector that would only ever find the first one.
+    //
+    // Takes a live reference to the just-inserted row (rather than using
+    // insertAdjacentHTML, which returns nothing) so a nested array inside
+    // that row — footer's links-within-a-column being the one case that
+    // needs this — can be wired immediately via `onRowAdded`, exactly
+    // once, with no need to ever re-wire anything else already on the
+    // page. That "exactly once per row, at the moment it's created"
+    // property is the actual fix for the duplicate-listener bug an
+    // earlier version of this function had (it re-ran itself over the
+    // whole panel on every "Add column" click, re-attaching a fresh
+    // listener to every column already on the page each time).
+    function wireArrayField(panel, containerEl, arrayName, rowHtmlFn, onRowAdded) {
+      const addBtn = panel.querySelector(`[data-add-${arrayName}]`);
+      if (addBtn) {
+        addBtn.addEventListener('click', () => {
+          const temp = document.createElement('div');
+          temp.innerHTML = rowHtmlFn({}).trim();
+          const newRow = temp.firstElementChild;
+          containerEl.appendChild(newRow);
+          if (onRowAdded) onRowAdded(newRow);
+        });
+      }
+      containerEl.addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('[data-remove-row]');
+        if (removeBtn && removeBtn.closest(`[data-array="${arrayName}"]`) === containerEl) {
+          // Stops a "remove link" click (inside a footer column's nested
+          // links array) from also bubbling up into the outer
+          // link_columns container's own delegated listener — both would
+          // otherwise independently call .remove() on the same row.
+          // Harmless either way (Element.remove() on an already-detached
+          // node is a no-op), but there's no reason to let it happen.
+          e.stopPropagation();
+          removeBtn.closest('[data-row]').remove();
+        }
+      });
+    }
+
+    // One footer column row's OWN nested "links" array — called once per
+    // row, whether that row came from the server-rendered initial content
+    // (wirePanelRows below) or was just added by clicking "Add column"
+    // (wireArrayField's onRowAdded above).
+    function wireColumnLinks(columnRow) {
+      const linksContainer = columnRow.querySelector('[data-array="links"]');
+      wireArrayField(columnRow, linksContainer, 'links', footerLinkRowHtml);
+    }
+
+    const TYPE_HANDLERS = {
+      hero: { render: renderHeroForm, collect: collectHeroForm },
+      feature_cards: { render: renderFeatureCardsForm, collect: collectFeatureCardsForm },
+      split_image_text: { render: renderSplitImageTextForm, collect: collectSplitImageTextForm },
+      cta_image_cards: { render: renderCtaImageCardsForm, collect: collectCtaImageCardsForm },
+      bullet_list: { render: renderBulletListForm, collect: collectBulletListForm },
+      testimonials: { render: renderTestimonialsForm, collect: collectTestimonialsForm },
+      footer: { render: renderFooterForm, collect: collectFooterForm }
+    };
+
+    // Wires whichever single top-level array field a section's form has
+    // (at most one, for every type except footer — see the `link_columns`
+    // branch, which additionally wires each existing column's own nested
+    // links array exactly once).
+    function wirePanelRows(panel, sectionType) {
+      const TOP_LEVEL_ARRAY_BY_TYPE = {
+        feature_cards: { name: 'cards', rowHtmlFn: featureCardRowHtml },
+        cta_image_cards: { name: 'cards', rowHtmlFn: ctaCardRowHtml },
+        bullet_list: { name: 'items', rowHtmlFn: bulletItemRowHtml },
+        testimonials: { name: 'items', rowHtmlFn: testimonialRowHtml },
+        footer: { name: 'link_columns', rowHtmlFn: footerColumnRowHtml }
+      };
+      const arrayField = TOP_LEVEL_ARRAY_BY_TYPE[sectionType];
+      if (!arrayField) return; // hero / split_image_text have no array field at all
+
+      const containerEl = panel.querySelector(`[data-array="${arrayField.name}"]`);
+      const onRowAdded = sectionType === 'footer' ? wireColumnLinks : undefined;
+      wireArrayField(panel, containerEl, arrayField.name, arrayField.rowHtmlFn, onRowAdded);
+
+      if (sectionType === 'footer') {
+        // Every column already present in the server-rendered content
+        // needs its own links-array wiring too — onRowAdded above only
+        // covers columns added AFTER this initial wiring pass.
+        containerEl.querySelectorAll(':scope > [data-row]').forEach(wireColumnLinks);
+      }
+    }
+
+    function renderCard(section) {
+      const handlers = TYPE_HANDLERS[section.sectionType];
+      const wrap = document.createElement('div');
+      wrap.className = 'admin-card';
+      wrap.dataset.sectionId = section.id;
+      wrap.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="admin-badge">${escapeHtml(section.sectionType)}</span>
+            <span class="admin-badge ${section.isActive ? 'admin-badge-active' : 'admin-badge-warn'}">${section.isActive ? 'Active' : 'Inactive'}</span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="admin-btn-outline admin-btn-sm move-up">↑</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm move-down">↓</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm toggle-active">${section.isActive ? 'Deactivate' : 'Activate'}</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm toggle-edit">Edit</button>
+            <button type="button" class="admin-btn-danger admin-btn-sm delete-section">Delete</button>
+          </div>
+        </div>
+        <p class="mt-2 text-sm text-slate-500">${escapeHtml(summaryFor(section))}</p>
+        <form class="edit-panel mt-4" style="display:none;">
+          ${handlers ? handlers.render(section.content || {}) : '<p class="text-sm text-red-600">Unknown section type.</p>'}
+          <p class="save-status admin-msg" style="display:none;"></p>
+          <button type="submit" class="admin-btn mt-3">Save</button>
+        </form>`;
+
+      const panel = wrap.querySelector('.edit-panel');
+      if (handlers) wirePanelRows(panel, section.sectionType);
+
+      wrap.querySelector('.toggle-edit').addEventListener('click', () => {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      });
+      wrap.querySelector('.move-up').addEventListener('click', () => moveSection(section.id, 'up'));
+      wrap.querySelector('.move-down').addEventListener('click', () => moveSection(section.id, 'down'));
+      wrap.querySelector('.toggle-active').addEventListener('click', () => toggleActive(section.id, !section.isActive));
+      wrap.querySelector('.delete-section').addEventListener('click', () => deleteSection(section.id));
+
+      panel.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const statusEl = panel.querySelector('.save-status');
+        const content = handlers.collect(panel);
+        const res = await window.adminFetch(`/api/admin/landing-sections/${section.id}/content`, {
+          method: 'PUT',
+          body: JSON.stringify({ content })
+        });
+        const data = await res.json();
+        statusEl.style.display = 'block';
+        if (!res.ok) {
+          statusEl.className = 'save-status admin-msg admin-msg-error';
+          statusEl.textContent = data.error || 'Failed to save.';
+          return;
+        }
+        statusEl.className = 'save-status admin-msg admin-msg-success';
+        statusEl.textContent = 'Saved.';
+        load();
+      });
+
+      return wrap;
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/landing-sections');
+      const data = await res.json();
+      sections = data.sections;
+      listEl.innerHTML = '';
+      if (sections.length === 0) {
+        listEl.innerHTML = '<p class="text-sm text-slate-500">No sections yet — add one above.</p>';
+        return;
+      }
+      sections.forEach(section => listEl.appendChild(renderCard(section)));
+    }
+
+    async function moveSection(id, direction) {
+      const res = await window.adminFetch(`/api/admin/landing-sections/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+      if (res.ok) load();
+    }
+    async function toggleActive(id, isActive) {
+      const res = await window.adminFetch(`/api/admin/landing-sections/${id}/active`, {
+        method: 'PUT',
+        body: JSON.stringify({ isActive })
+      });
+      if (res.ok) load();
+    }
+    async function deleteSection(id) {
+      if (!confirm('Delete this section? This cannot be undone.')) return;
+      const res = await window.adminFetch(`/api/admin/landing-sections/${id}`, { method: 'DELETE' });
+      if (res.ok) load();
+    }
+
+    document.getElementById('addSectionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const sectionType = document.getElementById('newSectionType').value;
+      const res = await window.adminFetch('/api/admin/landing-sections', {
+        method: 'POST',
+        body: JSON.stringify({ sectionType })
+      });
+      if (res.ok) {
+        load();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to add section.');
+      }
+    });
+
+    load();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -1800,5 +2201,6 @@
     if (page === 'site-settings') initSiteSettingsPage();
     if (page === 'scripts') initScriptsPage();
     if (page === 'landing-page') initLandingPagePage();
+    if (page === 'landing-sections') initLandingSectionsPage();
   });
 })();
