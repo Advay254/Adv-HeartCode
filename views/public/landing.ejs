@@ -3,70 +3,20 @@
 <head>
 <%- include('../partials/public-head') %>
 </head>
-<body class="bg-white font-sans text-hc-ink antialiased" data-page="home">
+<body class="bg-white font-poppins text-hc-ink antialiased" data-page="home">
 <%- include('../partials/public-body-start-scripts') %>
 
-<%- include('../partials/public-nav') %>
+<%- include('../partials/landing-sections/hero', { section: heroSection }) %>
 
-<!-- HERO -->
-<section class="relative overflow-hidden bg-hc-blue px-4 pb-16 pt-14 sm:px-6 sm:pb-24 sm:pt-20 lg:pb-28 lg:pt-24">
-  <div class="mx-auto flex max-w-6xl flex-col items-center gap-12 lg:flex-row lg:items-center lg:gap-10">
-    <div class="max-w-xl text-center lg:text-left" data-reveal>
-      <p class="mb-4 inline-block rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-hc-yellow">
-        Live in minutes, not weeks
-      </p>
-      <h1 class="font-display text-5xl uppercase leading-[0.95] text-white sm:text-6xl lg:text-8xl">
-        <%= landingContent.heroHeadline %>
-      </h1>
-      <p class="mt-6 text-lg text-white/80 sm:text-xl">
-        <%= landingContent.heroTagline %>
-      </p>
-      <div class="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
-        <a href="/explore" class="hc-pill-btn"><%= landingContent.heroCtaText %></a>
-      </div>
-    </div>
-    <div class="w-full max-w-xl" data-reveal>
-      <!-- LAPTOP MOCKUP PLACEHOLDER — swap this <div> for the real asset once
-           it's ready, e.g.:
-           <img src="/images/hero-laptop.png" width="640" height="480"
-                alt="A HeartCode-built website shown on a laptop"
-                class="hc-panel w-full" loading="eager">
-           Explicit width/height on that real <img> tag is required to avoid
-           layout shift once it's swapped in — don't drop them. -->
-      <div
-        class="hc-panel aspect-[4/3] w-full bg-gradient-to-br from-hc-yellow via-white to-hc-blue/30 shadow-2xl"
-        role="img"
-        aria-label="Placeholder for a laptop mockup of a HeartCode-built website"
-      ></div>
-    </div>
-  </div>
-</section>
-
-<!-- HOW IT WORKS -->
-<section id="how-it-works" class="bg-white px-4 py-20 sm:px-6">
-  <div class="mx-auto max-w-6xl">
-    <p class="text-center text-xs font-semibold uppercase tracking-widest text-hc-blue">How it works</p>
-    <h2 class="mt-3 text-center font-display text-3xl uppercase text-hc-ink sm:text-4xl">Three steps. One live site.</h2>
-
-    <div class="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
-      <% if (landingSteps.length === 0) { %>
-        <p class="text-center text-sm text-hc-ink/50 md:col-span-3">Steps coming soon.</p>
-      <% } %>
-      <% landingSteps.forEach(function (step, i) { %>
-        <div class="text-center" data-reveal>
-          <span class="font-display text-sm text-hc-blue/40"><%= String(i + 1).padStart(2, '0') %></span>
-          <div class="mx-auto mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-7 [&>svg]:w-7">
-            <%- getIconSvg(step.iconName) %>
-          </div>
-          <h3 class="mt-5 text-lg font-semibold text-hc-ink"><%= step.title %></h3>
-          <p class="mt-2 text-sm text-hc-ink/60"><%= step.description %></p>
-        </div>
-      <% }); %>
-    </div>
-  </div>
-</section>
-
-<!-- STATS -->
+<!-- STATS + WEBSITE-TYPE TEASER GRID: kept as fixed, non-CMS sections —
+     NOT part of landing_sections. The stats counter is the "honest stats
+     counter" the v1.1.3 build brief itself says not to rebuild under a
+     different name; the type-teaser grid is the page's actual
+     navigation into /build/:slug, which a purely visual redesign
+     shouldn't remove. Both are unchanged from the pre-redesign page
+     other than inheriting this page's new font-poppins default (their
+     own font-display/font-sans overrides below still apply where they
+     already did). See this version's delivery notes. -->
 <section class="bg-hc-ink px-4 py-16 text-center sm:px-6">
   <div class="mx-auto max-w-2xl" data-reveal>
     <p class="font-display text-6xl text-hc-yellow sm:text-7xl">
@@ -76,13 +26,12 @@
   </div>
 </section>
 
-<!-- TYPE TEASER GRID -->
 <section class="bg-white px-4 py-20 sm:px-6">
   <div class="mx-auto max-w-6xl">
     <div class="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
       <div>
-        <p class="text-xs font-semibold uppercase tracking-widest text-hc-blue">Website types</p>
-        <h2 class="mt-3 font-display text-3xl uppercase text-hc-ink sm:text-4xl">Built for your kind of business</h2>
+        <p class="text-xs font-semibold uppercase tracking-widest text-sk-blue">Website types</p>
+        <h2 class="mt-3 text-3xl font-bold text-hc-ink sm:text-4xl">Built for your kind of business</h2>
       </div>
       <a href="/explore" class="hc-pill-btn-outline hidden sm:inline-flex">See all types</a>
     </div>
@@ -110,21 +59,37 @@
   </div>
 </section>
 
-<!-- TRUST LINE -->
-<!-- v1.0.8: was two separate badges before this version ("Secure checkout
-     via Paystack" / "No account or registration required") -- the CMS
-     model (landing_content.trust_line_text) is a single text field, not a
-     list, so this is now one line combining both messages by default (see
-     db/init.js's seed value). Deliberate content/layout change, not an
-     oversight — flagged in the delivery notes. -->
-<section class="border-y border-black/5 bg-white px-4 py-8 sm:px-6">
-  <div class="mx-auto flex max-w-2xl items-center justify-center gap-2 text-center">
-    <span class="text-hc-blue [&>svg]:h-4 [&>svg]:w-4"><%- getIconSvg('shield-check') %></span>
-    <span class="text-sm text-hc-ink/70"><%= landingContent.trustLineText %></span>
-  </div>
-</section>
+<%
+  // Every remaining active section, in display_order — hero and footer
+  // are excluded from middleSections by routes/public.js so they can
+  // never appear twice (once here, once in their own guaranteed slot).
+  var SECTION_PARTIALS = {
+    feature_cards: '../partials/landing-sections/feature-cards',
+    split_image_text: '../partials/landing-sections/split-image-text',
+    cta_image_cards: '../partials/landing-sections/cta-image-cards',
+    bullet_list: '../partials/landing-sections/bullet-list',
+    testimonials: '../partials/landing-sections/testimonials'
+  };
+%>
+<% middleSections.forEach(function (section) { %>
+  <% var partialPath = SECTION_PARTIALS[section.sectionType]; %>
+  <% if (partialPath) { %>
+    <%- include(partialPath, { section: section }) %>
+  <% } %>
+<% }); %>
 
-<%- include('../partials/public-footer') %>
+<% if (footerSection) { %>
+  <%- include('../partials/landing-sections/footer', { section: footerSection }) %>
+<% } else { %>
+  <!-- Zero-sections fresh-install fallback (see routes/public.js) — a
+       minimal footer that doesn't depend on any landing_sections row
+       existing, so the page always has basic navigation even before an
+       admin has touched anything. -->
+  <footer class="border-t border-black/5 bg-white px-4 py-8 text-center font-poppins text-xs text-hc-ink/40 sm:px-6">
+    &copy; <%= new Date().getFullYear() %> <%= siteSettings.site_title %>. All rights reserved.
+  </footer>
+<% } %>
+
 <%- include('../partials/public-footer-scripts') %>
 </body>
 </html>
