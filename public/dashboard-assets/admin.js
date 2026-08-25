@@ -1059,9 +1059,28 @@
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
-    document.getElementById('outputTypeSelect').addEventListener('change', (e) => {
-      document.getElementById('objectShapeRow').style.display = e.target.value === 'array_of_objects' ? 'block' : 'none';
-    });
+    // Bug fix: the object-shape-keys row had the exact same
+    // "hide two elements, only ever un-hide one of them" bug that
+    // toggleDropdownOptionsRow() above deliberately avoids — the change
+    // listener only ever toggled `objectShapeRow` (the <label>), never
+    // `objectShapeKeysInput` (the actual <input>, which starts with an
+    // inline `style="display:none;"` in the markup and had nothing that
+    // ever set it back to visible). The input was never actually
+    // missing from the page — it was present in the DOM the whole
+    // time, just permanently hidden, which looks identical to "missing"
+    // from the browser and made it impossible to ever type a value into
+    // it. Fixed the same way as the working dropdown-options pattern
+    // just above: one named function toggles both elements together,
+    // wired to `change`, and called once immediately so a browser
+    // restoring previous form state (e.g. via back/forward navigation)
+    // can't land on a mismatched label-visible-but-input-hidden state.
+    function toggleObjectShapeRow() {
+      const isObjectList = document.getElementById('outputTypeSelect').value === 'array_of_objects';
+      document.getElementById('objectShapeRow').style.display = isObjectList ? 'block' : 'none';
+      document.getElementById('objectShapeKeysInput').style.display = isObjectList ? 'block' : 'none';
+    }
+    document.getElementById('outputTypeSelect').addEventListener('change', toggleObjectShapeRow);
+    toggleObjectShapeRow();
 
     document.getElementById('addOutputFieldForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1084,7 +1103,7 @@
       });
       if (res.ok) {
         form.reset();
-        document.getElementById('objectShapeRow').style.display = 'none';
+        toggleObjectShapeRow();
         loadAiConfig();
       } else {
         const data = await res.json();
