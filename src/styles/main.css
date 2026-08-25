@@ -12,11 +12,23 @@
    views/partials/public-head.ejs, ahead of this stylesheet's own <link>,
    so the browser can open those connections before it's even finished
    downloading/parsing this file. */
-@import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:opsz,wght@14..32,100..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:opsz,wght@14..32,100..900&family=Poppins:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* v1.1.3: Poppins was added to the single @import above rather than a
+   second, conditionally-loaded stylesheet — this file compiles to ONE
+   main.css shared by every public page, and Tailwind's CLI doesn't
+   support splitting an @import by which page will use it. In practice
+   this costs one shared CSS request (already being made for
+   Anton/Inter); the browser only downloads the actual Poppins font
+   FILES on a page that renders text using it, which today is only
+   views/public/landing.ejs (via the `font-poppins` utility — see
+   tailwind.config.js). Every other public page's rendered output is
+   unaffected: font-sans/font-display keep resolving to Inter/Anton
+   exactly as before. */
 
 :root {
   --hc-blue: #183fad;
@@ -31,6 +43,20 @@
   --hc-blue-rgb: 24 63 173;
   --hc-yellow-rgb: 241 191 10;
   --hc-ink-rgb: 20 21 29;
+
+  /* v1.1.3: sk-* ("Skilline") landing-page-only tokens — see
+     tailwind.config.js's own comment for the exact tint/shade percentage
+     each was derived from hc-blue (#183FAD) / hc-yellow (#F1BF0A). Kept
+     here rather than tailwind.theme.js so these never end up in the
+     admin dashboard's compiled CSS bundle. */
+  --sk-blue-rgb: 24 63 173;
+  --sk-blue-deep-rgb: 16 41 112;
+  --sk-blue-soft-rgb: 128 149 210;
+  --sk-blue-pale-rgb: 220 226 243;
+  --sk-yellow-rgb: 241 191 10;
+  --sk-yellow-deep-rgb: 181 143 8;
+  --sk-yellow-soft-rgb: 246 213 96;
+  --sk-yellow-pale-rgb: 252 242 206;
 }
 
 @layer components {
@@ -194,6 +220,22 @@
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+/* v1.1.3: optional directional variants for the Skilline-styled landing
+   page's alternating split_image_text sections (data-reveal="left" /
+   "right", image sliding in from whichever side it sits on) — purely
+   additive. public/site-interactions.js only ever checks
+   hasAttribute('data-reveal'), never its value, so every existing bare
+   data-reveal usage elsewhere on the site (explore/build/checkout/etc.)
+   keeps behaving exactly as before with zero JS changes. The
+   `.is-visible` end-state rule below is a higher-specificity
+   attribute+class selector, so it correctly wins over whichever
+   directional starting transform applied. */
+[data-reveal="left"] {
+  transform: translateX(-28px);
+}
+[data-reveal="right"] {
+  transform: translateX(28px);
 }
 [data-reveal].is-visible {
   opacity: 1;
