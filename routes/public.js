@@ -11,6 +11,8 @@ const { getRate, convertUsdTo, getChargeCurrencyForCountry, formatMoney } = requ
 const { getSiteSettings } = require('../lib/siteSettings');
 const { getActiveScriptsByPlacement } = require('../lib/siteScripts');
 const { getLandingContent } = require('../lib/landingContent');
+const { getLandingSections } = require('../lib/landingSections');
+const { DEFAULT_CONTENT } = require('../lib/landingSectionTypes');
 const { escapeHtml } = require('../lib/template');
 const { sendResendDetailsEmail } = require('../lib/email');
 
@@ -296,10 +298,35 @@ router.get('/', async (req, res) => {
     }
   ];
 
+  // v1.1.3: the Skilline-redesigned landing page renders from
+  // landing_sections (lib/landingSections.js), not the old
+  // landingContent/landingSteps setup that res.locals already carries
+  // (that stays wired up only for /explore's shared footer partial — see
+  // db/init.js's migration comment). The hero and footer sections are
+  // pulled out and passed separately from "everything else" so the view
+  // can place the always-present stats-counter/website-type-teaser grid
+  // right after the hero without depending on admin-set display_order,
+  // and so the footer reliably renders last regardless of where it sits
+  // in that order. Per the build brief's "never completely blank"
+  // requirement, a fresh install with zero rows (or a full landing_sections
+  // read failure — getLandingSections() never throws, just returns [])
+  // falls back to a minimal hardcoded hero built from DEFAULT_CONTENT.hero;
+  // the stats counter and type-teaser grid below are independent of
+  // landing_sections entirely, so they still render either way.
+  const landingSections = await getLandingSections();
+  const heroSection = landingSections.find(s => s.sectionType === 'hero') || {
+    id: 0, sectionType: 'hero', content: DEFAULT_CONTENT.hero, displayOrder: 1, isActive: true
+  };
+  const footerSection = landingSections.find(s => s.sectionType === 'footer') || null;
+  const middleSections = landingSections.filter(s => s.sectionType !== 'hero' && s.sectionType !== 'footer');
+
   res.render('public/landing', {
     pageTitle: null,
     statsNumber,
     structuredData,
+    heroSection,
+    middleSections,
+    footerSection,
     typeTeasers: result.rows.map(t => {
       const priceUsd = Number(t.price_usd) || 0;
       return {

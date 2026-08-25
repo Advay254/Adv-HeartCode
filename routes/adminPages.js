@@ -4,6 +4,7 @@ const { deriveCsrfToken } = require('../lib/auth');
 const { requireAdminSession, getSessionCookie } = require('../middleware/requireAdminSession');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
 const { CATEGORY_ICON_NAMES, ALL_ICON_NAMES } = require('../lib/icons');
+const { SECTION_TYPES, DEFAULT_CONTENT, ACCENT_COLOR_NAMES } = require('../lib/landingSectionTypes');
 
 const router = express.Router();
 
@@ -25,6 +26,13 @@ router.use((req, res, next) => {
   res.locals.csrfToken = deriveCsrfToken(getSessionCookie(req), process.env.SESSION_SECRET);
   res.locals.iconNames = CATEGORY_ICON_NAMES;
   res.locals.stepIconNames = ALL_ICON_NAMES;
+  // v1.1.3: only the new Landing Sections page uses these, but set once
+  // here for the same reason iconNames/stepIconNames are — one place to
+  // keep in sync with lib/landingSectionTypes.js rather than remembering
+  // it at just that one route.
+  res.locals.landingSectionTypes = SECTION_TYPES;
+  res.locals.landingSectionDefaults = DEFAULT_CONTENT;
+  res.locals.landingAccentColors = ACCENT_COLOR_NAMES;
   next();
 });
 
@@ -79,6 +87,10 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/site-settings`, (req, res) => {
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/landing-page`, (req, res) => {
   res.render('admin/landing-page');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/landing-sections`, (req, res) => {
+  res.render('admin/landing-sections');
 });
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/scripts`, (req, res) => {
