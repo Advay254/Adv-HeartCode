@@ -4,6 +4,14 @@ const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+// v1.1.3: found while touching this file for an unrelated reason —
+// /health's version string was a hand-typed literal that had already
+// drifted at least one release behind package.json's actual "version"
+// before this fix (it still read '1.1.2' after package.json had already
+// moved on). Reading it directly means it can never drift again; no
+// version bump will ever need to remember to also edit a second, unrelated
+// file just for /health to stay accurate.
+const { version: APP_VERSION } = require('./package.json');
 const { getPool, initDB } = require('./db/init');
 const { adminSlugMiddleware } = require('./middleware/adminSlug');
 const { pageRouter: adminLoginPageRouter, apiRouter: adminAuthApiRouter } = require('./routes/adminAuth');
@@ -18,6 +26,7 @@ const adminSettingsRouter = require('./routes/adminSettings');
 const adminSiteSettingsRouter = require('./routes/adminSiteSettings');
 const adminScriptsRouter = require('./routes/adminScripts');
 const adminLandingRouter = require('./routes/adminLanding');
+const adminLandingSectionsRouter = require('./routes/adminLandingSections');
 const adminRecoveryRouter = require('./routes/adminRecovery');
 const adminFunnelRouter = require('./routes/adminFunnel');
 const publicRouter = require('./routes/public');
@@ -29,6 +38,8 @@ const { createRateLimiter } = require('./lib/rateLimit');
 const { refreshExchangeRates } = require('./lib/currency');
 const { seedEmailProviderFromEnvIfNeeded } = require('./lib/emailProvider');
 const { getIconSvg } = require('./lib/icons');
+const { getLandingImageAsset } = require('./lib/landingImageAssets');
+const { escapeHtml, highlightWord } = require('./lib/template');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +60,20 @@ app.set('views', path.join(__dirname, 'views'));
 // (`<%- getIconSvg('sparkles') %>`) without every res.render() call
 // needing to remember to pass it explicitly.
 app.locals.getIconSvg = getIconSvg;
+
+// Same reasoning as getIconSvg just above — views/partials/landing-sections/*.ejs
+// resolve an image_asset_key to a real path (or null, for the placeholder
+// path) via this, rather than every section partial needing its own
+// require().
+app.locals.getLandingImageAsset = getLandingImageAsset;
+
+// Same reasoning again — views/partials/landing-sections/hero.ejs and
+// split-image-text.ejs both need to escape a headline's surrounding text
+// while leaving a hand-built <span> around the highlighted word
+// unescaped, which needs `<%-%>` (raw output) — this is what makes doing
+// that safely possible from inside an EJS template.
+app.locals.escapeHtml = escapeHtml;
+app.locals.highlightWord = highlightWord;
 
 // ---- security headers ----
 // v1.0.7 split the single, site-wide CSP into two separate policies:
@@ -237,6 +262,7 @@ app.use('/api/admin/settings', adminSettingsRouter);
 app.use('/api/admin/site-settings', adminSiteSettingsRouter);
 app.use('/api/admin/scripts', adminScriptsRouter);
 app.use('/api/admin/landing', adminLandingRouter);
+app.use('/api/admin/landing-sections', adminLandingSectionsRouter);
 app.use('/api/admin/pending-deployments', adminRecoveryRouter);
 app.use('/api/admin/funnel', adminFunnelRouter);
 
@@ -258,10 +284,10 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: '1.1.2' });
+    res.json({ status: 'ok', db: 'connected', version: APP_VERSION });
   } catch (err) {
     console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: '1.1.2' });
+    res.status(500).json({ status: 'error', db: 'disconnected', version: APP_VERSION });
   }
 });
 
