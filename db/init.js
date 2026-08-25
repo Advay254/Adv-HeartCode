@@ -526,9 +526,246 @@ CREATE TABLE IF NOT EXISTS notification_channels (
 -- attempt limiter.
 INSERT INTO site_settings (key, value) VALUES ('resend_details_rate_limit_per_day', '1')
 ON CONFLICT (key) DO NOTHING;
+
+-- v1.1.3: flexible section-based landing page CMS (Skilline template
+-- redesign). This is the new source of truth for the LANDING PAGE ITSELF
+-- (routes/public.js's GET / now renders an ordered loop of these rows —
+-- see lib/landingSections.js). One row per visual section; 'content''s
+-- shape depends on 'section_type' — see lib/landingSectionTypes.js for
+-- the full per-type zod schema, which is the single source of truth both
+-- the admin API (routes/adminLandingSections.js) and this migration's
+-- seed below are kept consistent with by hand.
+--
+-- Deliberately NOT dropping or ceasing to populate landing_content /
+-- landing_steps / landing_footer_links (all three stay exactly as they
+-- were before this version, still read by lib/landingContent.js): this
+-- version's scope is the landing page ONLY — /explore is untouched, and
+-- views/partials/public-footer.ejs (shared by /explore) still reads its
+-- footer text/links from those old tables. Migrating landing_sections
+-- OFF of them and then leaving them stale would be invisible today but
+-- wrong the moment /explore's own redesign eventually lands and someone
+-- assumes those tables are dead. They're not — only the LANDING page
+-- stopped reading them. See this version's delivery notes and
+-- views/partials/nav.ejs's comment for the admin-UI side of this same
+-- decision (the old "Landing Page" admin screen is kept, relabeled,
+-- rather than removed, specifically so /explore's footer stays editable).
+CREATE TABLE IF NOT EXISTS landing_sections (
+  id SERIAL PRIMARY KEY,
+  section_type TEXT NOT NULL CHECK (section_type IN
+    ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer')),
+  content JSONB NOT NULL,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- One-time seed, guarded on the WHOLE landing_sections TABLE being empty
+-- (matches this file's existing convention for every other first-boot
+-- seed above — e.g. landing_steps — so an admin deliberately deleting
+-- every section later does NOT cause a silent reseed on the next
+-- restart). All three branches share that single guard by being ONE
+-- statement (UNION ALL, not three separate INSERTs) — evaluating the
+-- guard three times separately would have a real bug: the first branch's
+-- INSERT would make the table non-empty before the second branch's own
+-- WHERE NOT EXISTS check ran, silently skipping it.
+--
+-- Migrates the CURRENT LIVE landing_content / landing_steps /
+-- landing_footer_links data (never Skilline's own placeholder marketing
+-- copy) so an existing install's actual hero text/steps/footer links
+-- keep showing on the redesigned page rather than reverting to empty —
+-- see this version's delivery notes, item 2.
+--
+-- landing_steps -> a 'feature_cards' section, not 'bullet_list': each
+-- existing step already has an icon + title + description, which is
+-- exactly feature_cards' per-card shape (bullet_list's items are a
+-- shorter icon+text pair with no separate title), so this is the closer
+-- structural match, not an arbitrary pick between the two options the
+-- build prompt allowed.
+--
+-- icon_color cycles through three of the new blue/yellow-derived accent
+-- tokens (see tailwind.config.js) so the migrated cards don't all render
+-- with the same flat color. icon_name is included alongside icon_color —
+-- a deliberate, additive extension beyond the shape as literally
+-- specified (which only listed icon_color): with no icon name field at
+-- all, there would be no way to pick WHICH curated icon a card shows,
+-- which contradicts the instruction to reuse the curated Lucide set per
+-- card. Flagged clearly in the delivery notes, not silently changed.
+--
+-- v1.1.3 correction: the hero branch below no longer writes a
+-- 'hero_image_url' key at all (an earlier pass through this migration
+-- did, pointing at a path that was never actually populated with a real
+-- file). The hero image is now hardcoded directly into
+-- views/partials/landing-sections/hero.ejs — see lib/landingSectionTypes.js's
+-- comment on heroSchema for why the content JSON has no image field at
+-- all for this type.
+--
+-- Six NEW 'split_image_text' rows, one 'cta_image_cards' row, one
+-- 'bullet_list' row, and one empty 'testimonials' row are seeded below
+-- alongside the three migrated sections — these have no prior HeartCode
+-- content to migrate FROM (landing_content/landing_steps/landing_footer_links
+-- never had anything shaped like them), so they're seeded with fresh copy
+-- written for HeartCode's actual product (building/deploying a website),
+-- NOT Skilline's own virtual-classroom marketing copy — only the
+-- template's IMAGES are reused as-is, per the build brief's explicit
+-- "only colors and text content are meant to be swapped" instruction.
+-- Each 'image_asset_key' value below matches a key in
+-- lib/landingImageAssets.js's LANDING_IMAGE_ASSETS map.
+INSERT INTO landing_sections (section_type, content, display_order)
+SELECT 'hero', jsonb_build_object(
+    'headline', COALESCE((SELECT hero_headline FROM landing_content ORDER BY id ASC LIMIT 1), 'HeartCode'),
+    'highlighted_word', '',
+    'tagline', COALESCE((SELECT hero_tagline FROM landing_content ORDER BY id ASC LIMIT 1), ''),
+    'primary_cta_text', COALESCE((SELECT hero_cta_text FROM landing_content ORDER BY id ASC LIMIT 1), 'Explore website types'),
+    'primary_cta_url', '/explore',
+    'secondary_cta_text', '',
+    'secondary_cta_url', ''
+  ), 1
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'feature_cards', jsonb_build_object(
+    'heading', 'Three steps. One live site.',
+    'highlighted_word', 'live site',
+    'cards', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+          'icon_name', sub.icon_name,
+          'icon_color', (ARRAY['sk-blue', 'sk-yellow-deep', 'sk-blue-soft'])[((sub.rn - 1) % 3) + 1],
+          'title', sub.title,
+          'description', sub.description
+        ) ORDER BY sub.rn)
+      FROM (
+        SELECT icon_name, title, description,
+               row_number() OVER (ORDER BY display_order ASC, id ASC) AS rn
+        FROM landing_steps
+      ) sub
+    ), '[]'::jsonb)
+  ), 2
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'split_image_text', jsonb_build_object(
+    'heading', 'Everything you need to launch, in one guided flow',
+    'highlighted_word', 'one guided flow',
+    'body_text', 'Pick a website type, answer a short form, and let AI turn your answers into real copy - no design software, no code editor, and no blank page to stare at.',
+    'image_side', 'right',
+    'cta_text', 'See how it works',
+    'cta_url', '/explore',
+    'decorative_accent_color', 'sk-blue',
+    'image_asset_key', 'teacher-explaining'
+  ), 3
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'split_image_text', jsonb_build_object(
+    'heading', 'Built for people who have never built a website before',
+    'highlighted_word', 'never built a website',
+    'body_text', 'Every field is explained in plain language, every step shows what happens next, and there is always a live preview before you pay for anything.',
+    'image_side', 'right',
+    'cta_text', '',
+    'cta_url', '',
+    'decorative_accent_color', 'sk-yellow',
+    'image_asset_key', 'girl-with-books'
+  ), 4
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'split_image_text', jsonb_build_object(
+    'heading', 'Know exactly what you are getting before you pay',
+    'highlighted_word', 'before you pay',
+    'body_text', 'Your AI-generated copy renders in a real preview first. Nothing goes live, and nothing gets charged, until you are happy with what you see.',
+    'image_side', 'left',
+    'cta_text', '',
+    'cta_url', '',
+    'decorative_accent_color', 'sk-blue-soft',
+    'image_asset_key', 'true-false'
+  ), 5
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'split_image_text', jsonb_build_object(
+    'heading', 'Manage your live site without a developer',
+    'highlighted_word', 'without a developer',
+    'body_text', 'Update copy, swap images, and adjust settings for your published site whenever you need to - no ticket, no waiting on someone else.',
+    'image_side', 'right',
+    'cta_text', '',
+    'cta_url', '',
+    'decorative_accent_color', 'sk-yellow-deep',
+    'image_asset_key', 'gradebook'
+  ), 6
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'split_image_text', jsonb_build_object(
+    'heading', 'Real support when something does not look right',
+    'highlighted_word', 'Real support',
+    'body_text', 'If a deployment stalls or an email does not arrive, you can reach out and get a real answer, not a bot loop.',
+    'image_side', 'left',
+    'cta_text', '',
+    'cta_url', '',
+    'decorative_accent_color', 'sk-blue-pale',
+    'image_asset_key', 'discussion'
+  ), 7
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'split_image_text', jsonb_build_object(
+    'heading', 'Payments, hosting, and email, already connected',
+    'highlighted_word', 'already connected',
+    'body_text', 'Every site launches on fast, reliable infrastructure with secure checkout and an automatic confirmation email - nothing extra to wire up yourself.',
+    'image_side', 'left',
+    'cta_text', '',
+    'cta_url', '',
+    'decorative_accent_color', 'sk-yellow-soft',
+    'image_asset_key', 'integrations'
+  ), 8
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'cta_image_cards', jsonb_build_object(
+    'heading', 'Two ways to get started',
+    'cards', jsonb_build_array(
+      jsonb_build_object(
+        'image_asset_key', 'for-instructors',
+        'overlay_label', 'BUSINESSES AND CREATORS',
+        'button_text', 'Explore website types',
+        'button_url', '/explore'
+      ),
+      jsonb_build_object(
+        'image_asset_key', 'for-students',
+        'overlay_label', 'ALREADY PAID',
+        'button_text', 'Find your site details',
+        'button_url', '/resend-details'
+      )
+    )
+  ), 9
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'bullet_list', jsonb_build_object(
+    'heading', 'A build flow designed for people with no time to waste',
+    'highlighted_word', 'no time to waste',
+    'body_text', 'Every screen is built mobile-first and gets straight to the point.',
+    'items', jsonb_build_array(
+      jsonb_build_object('icon_color', 'sk-blue', 'text', 'Fill out one short form - most types take under five minutes.'),
+      jsonb_build_object('icon_color', 'sk-yellow-deep', 'text', 'See your AI-written copy in a live preview before paying anything.'),
+      jsonb_build_object('icon_color', 'sk-blue-soft', 'text', 'Get a working, deployed site and a confirmation email within minutes of checkout.')
+    ),
+    'image_asset_key', 'vcall'
+  ), 10
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'testimonials', jsonb_build_object(
+    'heading', 'What people say',
+    'eyebrow_text', 'TESTIMONIALS',
+    'items', '[]'::jsonb
+  ), 11
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections)
+UNION ALL
+SELECT 'footer', jsonb_build_object(
+    'tagline', COALESCE((SELECT footer_text FROM landing_content ORDER BY id ASC LIMIT 1), ''),
+    'link_columns', jsonb_build_array(jsonb_build_object(
+      'heading', 'Links',
+      'links', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('label', lfl.label, 'url', lfl.url) ORDER BY lfl.display_order ASC, lfl.id ASC)
+        FROM landing_footer_links lfl
+      ), '[]'::jsonb)
+    ))
+  ), 99
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections);
 `;
 
-const CURRENT_VERSION = '1.1.2';
+const CURRENT_VERSION = '1.1.3';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
