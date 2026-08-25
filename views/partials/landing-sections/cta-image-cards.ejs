@@ -1,0 +1,38 @@
+<%
+  var cic = section.content;
+%>
+<section class="bg-white px-4 py-16 font-poppins sm:px-6" data-reveal>
+  <div class="mx-auto max-w-6xl">
+    <h2 class="text-center text-2xl font-bold text-hc-ink sm:text-3xl"><%= cic.heading %></h2>
+
+    <% if (cic.cards && cic.cards.length > 0) { %>
+      <%
+        // Fixed sm:grid-cols-2 (not a length-dependent dynamic class —
+        // see tailwind.config.js's safelist comment for why a
+        // runtime-interpolated Tailwind class is a real bug, not just a
+        // style choice). The two seeded cards fill it exactly; a single
+        // admin-added card just occupies the first cell instead of
+        // centering alone, which is a minor cosmetic gap for an edge
+        // case the schema allows (up to 6 cards) but the seeded content
+        // never exercises.
+      %>
+      <div class="mt-10 grid gap-6 sm:grid-cols-2">
+        <% cic.cards.forEach(function (card) { %>
+          <% var imagePath = getLandingImageAsset(card.image_asset_key); %>
+          <div class="group relative isolate flex h-80 flex-col justify-end overflow-hidden rounded-2xl p-8 shadow-lg sm:h-96" data-reveal>
+            <% if (imagePath) { %>
+              <img src="<%= imagePath %>" alt="" class="absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" loading="lazy">
+            <% } else { %>
+              <div class="absolute inset-0 -z-10 bg-gradient-to-br from-sk-blue to-sk-blue-deep"></div>
+            <% } %>
+            <div class="absolute inset-0 -z-[5] bg-hc-ink/45"></div>
+            <p class="text-sm font-bold uppercase tracking-widest text-sk-yellow"><%= card.overlay_label %></p>
+            <a href="<%= card.button_url %>" class="mt-3 inline-flex w-fit items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-hc-ink transition-transform duration-200 hover:scale-105">
+              <%= card.button_text %>
+            </a>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</section>

@@ -1,0 +1,60 @@
+<%
+  var f = section.content;
+%>
+<footer class="bg-hc-ink px-4 pt-16 font-poppins text-white sm:px-6">
+  <div class="mx-auto max-w-6xl">
+    <div class="flex flex-col gap-12 pb-12 md:flex-row md:justify-between">
+      <div class="max-w-sm">
+        <div class="flex items-center gap-2 text-lg font-bold">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sk-yellow text-hc-ink [&>svg]:h-4 [&>svg]:w-4">
+            <%- getIconSvg('heart') %>
+          </span>
+          <span><%= siteSettings.site_title %></span>
+        </div>
+      </div>
+
+      <% if (f.link_columns && f.link_columns.length > 0) { %>
+        <div class="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          <% f.link_columns.forEach(function (column) { %>
+            <div>
+              <% if (column.heading) { %>
+                <p class="text-xs font-bold uppercase tracking-widest text-white/40"><%= column.heading %></p>
+              <% } %>
+              <% if (column.links && column.links.length > 0) { %>
+                <ul class="mt-4 flex flex-col gap-2.5">
+                  <% column.links.forEach(function (link) { %>
+                    <li><a href="<%= link.url %>" class="text-sm text-white/70 transition-colors hover:text-sk-yellow"><%= link.label %></a></li>
+                  <% }); %>
+                </ul>
+              <% } %>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+    </div>
+
+    <%
+      // `tagline` is the migrated v1.0.x `landing_content.footer_text`
+      // column (see db/init.js's v1.1.3 migration) — that field's own
+      // schema default, and every fresh install's actual seeded value,
+      // has ALWAYS been a full copyright-style line ("© 2026 HeartCode.
+      // All rights reserved."), not a short descriptive brand blurb. An
+      // earlier pass at this partial displayed `tagline` as a blurb NEAR
+      // the logo AND a separately hardcoded "&copy; {year} ... All
+      // rights reserved." bar below — for the real, actual seeded
+      // content, that put a copyright notice on the page twice, worded
+      // almost identically. Fixed by giving `tagline` sole ownership of
+      // this bottom bar (matching exactly where/how the pre-redesign
+      // views/partials/public-footer.ejs already displayed this same
+      // column), with a computed fallback only for the edge case of an
+      // admin clearing it entirely.
+    %>
+    <div class="border-t border-white/10 py-6 text-center text-xs text-white/40 sm:text-left">
+      <% if (f.tagline) { %>
+        <%= f.tagline %>
+      <% } else { %>
+        &copy; <%= new Date().getFullYear() %> <%= siteSettings.site_title %>. All rights reserved.
+      <% } %>
+    </div>
+  </div>
+</footer>

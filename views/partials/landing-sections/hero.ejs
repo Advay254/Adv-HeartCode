@@ -1,0 +1,78 @@
+<%
+  // `section` is passed in by views/public/landing.ejs. See
+  // lib/template.js's highlightWord() for the shared "highlight one word"
+  // helper every section-with-a-heading partial uses.
+  var hero = section.content;
+  var headlineHtml = highlightWord(hero.headline, hero.highlighted_word, 'text-sk-yellow-deep');
+%>
+<header class="relative overflow-hidden bg-white font-poppins">
+  <%- include('./nav') %>
+
+  <div class="relative mx-auto flex max-w-6xl flex-col items-center gap-14 px-4 pb-24 pt-10 sm:px-6 lg:flex-row lg:gap-10 lg:pb-32 lg:pt-16">
+    <!-- soft decorative wash behind the whole hero, sk-* only -->
+    <div class="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-sk-yellow-pale/70 blur-3xl"></div>
+    <div class="pointer-events-none absolute -left-32 bottom-0 h-80 w-80 rounded-full bg-sk-blue-pale/60 blur-3xl"></div>
+
+    <!-- Left col -->
+    <div class="relative w-full text-center lg:w-1/2 lg:text-left" data-reveal="left">
+      <h1 class="text-4xl font-bold leading-tight text-hc-ink sm:text-5xl lg:text-6xl">
+        <%- headlineHtml %>
+      </h1>
+      <% if (hero.tagline) { %>
+        <p class="mx-auto mt-6 max-w-xl text-lg text-hc-ink/60 lg:mx-0">
+          <%= hero.tagline %>
+        </p>
+      <% } %>
+      <div class="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
+        <% if (hero.primary_cta_text) { %>
+          <a href="<%= hero.primary_cta_url || '/explore' %>"
+             class="inline-flex transform items-center justify-center rounded-full bg-sk-yellow px-9 py-4 text-base font-bold text-hc-ink transition duration-300 ease-in-out hover:scale-105 focus:outline-none">
+            <%= hero.primary_cta_text %>
+          </a>
+        <% } %>
+        <% if (hero.secondary_cta_text) { %>
+          <a href="<%= hero.secondary_cta_url || '#' %>"
+             class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-sk-blue/20 px-7 py-[0.95rem] text-sm font-semibold text-sk-blue transition-colors hover:bg-sk-blue-pale">
+            <%= hero.secondary_cta_text %>
+          </a>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Right col: hero image + floating decorative badges -->
+    <div class="relative w-full lg:-mt-6 lg:w-1/2" data-reveal="right">
+      <img
+        src="/images/landing/hero-girl.png"
+        alt=""
+        class="mx-auto w-9/12 sm:w-8/12 lg:w-10/12"
+        width="720" height="720"
+        loading="eager"
+      >
+
+      <div class="absolute left-0 top-16 animate-sk-float-slow sm:left-6 sm:top-24 lg:-left-2 lg:top-36">
+        <img class="h-12 rounded-lg bg-white/90 p-1.5 shadow-lg sm:h-16" src="/images/landing/hero-calendar.svg" alt="">
+      </div>
+      <div class="absolute bottom-16 left-2 animate-sk-float sm:bottom-24 sm:left-8 lg:bottom-28 lg:left-0">
+        <img class="h-16 rounded-lg bg-white/90 p-2 shadow-lg sm:h-24" src="/images/landing/hero-ux-class.svg" alt="">
+      </div>
+      <div class="absolute bottom-20 right-2 animate-sk-float-delay sm:bottom-32 sm:right-8 lg:right-4">
+        <img class="h-12 rounded-lg bg-white/90 p-1.5 shadow-lg sm:h-16" src="/images/landing/hero-congrat.svg" alt="">
+      </div>
+      <div class="absolute right-6 top-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-sk-blue shadow-lg animate-sk-float sm:h-20 sm:w-20 lg:right-10 lg:top-16">
+        <svg class="h-7 w-7 text-white sm:h-8 sm:w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Skilline's signature wave divider — recreated as an inline SVG
+       (fill="currentColor" reads text-white below) rather than an image
+       asset, so it can flow into the white section beneath at any
+       viewport width with no fixed-aspect image to manage. -->
+  <div class="relative -mt-1 text-white">
+    <svg class="h-16 w-full sm:h-24" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M600,112.77C268.63,112.77,0,65.52,0,7.23V120H1200V7.23C1200,65.52,931.37,112.77,600,112.77Z" fill="currentColor"></path>
+    </svg>
+  </div>
+</header>

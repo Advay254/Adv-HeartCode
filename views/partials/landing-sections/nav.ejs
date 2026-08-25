@@ -1,0 +1,59 @@
+<%
+/* v1.1.3: this nav exists ONLY for the redesigned landing page — it is
+   deliberately NOT views/partials/public-nav.ejs (which /explore, /build,
+   /checkout, etc. keep using, untouched, per this version's scope). The
+   original Skilline template toggles its mobile menu with Alpine.js
+   (x-data="{ open: false }"); this app has no Alpine dependency anywhere
+   else and isn't adding one for a single toggle button — see
+   public/site.js's initHomePage() for the vanilla-JS equivalent (a class
+   toggle plus an aria-expanded flip), dispatched via this page's existing
+   data-page="home" body attribute. */
+%>
+<div class="relative z-30 w-full bg-white font-poppins">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
+    <a href="/" class="text-lg font-bold tracking-tight text-hc-ink">
+      <%= siteSettings.site_title %>
+    </a>
+
+    <nav id="landing-nav-links" class="hidden items-center gap-1 md:flex">
+      <a href="/#how-it-works" class="rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink">How it works</a>
+      <a href="/explore" class="rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink">Website types</a>
+      <a href="/resend-details" class="rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink">Find my site</a>
+      <a href="/explore" class="ml-2 inline-flex items-center justify-center rounded-full bg-sk-yellow px-6 py-2.5 text-sm font-semibold text-hc-ink transition-transform duration-200 ease-out hover:scale-105">
+        Get started
+      </a>
+    </nav>
+
+    <button
+      type="button"
+      data-landing-nav-toggle
+      aria-expanded="false"
+      aria-controls="landing-nav-links"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-hc-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sk-blue md:hidden"
+    >
+      <span class="sr-only">Toggle menu</span>
+      <svg data-landing-nav-icon-open class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+      <svg data-landing-nav-icon-close class="hidden h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Mobile panel — same #landing-nav-links element as the desktop <nav>
+       above would be nice for one source of truth, but the desktop
+       version needs a horizontal pill layout and this needs a stacked
+       one, so it's a second element instead, toggled together by the
+       same JS (see public/site.js — both share the [data-landing-nav-toggle]
+       click handler; querying by id would only find one of them, so that
+       handler toggles both via a shared class instead). -->
+  <nav id="landing-nav-links-mobile" class="hidden flex-col gap-1 border-t border-black/5 bg-white px-4 pb-4 pt-2 md:hidden">
+    <a href="/#how-it-works" class="rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink">How it works</a>
+    <a href="/explore" class="rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink">Website types</a>
+    <a href="/resend-details" class="rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink">Find my site</a>
+    <a href="/explore" class="mt-1 inline-flex items-center justify-center rounded-full bg-sk-yellow px-6 py-2.5 text-sm font-semibold text-hc-ink">
+      Get started
+    </a>
+  </nav>
+</div>

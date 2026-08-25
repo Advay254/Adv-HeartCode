@@ -1,0 +1,46 @@
+<%
+  var sit = section.content;
+  var headingHtml = highlightWord(sit.heading, sit.highlighted_word, 'text-' + (sit.decorative_accent_color || 'sk-yellow-deep'));
+  var imagePath = getLandingImageAsset(sit.image_asset_key);
+  // DOM order is always [image column, text column] — image_side only
+  // ever flips which side each visually lands on via flex-direction, so
+  // there's exactly one reordering mechanism to reason about rather than
+  // swapping which column is written first per instance.
+  var rowClass = sit.image_side === 'left' ? 'md:flex-row' : 'md:flex-row-reverse';
+  var imageRevealDir = sit.image_side === 'left' ? 'left' : 'right';
+  var textRevealDir = sit.image_side === 'left' ? 'right' : 'left';
+%>
+<section class="bg-white px-4 py-14 font-poppins sm:px-6 sm:py-16">
+  <div class="mx-auto flex max-w-6xl flex-col items-center gap-10 <%= rowClass %>">
+    <div class="w-full md:w-1/2" data-reveal="<%= imageRevealDir %>">
+      <% if (imagePath) { %>
+        <img src="<%= imagePath %>" alt="" class="mx-auto w-full max-w-md rounded-2xl shadow-xl sm:max-w-lg md:max-w-none" loading="lazy">
+      <% } else { %>
+        <!-- No image_asset_key resolves for this instance (an
+             admin-created section — see lib/landingSectionTypes.js's
+             comment on why that has no image this version). A neutral
+             gradient panel keeps the layout intact rather than an empty
+             gap or a broken <img>, same pattern the pre-redesign hero
+             used for its own placeholder. -->
+        <div
+          class="mx-auto aspect-[4/3] w-full max-w-md rounded-2xl bg-gradient-to-br from-sk-yellow-pale via-white to-sk-blue-pale shadow-inner sm:max-w-lg md:max-w-none"
+          role="img"
+          aria-label=""
+        ></div>
+      <% } %>
+    </div>
+    <div class="w-full md:w-1/2" data-reveal="<%= textRevealDir %>">
+      <span class="inline-block h-1.5 w-12 rounded-full bg-<%= sit.decorative_accent_color || 'sk-yellow' %>"></span>
+      <h2 class="mt-4 text-2xl font-bold text-hc-ink sm:text-3xl"><%- headingHtml %></h2>
+      <% if (sit.body_text) { %>
+        <p class="mt-4 text-base leading-relaxed text-hc-ink/60"><%= sit.body_text %></p>
+      <% } %>
+      <% if (sit.cta_text) { %>
+        <a href="<%= sit.cta_url || '#' %>" class="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-<%= sit.decorative_accent_color || 'sk-blue' %>">
+          <%= sit.cta_text %>
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+        </a>
+      <% } %>
+    </div>
+  </div>
+</section>
