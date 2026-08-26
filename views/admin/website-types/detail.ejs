@@ -17,6 +17,7 @@
       <button type="button" class="admin-tab-btn" data-tab="ai">AI</button>
       <button type="button" class="admin-tab-btn" data-tab="template">Template</button>
       <button type="button" class="admin-tab-btn" data-tab="email">Email</button>
+      <button type="button" class="admin-tab-btn" data-tab="password-page">Password Page</button>
     </div>
 
     <section id="tab-details" class="tab-panel">
@@ -34,6 +35,11 @@
           </select>
           <label class="admin-label" for="detailsDisplayOrder">Display order</label>
           <input class="admin-input" type="number" name="displayOrder" id="detailsDisplayOrder" value="<%= websiteType.display_order %>">
+          <label class="admin-label" for="detailsCategoryId">Category</label>
+          <select class="admin-select" name="categoryId" id="detailsCategoryId">
+            <option value="">None</option>
+            <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= websiteType.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }); %>
+          </select>
           <label class="admin-checkbox-label"><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
 
           <h2 class="mt-5 text-sm font-semibold text-hc-ink">Custom deploy slug</h2>
@@ -62,10 +68,13 @@
 
     <section id="tab-fields" class="tab-panel" style="display:none;">
       <div class="admin-card max-w-xl">
-        <h2 class="text-sm font-semibold text-hc-ink">Add field</h2>
+        <h2 id="fieldFormHeading" class="text-sm font-semibold text-hc-ink">Add field</h2>
         <form id="addFieldForm">
           <label class="admin-label" for="fieldKeyInput">Field key (letters, numbers, underscore only)</label>
           <input class="admin-input" type="text" name="fieldKey" id="fieldKeyInput" required pattern="[a-z0-9_]+">
+          <p class="mt-1 text-xs text-slate-500">
+            Used as <code>{{field_key}}</code> in the Template/AI/Email tabs. Changing this on an existing field won't update any place that already references the old key — you'll be asked to confirm.
+          </p>
           <label class="admin-label" for="fieldLabelInput">Label</label>
           <input class="admin-input" type="text" name="fieldLabel" id="fieldLabelInput" required>
           <label class="admin-label" for="fieldTypeSelect">Type</label>
@@ -85,12 +94,16 @@
           <label class="admin-label" id="dropdownOptionsRow" for="fieldDropdownOptions" style="display:none;">Options (comma-separated)</label>
           <input class="admin-input" type="text" name="dropdownOptions" id="fieldDropdownOptions" style="display:none;">
           <label class="admin-checkbox-label"><input type="checkbox" name="isRequired" checked> Required</label>
-          <button type="submit" class="admin-btn mt-3">Add field</button>
+          <div class="mt-3 flex gap-2">
+            <button type="submit" id="fieldSubmitBtn" class="admin-btn">Add field</button>
+            <button type="button" id="cancelFieldEditBtn" class="admin-btn-outline" style="display:none;">Cancel</button>
+          </div>
         </form>
+        <p id="fieldFormStatus" class="admin-msg" style="display:none;"></p>
       </div>
       <div class="admin-table-wrap mt-6">
         <table class="admin-table is-responsive-stack">
-          <thead><tr><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
+          <thead><tr><th>Order</th><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
           <tbody id="fieldsTableBody"></tbody>
         </table>
       </div>
@@ -148,6 +161,8 @@
       <div class="admin-card max-w-2xl">
         <p class="text-sm text-slate-500">Available placeholders: <span id="availablePlaceholders" class="font-mono text-xs">—</span></p>
         <form id="templateForm">
+          <label class="admin-label" for="templateFileInput">Or upload a .txt/.html file (fills the box below — nothing is saved until you click "Save new version")</label>
+          <input class="admin-input" type="file" id="templateFileInput" accept=".txt,.html,text/plain,text/html">
           <label class="admin-label" for="htmlContent">HTML content (current version: <span id="currentVersion">—</span>)</label>
           <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="htmlContent"></textarea>
           <button type="submit" class="admin-btn mt-3">Save new version</button>
@@ -175,6 +190,8 @@
         <form id="emailTemplateForm">
           <label class="admin-label" for="emailSubject">Subject (current version: <span id="currentEmailVersion">—</span>)</label>
           <input class="admin-input" type="text" id="emailSubject" required>
+          <label class="admin-label" for="emailBodyFileInput">Or upload a .txt/.html file (fills the box below — nothing is saved until you click "Save new version")</label>
+          <input class="admin-input" type="file" id="emailBodyFileInput" accept=".txt,.html,text/plain,text/html">
           <label class="admin-label" for="emailHtmlBody">HTML body</label>
           <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="emailHtmlBody"></textarea>
           <button type="submit" class="admin-btn mt-3">Save new version</button>
@@ -185,6 +202,33 @@
         <table class="admin-table is-responsive-stack">
           <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
           <tbody id="emailHistoryTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-password-page" class="tab-panel" style="display:none;">
+      <div class="admin-card max-w-2xl">
+        <p class="text-sm text-slate-500">
+          Available placeholders: <span class="font-mono text-xs">{{website_type_name}}, {{password_input_and_button}}</span>
+        </p>
+        <p class="mt-2 text-xs text-slate-500">
+          This page renders BEFORE any site content unlocks, so it only has these two tokens — not the full field/AI set the Template tab has.
+          <code>{{password_input_and_button}}</code> is a fixed functional element (the actual password input, submit button, and check logic are
+          always code-controlled for correctness) — design everything else around it. Leave this tab untouched to keep using the original generic gate design.
+        </p>
+        <form id="passwordPageForm">
+          <label class="admin-label" for="passwordPageFileInput">Or upload a .txt/.html file (fills the box below — nothing is saved until you click "Save new version")</label>
+          <input class="admin-input" type="file" id="passwordPageFileInput" accept=".txt,.html,text/plain,text/html">
+          <label class="admin-label" for="passwordPageHtmlContent">HTML content (current version: <span id="currentPasswordPageVersion">—</span>)</label>
+          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="passwordPageHtmlContent" placeholder="e.g. <div style=&quot;text-align:center;padding:2rem;&quot;><h2>{{website_type_name}} is locked</h2>{{password_input_and_button}}</div>"></textarea>
+          <button type="submit" class="admin-btn mt-3">Save new version</button>
+        </form>
+        <p id="passwordPageStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+      <div class="admin-table-wrap mt-6">
+        <table class="admin-table is-responsive-stack">
+          <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+          <tbody id="passwordPageHistoryTableBody"></tbody>
         </table>
       </div>
     </section>
