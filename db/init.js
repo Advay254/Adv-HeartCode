@@ -763,9 +763,56 @@ SELECT 'footer', jsonb_build_object(
     ))
   ), 99
 WHERE NOT EXISTS (SELECT 1 FROM landing_sections);
+
+-- v1.1.4 Part C: per-website-type password page CMS. Same versioning
+-- discipline as templates/email_templates above -- saving a new version
+-- inserts a new row and deactivates the previous active one, rollback is
+-- a pointer-flip, nothing is ever deleted. A type with no row here at all
+-- (the default, for every existing type until an admin visits the new
+-- Password Page tab) falls back to the original hardcoded generic gate
+-- design baked into lib/finalizeDeployment.js -- same non-breaking
+-- fallback pattern already used for Email templates in v1.0.9. See
+-- lib/passwordPageTemplates.js for the small, dedicated (NOT the full
+-- raw/AI field) placeholder set this table's html_content supports.
+CREATE TABLE IF NOT EXISTS password_page_templates (
+  id SERIAL PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  html_content TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- v1.1.4 Part D: an organizational layer above website types (e.g.
+-- "Birthday", "Valentine's") so /explore can group types into cards
+-- instead of showing one long flat list -- see routes/adminCategories.js
+-- and routes/public.js's GET /explore.
+--
+-- website_types.category_id is nullable, and ON DELETE SET NULL rather
+-- than CASCADE: deleting a category must never delete or orphan the
+-- types inside it, only uncategorize them -- same "never silently
+-- destroy content the admin didn't explicitly ask to delete" posture as
+-- every other FK relationship in this schema. Every existing
+-- website_types row is simply uncategorized (category_id NULL) the
+-- moment this migration runs on an existing install -- see this
+-- version's delivery notes and GET /explore's fallback section for why
+-- that does NOT mean an existing type silently disappears from the
+-- public site.
+CREATE TABLE IF NOT EXISTS website_categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  description TEXT DEFAULT '',
+  icon_name TEXT NOT NULL DEFAULT 'sparkles',
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES website_categories(id) ON DELETE SET NULL;
 `;
 
-const CURRENT_VERSION = '1.1.3';
+const CURRENT_VERSION = '1.1.4';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
