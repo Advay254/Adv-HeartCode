@@ -857,6 +857,38 @@
       });
     });
 
+    // v1.1.4 Part B: "Or upload a .txt/.html file" convenience, shared by
+    // the Template tab, the Email tab's HTML body, and the new Password
+    // Page tab — all three are "admin pastes a large chunk of HTML into a
+    // textarea" in the exact same shape. Client-side only, via FileReader:
+    // the file's text content just populates the existing textarea's
+    // value, nothing is uploaded to the server as a file (there's no file
+    // storage in this project, and this was never meant to persist as a
+    // file). The admin still reviews the populated textarea and clicks
+    // "Save new version" themselves, exactly as before — this doesn't
+    // change the save flow at all, just how the content gets into the box.
+    function wireFileUploadIntoTextarea(fileInputId, textareaId) {
+      const fileInput = document.getElementById(fileInputId);
+      const textarea = document.getElementById(textareaId);
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          textarea.value = typeof reader.result === 'string' ? reader.result : '';
+          fileInput.value = ''; // so picking the exact same file again still fires 'change'
+        };
+        reader.onerror = () => {
+          alert('Could not read that file.');
+          fileInput.value = '';
+        };
+        reader.readAsText(file);
+      });
+    }
+    wireFileUploadIntoTextarea('templateFileInput', 'htmlContent');
+    wireFileUploadIntoTextarea('emailBodyFileInput', 'emailHtmlBody');
+    wireFileUploadIntoTextarea('passwordPageFileInput', 'passwordPageHtmlContent');
+
     // v1.0.8 Part A: the field-type select's dropdown-options row only
     // makes sense for the three "pick from a list" types — hidden
     // otherwise so a text/number/date field doesn't show an irrelevant
@@ -887,7 +919,12 @@
           iconName: form.iconName.value,
           deploySlugPattern: form.deploySlugPattern.value,
           seoTitle: form.seoTitle.value,
-          seoDescription: form.seoDescription.value
+          seoDescription: form.seoDescription.value,
+          // v1.1.4 Part D: "None" (empty option value) explicitly clears
+          // the category back to null, rather than being omitted — see
+          // routes/adminWebsiteTypes.js's updateTypeSchema comment on why
+          // categoryId needs a real null, not just "don't send the field".
+          categoryId: form.categoryId.value ? Number(form.categoryId.value) : null
         })
       });
       const data = await res.json();
@@ -903,28 +940,117 @@
       statusEl.textContent = warnings.length ? `Saved, but: ${warnings.join(' | ')}` : 'Saved.';
     });
 
+    // v1.1.4 Part A: null while adding a new field; the field's id while
+    // editing an existing one in-place. addFieldForm (below) branches its
+    // submit behavior (POST vs PUT) on this.
+    let editingFieldId = null;
+
+    function resetFieldForm() {
+      editingFieldId = null;
+      const form = document.getElementById('addFieldForm');
+      form.reset();
+      document.getElementById('fieldKeyInput').disabled = false;
+      toggleDropdownOptionsRow();
+      document.getElementById('fieldFormHeading').textContent = 'Add field';
+      document.getElementById('fieldSubmitBtn').textContent = 'Add field';
+      document.getElementById('cancelFieldEditBtn').style.display = 'none';
+    }
+
+    function startFieldEdit(field) {
+      editingFieldId = field.id;
+      const form = document.getElementById('addFieldForm');
+      form.fieldKey.value = field.fieldKey;
+      form.fieldLabel.value = field.fieldLabel;
+      form.fieldType.value = field.fieldType;
+      form.placeholderText.value = field.placeholderText || '';
+      form.isRequired.checked = field.isRequired;
+      form.dropdownOptions.value = Array.isArray(field.dropdownOptions) ? field.dropdownOptions.join(', ') : '';
+      toggleDropdownOptionsRow();
+      document.getElementById('fieldFormHeading').textContent = `Edit field: ${field.fieldLabel}`;
+      document.getElementById('fieldSubmitBtn').textContent = 'Save changes';
+      document.getElementById('cancelFieldEditBtn').style.display = 'inline-block';
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    document.getElementById('cancelFieldEditBtn').addEventListener('click', resetFieldForm);
+
     async function loadFields() {
       const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields`);
       const fields = await res.json();
       currentFields = fields;
-      document.getElementById('fieldsTableBody').innerHTML = fields.map(f => `
-        <tr>
+      document.getElementById('fieldsTableBody').innerHTML = fields.map((f, i) => `
+        <tr data-id="${f.id}">
+          <td data-label="Order">
+            <button type="button" class="admin-btn-outline admin-btn-sm move-field-up" data-id="${f.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm move-field-down" data-id="${f.id}" ${i === fields.length - 1 ? 'disabled' : ''}>↓</button>
+          </td>
           <td data-label="Key">{{${escapeHtml(f.fieldKey)}}}</td>
           <td data-label="Label">${escapeHtml(f.fieldLabel)}</td>
           <td data-label="Type">${escapeHtml(f.fieldType)}</td>
           <td data-label="Required">${f.isRequired ? 'yes' : 'no'}</td>
-          <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm remove-field" data-id="${f.id}">Remove</button></td>
-        </tr>`).join('') || '<tr><td colspan="5" data-label="">No fields yet.</td></tr>';
+          <td data-label="">
+            <button type="button" class="admin-btn-outline admin-btn-sm edit-field" data-id="${f.id}">Edit</button>
+            <button type="button" class="admin-btn-danger admin-btn-sm remove-field" data-id="${f.id}">Remove</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="6" data-label="">No fields yet.</td></tr>';
 
       renderPlaceholdersReference();
       renderEmailPlaceholdersReference();
 
+      // v1.1.4 Part A: a misclick here previously destroyed a field with
+      // zero recovery — confirm() is a simple, no-custom-modal-needed way
+      // to close that gap (same pattern the codebase already uses
+      // elsewhere, e.g. website type / notification channel deletion).
       document.querySelectorAll('.remove-field').forEach(btn => {
         btn.addEventListener('click', async () => {
+          if (!confirm('Remove this field? Any Template, AI prompt, or Email content referencing it will stop working.')) return;
           const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields/${btn.dataset.id}`, { method: 'DELETE' });
-          if (res.ok) loadFields();
+          if (res.ok) {
+            if (editingFieldId === Number(btn.dataset.id)) resetFieldForm();
+            loadFields();
+          }
         });
       });
+
+      document.querySelectorAll('.edit-field').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const field = currentFields.find(f => String(f.id) === String(btn.dataset.id));
+          if (field) startFieldEdit(field);
+        });
+      });
+
+      // v1.1.4 Part A: drag-and-drop reordering was considered, but native
+      // HTML5 drag events (dragstart/dragover/drop) simply don't fire from
+      // touch input on mobile browsers — Advay works exclusively from an
+      // Android phone, so a drag-and-drop-only implementation would be
+      // completely unusable for the one device that actually matters
+      // here. Up/down arrow buttons (same pattern already used for footer
+      // links and landing sections elsewhere in this admin) work
+      // identically on touch and desktop, so that's what's implemented —
+      // each click swaps this field with its neighbor in `currentFields`
+      // and persists the FULL new order via the new
+      // PUT /fields/reorder endpoint.
+      document.querySelectorAll('.move-field-up, .move-field-down').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = Number(btn.dataset.id);
+          const idx = currentFields.findIndex(f => f.id === id);
+          const direction = btn.classList.contains('move-field-up') ? -1 : 1;
+          const targetIdx = idx + direction;
+          if (idx === -1 || targetIdx < 0 || targetIdx >= currentFields.length) return;
+          const reordered = currentFields.slice();
+          const [moved] = reordered.splice(idx, 1);
+          reordered.splice(targetIdx, 0, moved);
+          saveFieldOrder(reordered.map(f => f.id));
+        });
+      });
+    }
+
+    async function saveFieldOrder(fieldIds) {
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields/reorder`, {
+        method: 'PUT',
+        body: JSON.stringify({ fieldIds })
+      });
+      if (res.ok) loadFields();
     }
 
     document.getElementById('addFieldForm').addEventListener('submit', async (e) => {
@@ -933,10 +1059,51 @@
       const dropdownOptions = form.dropdownOptions.value
         ? form.dropdownOptions.value.split(',').map(s => s.trim()).filter(Boolean)
         : undefined;
+      const newFieldKey = form.fieldKey.value;
+      const statusEl = document.getElementById('fieldFormStatus');
+      statusEl.style.display = 'none';
+
+      if (editingFieldId) {
+        // v1.1.4 Part A: changing field_key specifically (not label/
+        // placeholder/required/options) gets its own explicit confirm —
+        // renaming a key doesn't automatically update any Template/AI
+        // prompt/Email content that already references the OLD key.
+        const originalField = currentFields.find(f => f.id === editingFieldId);
+        if (originalField && newFieldKey !== originalField.fieldKey) {
+          const confirmed = confirm(
+            `Changing this field's key from "${originalField.fieldKey}" to "${newFieldKey}" will NOT update any Template, AI prompt, or Email content that already uses {{${originalField.fieldKey}}} — those will stop resolving. Continue?`
+          );
+          if (!confirmed) return;
+        }
+
+        const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields/${editingFieldId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            fieldKey: newFieldKey,
+            fieldLabel: form.fieldLabel.value,
+            fieldType: form.fieldType.value,
+            placeholderText: form.placeholderText.value,
+            isRequired: form.isRequired.checked,
+            dropdownOptions
+          })
+        });
+        if (res.ok) {
+          resetFieldForm();
+          loadFields();
+          loadAiConfig();
+        } else {
+          const data = await res.json();
+          statusEl.className = 'admin-msg admin-msg-error';
+          statusEl.textContent = data.error || 'Failed to save field.';
+          statusEl.style.display = 'block';
+        }
+        return;
+      }
+
       const res = await window.adminFetch(`/api/admin/website-types/${typeId}/fields`, {
         method: 'POST',
         body: JSON.stringify({
-          fieldKey: form.fieldKey.value,
+          fieldKey: newFieldKey,
           fieldLabel: form.fieldLabel.value,
           fieldType: form.fieldType.value,
           placeholderText: form.placeholderText.value,
@@ -945,12 +1112,13 @@
         })
       });
       if (res.ok) {
-        form.reset();
-        toggleDropdownOptionsRow();
+        resetFieldForm();
         loadFields();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to add field.');
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to add field.';
+        statusEl.style.display = 'block';
       }
     });
 
@@ -1012,6 +1180,7 @@
 
       document.querySelectorAll('.remove-output-field').forEach(btn => {
         btn.addEventListener('click', async () => {
+          if (!confirm('Remove this output field? Any Template or Email content referencing it will stop working.')) return;
           const res = await window.adminFetch(`/api/admin/website-types/${typeId}/ai/output-fields/${btn.dataset.id}`, { method: 'DELETE' });
           if (res.ok) loadAiConfig();
         });
@@ -1162,9 +1331,57 @@
       }
     });
 
+    // ---- Password Page tab (v1.1.4 Part C) ----
+
+    async function loadPasswordPage() {
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/password-page`);
+      const data = await res.json();
+      document.getElementById('currentPasswordPageVersion').textContent = data.active ? 'v' + data.active.version : 'none yet — generic fallback gate is used';
+      document.getElementById('passwordPageHtmlContent').value = data.active ? data.active.htmlContent : '';
+      document.getElementById('passwordPageHistoryTableBody').innerHTML = data.history.map(h => `
+        <tr>
+          <td data-label="Version">v${h.version}</td>
+          <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
+          <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-password-page" data-version="${h.version}">Rollback to this</button>`}</td>
+        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet — the generic fallback gate is used.</td></tr>';
+
+      document.querySelectorAll('.rollback-password-page').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm(`Roll back to version ${btn.dataset.version}?`)) return;
+          const res = await window.adminFetch(`/api/admin/website-types/${typeId}/password-page/rollback/${btn.dataset.version}`, { method: 'POST' });
+          if (res.ok) loadPasswordPage();
+        });
+      });
+    }
+
+    document.getElementById('passwordPageForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/password-page`, {
+        method: 'PUT',
+        body: JSON.stringify({ htmlContent: document.getElementById('passwordPageHtmlContent').value })
+      });
+      const data = await res.json();
+      const statusEl = document.getElementById('passwordPageStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        const warnings = []
+          .concat(data.undefinedPlaceholders.length ? [`unrecognized placeholder: ${data.undefinedPlaceholders.join(', ')}`] : [])
+          .concat(data.missingFunctionalToken ? ['missing {{password_input_and_button}} — visitors won\'t be able to enter a password on this design'] : []);
+        statusEl.className = 'admin-msg ' + (warnings.length ? 'admin-msg-warning' : 'admin-msg-success');
+        statusEl.textContent = warnings.length
+          ? `Saved as v${data.version}, but: ${warnings.join(' | ')}`
+          : `Saved as v${data.version}.`;
+        loadPasswordPage();
+      } else {
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to save password page.';
+      }
+    });
+
     loadFields().then(loadAiConfig);
     loadTemplate();
     loadEmailTemplate();
+    loadPasswordPage();
   }
 
   // ---- overview page ----
@@ -1618,6 +1835,7 @@
       });
       container.querySelectorAll('.remove-script').forEach(btn => {
         btn.addEventListener('click', async () => {
+          if (!confirm('Remove this script? This can\'t be undone.')) return;
           const res = await window.adminFetch(`/api/admin/scripts/${btn.dataset.id}`, { method: 'DELETE' });
           if (res.ok) load();
         });
@@ -2203,6 +2421,159 @@
     load();
   }
 
+  // ---- categories page (v1.1.4 Part D) ----
+  function initCategoriesPage() {
+    let editingId = null;
+
+    function render(categories) {
+      const list = document.getElementById('categoriesList');
+      list.innerHTML = categories.map((c, i) => `
+        <div class="admin-card" data-id="${c.id}">
+          <div class="flex flex-wrap items-start gap-3">
+            <div class="flex shrink-0 flex-col gap-1">
+              <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${c.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${c.id}" ${i === categories.length - 1 ? 'disabled' : ''}>↓</button>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-sm text-hc-ink">${escapeHtml(c.name)}</strong>
+                <span class="text-xs text-slate-400">/${escapeHtml(c.slug)}</span>
+                <span class="admin-badge ${c.isActive ? 'admin-badge-active' : ''}">${c.isActive ? 'active' : 'inactive'}</span>
+                <span class="text-xs text-slate-400">${c.typeCount} type${c.typeCount === 1 ? '' : 's'}</span>
+              </div>
+              ${c.description ? `<p class="mt-1 text-sm text-hc-ink/60">${escapeHtml(c.description)}</p>` : ''}
+              <div id="editRow-${c.id}" style="display:none;" class="mt-3"></div>
+            </div>
+            <div class="flex shrink-0 flex-wrap gap-2">
+              <button type="button" class="admin-btn-outline admin-btn-sm edit-category" data-id="${c.id}">Edit</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm toggle-category" data-id="${c.id}" data-active="${c.isActive}">${c.isActive ? 'Deactivate' : 'Activate'}</button>
+              <button type="button" class="admin-btn-danger admin-btn-sm remove-category" data-id="${c.id}">Remove</button>
+            </div>
+          </div>
+        </div>`).join('') || '<p class="text-sm text-slate-400">No categories yet — every website type shows in one flat list on /explore until you add one.</p>';
+
+      list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'up')));
+      list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'down')));
+      list.querySelectorAll('.toggle-category').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const isActive = btn.dataset.active === 'true';
+          const res = await window.adminFetch(`/api/admin/categories/${btn.dataset.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: !isActive })
+          });
+          if (res.ok) load();
+        });
+      });
+      list.querySelectorAll('.remove-category').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this category? Website types inside it are NOT deleted — they just become uncategorized.')) return;
+          const res = await window.adminFetch(`/api/admin/categories/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+      list.querySelectorAll('.edit-category').forEach(btn => {
+        btn.addEventListener('click', () => openEditRow(btn.dataset.id, categories));
+      });
+    }
+
+    function openEditRow(id, categories) {
+      const category = categories.find(c => String(c.id) === String(id));
+      if (!category) return;
+      editingId = id;
+      const row = document.getElementById(`editRow-${id}`);
+      row.style.display = 'block';
+      row.innerHTML = `
+        <label class="admin-label">Name</label>
+        <input class="admin-input" type="text" data-field="name" value="${escapeHtml(category.name)}">
+        <label class="admin-label">Description</label>
+        <textarea class="admin-textarea" data-field="description">${escapeHtml(category.description || '')}</textarea>
+        <label class="admin-label">Icon</label>
+        <select class="admin-select" data-field="iconName"></select>
+        <div class="mt-2 flex gap-2">
+          <button type="button" class="admin-btn admin-btn-sm save-edit">Save changes</button>
+          <button type="button" class="admin-btn-outline admin-btn-sm cancel-edit">Cancel</button>
+        </div>`;
+      const iconSelect = row.querySelector('[data-field="iconName"]');
+      window.HC_CATEGORY_ICON_NAMES.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === category.iconName) opt.selected = true;
+        iconSelect.appendChild(opt);
+      });
+      row.querySelector('.cancel-edit').addEventListener('click', () => {
+        editingId = null;
+        row.style.display = 'none';
+        row.innerHTML = '';
+      });
+      row.querySelector('.save-edit').addEventListener('click', async () => {
+        const res = await window.adminFetch(`/api/admin/categories/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: row.querySelector('[data-field="name"]').value,
+            description: row.querySelector('[data-field="description"]').value,
+            iconName: row.querySelector('[data-field="iconName"]').value
+          })
+        });
+        if (res.ok) {
+          editingId = null;
+          load();
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to save category.');
+        }
+      });
+    }
+
+    async function move(id, direction) {
+      const res = await window.adminFetch(`/api/admin/categories/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+      if (res.ok) load();
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/categories');
+      const categories = await res.json();
+      render(categories);
+    }
+
+    document.getElementById('addCategoryForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/categories', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name.value,
+          slug: form.slug.value || undefined,
+          description: form.description.value,
+          iconName: form.iconName.value
+        })
+      });
+      const statusEl = document.getElementById('addCategoryStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        statusEl.className = 'admin-msg admin-msg-success';
+        statusEl.textContent = 'Category added.';
+        form.reset();
+        load();
+      } else {
+        const data = await res.json();
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to add category.';
+      }
+    });
+
+    // Exposes the same curated icon set the "Add category" <select> is
+    // server-rendered with (views/admin/categories.ejs), read client-side
+    // from that already-rendered <select> rather than duplicating
+    // lib/icons.js's CATEGORY_ICON_NAMES list a third time in JS.
+    window.HC_CATEGORY_ICON_NAMES = Array.from(document.getElementById('categoryIconName').options).map(o => o.value);
+
+    load();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -2221,5 +2592,6 @@
     if (page === 'scripts') initScriptsPage();
     if (page === 'landing-page') initLandingPagePage();
     if (page === 'landing-sections') initLandingSectionsPage();
+    if (page === 'categories') initCategoriesPage();
   });
 })();
