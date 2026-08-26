@@ -340,26 +340,101 @@ router.get('/', async (req, res) => {
   });
 });
 
+// v1.1.4 Part D: shared by GET /explore and GET /explore/:categorySlug so
+// both format a website_types row into the exact same shape the card
+// partial/view expects — one source of truth for that mapping rather than
+// two near-identical inline .map() calls drifting apart over time.
+function formatExploreType(t, priceFor) {
+  const priceUsd = Number(t.price_usd) || 0;
+  return {
+    slug: t.slug,
+    name: t.name,
+    description: t.description,
+    iconName: t.icon_name,
+    ...priceFor(priceUsd)
+  };
+}
+
 router.get('/explore', async (req, res) => {
   const pool = getPool();
-  const result = await pool.query(
-    'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC'
+
+  // v1.1.4 Part D: categories are fetched regardless — the view itself
+  // decides how to render based on whether any exist (see
+  // views/public/explore.ejs). This is deliberate: an install with zero
+  // categories must render EXACTLY as it did before this version (flat
+  // list, no category UI at all), not a "0 categories" empty-state
+  // variant of the new UI — see this version's delivery notes, item 4.
+  const [typesResult, categoriesResult] = await Promise.all([
+    pool.query('SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC'),
+    pool.query('SELECT * FROM website_categories WHERE is_active = true ORDER BY display_order ASC, id ASC')
+  ]);
+
+  const priceFor = await resolveVisitorPricing(req);
+  const allTypes = typesResult.rows.map(t => ({ ...formatExploreType(t, priceFor), categoryId: t.category_id }));
+
+  // Every active type with NO category (category_id NULL, OR pointing at
+  // a category that isn't active) shows in the "More Website Types"
+  // fallback section — this is the specific mechanism that prevents an
+  // uncategorized (or since-deactivated-category) type from silently
+  // disappearing the moment this version ships. A type is only ever
+  // considered "categorized" here if its category is BOTH assigned and
+  // currently active — an inactive category's card doesn't render, so a
+  // type left pointing at one would otherwise vanish from the page
+  // entirely, which is exactly the failure mode this fallback exists to
+  // prevent.
+  const activeCategoryIds = new Set(categoriesResult.rows.map(c => c.id));
+  const categorizedTypes = allTypes.filter(t => t.categoryId && activeCategoryIds.has(t.categoryId));
+  const uncategorizedTypes = allTypes.filter(t => !t.categoryId || !activeCategoryIds.has(t.categoryId));
+
+  const categories = categoriesResult.rows.map(c => ({
+    slug: c.slug,
+    name: c.name,
+    description: c.description,
+    iconName: c.icon_name,
+    typeCount: categorizedTypes.filter(t => t.categoryId === c.id).length
+  }));
+
+  res.render('public/explore', {
+    pageTitle: 'Explore website types',
+    // Zero categories at all -> render exactly as before: the plain flat
+    // list, no category cards, no "More Website Types" heading. Non-empty
+    // -> category cards first, then the fallback section (only rendered
+    // if it actually has anything in it).
+    categories,
+    uncategorizedTypes,
+    // Kept for the zero-categories flat-list branch, which needs every
+    // active type regardless of category — same query result, just not
+    // filtered.
+    websiteTypes: allTypes
+  });
+});
+
+router.get('/explore/:categorySlug', async (req, res) => {
+  const pool = getPool();
+  const categoryResult = await pool.query(
+    'SELECT * FROM website_categories WHERE slug = $1 AND is_active = true',
+    [req.params.categorySlug]
+  );
+
+  if (categoryResult.rowCount === 0) {
+    return res.status(404).render('public/not-found', {
+      pageTitle: 'Not found',
+      message: 'That category is not available.'
+    });
+  }
+  const category = categoryResult.rows[0];
+
+  const typesResult = await pool.query(
+    'SELECT * FROM website_types WHERE is_active = true AND category_id = $1 ORDER BY display_order ASC, id ASC',
+    [category.id]
   );
 
   const priceFor = await resolveVisitorPricing(req);
 
-  res.render('public/explore', {
-    pageTitle: 'Explore website types',
-    websiteTypes: result.rows.map(t => {
-      const priceUsd = Number(t.price_usd) || 0;
-      return {
-        slug: t.slug,
-        name: t.name,
-        description: t.description,
-        iconName: t.icon_name,
-        ...priceFor(priceUsd)
-      };
-    })
+  res.render('public/explore-category', {
+    pageTitle: category.name,
+    category: { name: category.name, description: category.description, iconName: category.icon_name },
+    websiteTypes: typesResult.rows.map(t => formatExploreType(t, priceFor))
   });
 });
 

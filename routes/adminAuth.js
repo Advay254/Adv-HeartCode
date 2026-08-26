@@ -11,7 +11,13 @@ const { requireAdminSession, COOKIE_NAME, getSessionCookie } = require('../middl
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
 
-const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+// v1.1.4: shortened from 7 days to 24 hours -- deliberate security
+// hardening (the admin panel controls real payment and AI provider
+// credentials), not a bug fix. Must stay in lock-step with
+// lib/auth.js's createSession() expiresAt calculation -- both are changed
+// together here so the DB-stored session expiry and the cookie's maxAge
+// never drift apart into a confusing "one expires before the other" state.
+const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 // Gap this closes: previously just `typeof username === 'string'`, with no
 // length bound at all — an unbounded string could be sent as either field

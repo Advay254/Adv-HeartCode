@@ -66,7 +66,22 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, async (req, res) => {
   if (result.rowCount === 0) {
     return res.status(404).send('Website type not found');
   }
-  res.render('admin/website-types/detail', { websiteType: result.rows[0] });
+  // v1.1.4 Part D: the Details tab's category dropdown needs the full
+  // category list up front (client-fetched data would work too, but this
+  // page already renders websiteType server-side, so fetching categories
+  // the same way avoids an extra round trip before the dropdown can
+  // render with the right option pre-selected).
+  const categoriesResult = await pool.query(
+    'SELECT id, name FROM website_categories ORDER BY display_order ASC, id ASC'
+  );
+  res.render('admin/website-types/detail', {
+    websiteType: result.rows[0],
+    categories: categoriesResult.rows
+  });
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/categories`, (req, res) => {
+  res.render('admin/categories');
 });
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {

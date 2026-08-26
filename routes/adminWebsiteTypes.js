@@ -6,6 +6,7 @@ const { requireCsrf } = require('../middleware/requireCsrf');
 const { CATEGORY_ICON_NAMES, DEFAULT_ICON_NAME } = require('../lib/icons');
 const { slugify } = require('../lib/slugify');
 const { resolveDeploySlugPattern, extractFieldKeyReferences } = require('../lib/deploySlug');
+const { PASSWORD_PAGE_PLACEHOLDERS } = require('../lib/passwordPageTemplates');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -56,7 +57,12 @@ const createTypeSchema = z.object({
   // already guards for that), but rejecting it here means the admin finds
   // out immediately, at save time, rather than wondering later why their
   // custom icon name never showed up.
-  iconName: z.enum(CATEGORY_ICON_NAMES).optional()
+  iconName: z.enum(CATEGORY_ICON_NAMES).optional(),
+  // v1.1.4 Part D: nullable FK to website_categories — omitted/null means
+  // "uncategorized" (the type shows in /explore's "More Website Types"
+  // fallback section). Existence is checked against the DB below, not
+  // just shape here, since any positive integer is syntactically valid.
+  categoryId: z.coerce.number().int().positive().nullable().optional()
 });
 
 const updateTypeSchema = z.object({
@@ -80,7 +86,14 @@ const updateTypeSchema = z.object({
   // enforcing those exact numbers — an admin who wants to type something
   // longer isn't blocked, just past the point where it stops helping.
   seoTitle: z.string().max(200).optional(),
-  seoDescription: z.string().max(500).optional()
+  seoDescription: z.string().max(500).optional(),
+  // v1.1.4 Part D: same "omitted = don't change" convention as everything
+  // else in this schema. null (or 0) explicitly clears back to
+  // uncategorized — a plain omitted field can't distinguish "don't
+  // change" from "clear it" the way null can, so this is the one field
+  // in this schema where null is a meaningful, distinct third state from
+  // both "omitted" and "a real id".
+  categoryId: z.coerce.number().int().positive().nullable().optional()
 });
 
 const createFieldSchema = z.object({
@@ -94,6 +107,19 @@ const createFieldSchema = z.object({
 });
 
 const updateFieldSchema = z.object({
+  // v1.1.4 Part A: field_key is now editable in-place (previously the
+  // only way to fix a typo'd key was delete-and-recreate, which lost the
+  // field's position and any existing template/AI-prompt/email reference
+  // to it anyway). Renaming a key here does NOT rewrite any {{old_key}}
+  // reference already saved in a template/AI prompt/email body — those
+  // still literally say {{old_key}}, which will simply stop resolving to
+  // anything once the key changes. The admin UI warns about this clearly
+  // at save time when fieldKey is actually changing (not on every save);
+  // this route itself doesn't attempt to be "smart" about it beyond that
+  // — no rewriting of other tables' content, by design (out of scope, and
+  // a surprising thing for an edit endpoint to silently do to unrelated
+  // content).
+  fieldKey: z.string().regex(FIELD_KEY_RE, 'fieldKey must match ^[a-z0-9_]+$').optional(),
   fieldLabel: z.string().trim().min(1).max(200).optional(),
   fieldType: z.enum(VALID_FIELD_TYPES).optional(),
   placeholderText: z.string().max(500).optional(),
@@ -102,10 +128,27 @@ const updateFieldSchema = z.object({
   displayOrder: z.coerce.number().int().optional()
 });
 
-// ~500KB ceiling — generous for a template, well under any body-size limit,
-// still a real bound instead of "any length string accepted."
+// v1.1.4 Part A: accepts every field id for a website type, in the exact
+// order they should now display in — the whole set must be present
+// exactly once (checked below), not a partial reorder, so display_order
+// values across the type's fields can never end up with gaps or
+// duplicates from a partial/stale client-side list.
+const reorderFieldsSchema = z.object({
+  fieldIds: z.array(z.coerce.number().int().positive()).min(1)
+});
+
+// v1.1.4 Part B: raised from 500,000 chars (~500KB) to 5,000,000
+// (~5MB) — the actual root cause of the "large template silently fails
+// to save" bug was server.js's express.json() body-size limit (100kb,
+// Express's own default), not this zod cap; that limit is now raised to
+// 10mb for this route (see server.js's adminJsonBodyParser). But leaving
+// THIS cap at its old 500,000-char value would have just moved the same
+// silent-failure-shaped problem one layer up for any template between
+// ~500KB and 10MB, undoing the point of raising the body limit at all —
+// so this is raised proportionally, with headroom under the 10mb JSON
+// body ceiling for the surrounding request's JSON overhead.
 const templateSchema = z.object({
-  htmlContent: z.string().min(1).max(500000)
+  htmlContent: z.string().min(1).max(5000000)
 });
 
 function formatField(f) {
@@ -160,6 +203,7 @@ router.get('/', async (req, res) => {
       iconName: t.icon_name,
       fieldCount: Number(fieldCount.rows[0].count),
       activeTemplateVersion: activeTemplate.rowCount > 0 ? activeTemplate.rows[0].version : null,
+      categoryId: t.category_id,
       createdAt: t.created_at,
       updatedAt: t.updated_at
     });
@@ -173,7 +217,7 @@ router.post('/', requireCsrf, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'name is required' });
   }
-  const { name, description, priceUsd, slug: providedSlug, iconName } = parsed.data;
+  const { name, description, priceUsd, slug: providedSlug, iconName, categoryId } = parsed.data;
 
   const baseSlug = slugify(providedSlug || name);
   if (!baseSlug) {
@@ -186,12 +230,19 @@ router.post('/', requireCsrf, async (req, res) => {
     return res.status(409).json({ error: `slug "${baseSlug}" is already in use`, conflictField: 'slug' });
   }
 
+  if (categoryId) {
+    const categoryCheck = await pool.query('SELECT id FROM website_categories WHERE id = $1', [categoryId]);
+    if (categoryCheck.rowCount === 0) {
+      return res.status(400).json({ error: 'That category does not exist' });
+    }
+  }
+
   const price = typeof priceUsd === 'number' && priceUsd >= 0 ? priceUsd : 0;
 
   const result = await pool.query(
-    `INSERT INTO website_types (slug, name, description, price_usd, icon_name)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [baseSlug, name, description || '', price, iconName || DEFAULT_ICON_NAME]
+    `INSERT INTO website_types (slug, name, description, price_usd, icon_name, category_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [baseSlug, name, description || '', price, iconName || DEFAULT_ICON_NAME, categoryId || null]
   );
   const t = result.rows[0];
   res.status(201).json({
@@ -204,6 +255,7 @@ router.post('/', requireCsrf, async (req, res) => {
     priceUsd: Number(t.price_usd) || 0,
     aiEnabled: t.ai_enabled,
     iconName: t.icon_name,
+    categoryId: t.category_id,
     fieldCount: 0,
     activeTemplateVersion: null
   });
@@ -219,7 +271,7 @@ router.put('/:id', requireCsrf, async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const { id } = paramsParsed.data;
-  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription } = bodyParsed.data;
+  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription, categoryId } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -227,6 +279,16 @@ router.put('/:id', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Website type not found' });
   }
   const current = existing.rows[0];
+
+  // v1.1.4 Part D: null (explicitly sent) clears back to uncategorized;
+  // omitted leaves it unchanged; a real id sets/replaces it. Existence is
+  // checked against the DB, not just the schema's positive-int shape.
+  if (categoryId) {
+    const categoryCheck = await pool.query('SELECT id FROM website_categories WHERE id = $1', [categoryId]);
+    if (categoryCheck.rowCount === 0) {
+      return res.status(400).json({ error: 'That category does not exist' });
+    }
+  }
 
   const next = {
     name: name !== undefined ? name : current.name,
@@ -243,16 +305,17 @@ router.put('/:id', requireCsrf, async (req, res) => {
     // Same '' clears / omitted keeps convention — clearing means "fall
     // back to the global site_settings title/description again."
     seo_title: seoTitle !== undefined ? (seoTitle === '' ? null : seoTitle) : current.seo_title,
-    seo_description: seoDescription !== undefined ? (seoDescription === '' ? null : seoDescription) : current.seo_description
+    seo_description: seoDescription !== undefined ? (seoDescription === '' ? null : seoDescription) : current.seo_description,
+    category_id: categoryId !== undefined ? categoryId : current.category_id
   };
 
   const result = await pool.query(
     `UPDATE website_types SET name = $1, description = $2, is_active = $3,
        price_usd = $4, display_order = $5, icon_name = $6, deploy_slug_pattern = $7,
-       seo_title = $8, seo_description = $9, updated_at = NOW()
-     WHERE id = $10 RETURNING *`,
+       seo_title = $8, seo_description = $9, category_id = $10, updated_at = NOW()
+     WHERE id = $11 RETURNING *`,
     [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name,
-      next.deploy_slug_pattern, next.seo_title, next.seo_description, id]
+      next.deploy_slug_pattern, next.seo_title, next.seo_description, next.category_id, id]
   );
   const t = result.rows[0];
 
@@ -292,7 +355,8 @@ router.put('/:id', requireCsrf, async (req, res) => {
     deploySlugPattern: t.deploy_slug_pattern,
     deploySlugWarnings,
     seoTitle: t.seo_title,
-    seoDescription: t.seo_description
+    seoDescription: t.seo_description,
+    categoryId: t.category_id
   });
 });
 
@@ -392,6 +456,79 @@ router.post('/:id/fields', requireCsrf, async (req, res) => {
   res.status(201).json(formatField(result.rows[0]));
 });
 
+// v1.1.4 Part A: registered BEFORE PUT /:id/fields/:fieldId deliberately —
+// Express matches routes in registration order, and a plain `:fieldId`
+// param matches ANY path segment (including the literal string
+// "reorder"), so if the reorder route were registered after the
+// generic-fieldId one, a request to PUT /:id/fields/reorder would be
+// swallowed by that earlier route with `:fieldId` bound to "reorder"
+// instead. Caught by actually testing this route with curl against a
+// real running server, not just by reasoning about it — the first
+// version of this endpoint (with routes in the other order) returned
+// a fieldId-not-found-shaped error instead of ever running this handler.
+router.put('/:id/fields/reorder', requireCsrf, async (req, res) => {
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const bodyParsed = reorderFieldsSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: 'fieldIds must be a non-empty array of field ids' });
+  }
+  const { id: websiteTypeId } = paramsParsed.data;
+  const { fieldIds } = bodyParsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      'SELECT id FROM template_fields WHERE website_type_id = $1 FOR UPDATE',
+      [websiteTypeId]
+    );
+    const existingIds = new Set(existing.rows.map(r => r.id));
+    const providedIds = new Set(fieldIds);
+
+    // The full set must match exactly — every existing field present
+    // exactly once, nothing extra, nothing missing. A partial or stale
+    // list (e.g. from a client that loaded the fields list, then another
+    // browser tab added/removed a field before this request landed) is
+    // rejected outright rather than silently reassigning display_order
+    // to only some of the type's fields.
+    const isExactMatch = existingIds.size === fieldIds.length
+      && fieldIds.length === providedIds.size
+      && [...existingIds].every(existingId => providedIds.has(existingId));
+
+    if (!isExactMatch) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'fieldIds must include every field for this website type exactly once' });
+    }
+
+    for (let i = 0; i < fieldIds.length; i++) {
+      await client.query(
+        'UPDATE template_fields SET display_order = $1 WHERE id = $2 AND website_type_id = $3',
+        [i, fieldIds[i], websiteTypeId]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const result = await pool.query(
+      'SELECT * FROM template_fields WHERE website_type_id = $1 ORDER BY display_order ASC, id ASC',
+      [websiteTypeId]
+    );
+    res.json(result.rows.map(formatField));
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[FIELDS] Failed to reorder fields:', err.message);
+    res.status(500).json({ error: 'Failed to reorder fields' });
+  } finally {
+    client.release();
+  }
+});
+
 router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
   const paramsParsed = fieldIdParamsSchema.safeParse(req.params);
   if (!paramsParsed.success) {
@@ -402,7 +539,7 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
     return res.status(400).json({ error: 'Invalid field data' });
   }
   const { id, fieldId } = paramsParsed.data;
-  const { fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = bodyParsed.data;
+  const { fieldKey, fieldLabel, fieldType, placeholderText, isRequired, dropdownOptions, displayOrder } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query(
@@ -419,7 +556,31 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
     return res.status(400).json({ error: `dropdownOptions must be an array when fieldType is "${nextType}"` });
   }
 
+  // v1.1.4 Part A: same symmetric collision checks POST /:id/fields
+  // already runs at creation time — only actually run here when fieldKey
+  // is both provided AND actually different from the current value, so a
+  // save that doesn't touch the key never pays for these two extra
+  // queries.
+  const nextKey = fieldKey !== undefined ? fieldKey : current.field_key;
+  if (nextKey !== current.field_key) {
+    const conflict = await pool.query(
+      'SELECT id FROM template_fields WHERE website_type_id = $1 AND field_key = $2 AND id != $3',
+      [id, nextKey, fieldId]
+    );
+    if (conflict.rowCount > 0) {
+      return res.status(409).json({ error: `fieldKey "${nextKey}" already exists for this website type` });
+    }
+    const aiConflict = await pool.query(
+      'SELECT id FROM ai_output_fields WHERE website_type_id = $1 AND output_key = $2',
+      [id, nextKey]
+    );
+    if (aiConflict.rowCount > 0) {
+      return res.status(409).json({ error: `fieldKey "${nextKey}" collides with an existing AI output field of the same key` });
+    }
+  }
+
   const next = {
+    field_key: nextKey,
     field_label: fieldLabel !== undefined ? fieldLabel : current.field_label,
     field_type: nextType,
     placeholder_text: placeholderText !== undefined ? placeholderText : current.placeholder_text,
@@ -431,12 +592,12 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
   };
 
   const result = await pool.query(
-    `UPDATE template_fields SET field_label = $1, field_type = $2, placeholder_text = $3,
-       is_required = $4, dropdown_options = $5, display_order = $6
-     WHERE id = $7 RETURNING *`,
-    [next.field_label, next.field_type, next.placeholder_text, next.is_required, next.dropdown_options, next.display_order, fieldId]
+    `UPDATE template_fields SET field_key = $1, field_label = $2, field_type = $3, placeholder_text = $4,
+       is_required = $5, dropdown_options = $6, display_order = $7
+     WHERE id = $8 RETURNING *`,
+    [next.field_key, next.field_label, next.field_type, next.placeholder_text, next.is_required, next.dropdown_options, next.display_order, fieldId]
   );
-  res.json(formatField(result.rows[0]));
+  res.json({ ...formatField(result.rows[0]), keyChanged: nextKey !== current.field_key, oldFieldKey: current.field_key });
 });
 
 router.delete('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
@@ -691,9 +852,12 @@ router.post('/:id/template/rollback/:version', requireCsrf, async (req, res) => 
 // pipeline, not because the list is expected to diverge).
 const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password'];
 
+// v1.1.4 Part B: same reasoning and same raise (500,000 -> 5,000,000
+// chars) as templateSchema's htmlContent above — the Email tab's HTML
+// body hits the exact same "large paste silently fails" shape of bug.
 const emailTemplateSchema = z.object({
   subject: z.string().trim().min(1).max(500),
-  htmlBody: z.string().min(1).max(500000)
+  htmlBody: z.string().min(1).max(5000000)
 });
 
 router.get('/:id/email-template', async (req, res) => {
@@ -874,6 +1038,170 @@ router.post('/:id/email-template/rollback/:version', requireCsrf, async (req, re
     await client.query('ROLLBACK');
     console.error('[EMAIL TEMPLATE] Failed to rollback email template:', err.message);
     res.status(500).json({ error: 'Failed to rollback email template' });
+  } finally {
+    client.release();
+  }
+});
+
+// ---- password page templates (v1.1.4 Part C) ----
+//
+// Same versioning discipline as ---- template (site) ---- and
+// ---- email templates ---- above: PUT inserts a new version and
+// deactivates the previous active one, rollback is a pointer-flip,
+// nothing is ever deleted. A type with no row here at all uses the
+// original hardcoded generic password gate — see
+// lib/passwordPageTemplates.js and lib/finalizeDeployment.js.
+//
+// Deliberately validated against PASSWORD_PAGE_PLACEHOLDERS only (NOT
+// this type's raw fields / AI output fields, unlike the Template/Email
+// validation above) — this page renders before any site content is
+// unlocked, so it never has access to that data in the first place.
+
+const passwordPageSchema = z.object({
+  // Same 5,000,000-char ceiling as templateSchema/emailTemplateSchema
+  // above, for the same Part B reason — a large hand-designed password
+  // page is the same shape of "big HTML paste" as the Template/Email
+  // tabs, so it gets the same generous cap.
+  htmlContent: z.string().min(1).max(5000000)
+});
+
+router.get('/:id/password-page', async (req, res) => {
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const { id } = parsed.data;
+
+  const pool = getPool();
+  const active = await pool.query(
+    'SELECT * FROM password_page_templates WHERE website_type_id = $1 AND is_active = true LIMIT 1',
+    [id]
+  );
+  const history = await pool.query(
+    'SELECT version, created_at FROM password_page_templates WHERE website_type_id = $1 ORDER BY version DESC LIMIT 5',
+    [id]
+  );
+
+  res.json({
+    active: active.rowCount > 0
+      ? { htmlContent: active.rows[0].html_content, version: active.rows[0].version }
+      : null,
+    history: history.rows.map(h => ({ version: h.version, createdAt: h.created_at }))
+  });
+});
+
+router.put('/:id/password-page', requireCsrf, async (req, res) => {
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const bodyParsed = passwordPageSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    return res.status(400).json({ error: 'htmlContent is required' });
+  }
+  const { id: websiteTypeId } = paramsParsed.data;
+  const { htmlContent } = bodyParsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const typeCheck = await client.query('SELECT id FROM website_types WHERE id = $1 FOR UPDATE', [websiteTypeId]);
+    if (typeCheck.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Website type not found' });
+    }
+
+    // Warn, don't block — same posture as the Template/Email tabs. Only
+    // the two fixed tokens are ever "known" here; a stray {{some_field}}
+    // typo (e.g. an admin muscle-memory-typing a real field's key,
+    // forgetting this page doesn't have access to those) is flagged so
+    // it doesn't silently render as literal, un-substituted text on a
+    // live deployed site.
+    const foundKeys = new Set();
+    PLACEHOLDER_RE.lastIndex = 0;
+    let match;
+    while ((match = PLACEHOLDER_RE.exec(htmlContent)) !== null) {
+      foundKeys.add(match[1]);
+    }
+    const undefinedPlaceholders = [...foundKeys].filter(k => !PASSWORD_PAGE_PLACEHOLDERS.includes(k));
+
+    const missingFunctionalToken = !foundKeys.has('password_input_and_button');
+
+    const maxVersionResult = await client.query(
+      'SELECT COALESCE(MAX(version), 0) AS max_version FROM password_page_templates WHERE website_type_id = $1',
+      [websiteTypeId]
+    );
+    const nextVersion = Number(maxVersionResult.rows[0].max_version) + 1;
+
+    await client.query(
+      'UPDATE password_page_templates SET is_active = false WHERE website_type_id = $1 AND is_active = true',
+      [websiteTypeId]
+    );
+
+    const inserted = await client.query(
+      `INSERT INTO password_page_templates (website_type_id, html_content, version, is_active)
+       VALUES ($1, $2, $3, true) RETURNING *`,
+      [websiteTypeId, htmlContent, nextVersion]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      version: inserted.rows[0].version,
+      undefinedPlaceholders,
+      // Genuinely worth blocking-adjacent (a strong warning, not a hard
+      // block — the admin may still be mid-edit and about to add it) —
+      // a saved password page missing this token entirely deploys with
+      // no way for a visitor to actually type a password in, which is a
+      // real functional break, not just a cosmetic placeholder typo.
+      missingFunctionalToken
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[PASSWORD PAGE] Failed to save password page template:', err.message);
+    res.status(500).json({ error: 'Failed to save password page template' });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/:id/password-page/rollback/:version', requireCsrf, async (req, res) => {
+  const parsed = rollbackParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id or version' });
+  }
+  const { id: websiteTypeId, version } = parsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const target = await client.query(
+      'SELECT id FROM password_page_templates WHERE website_type_id = $1 AND version = $2 FOR UPDATE',
+      [websiteTypeId, version]
+    );
+    if (target.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'That password page version does not exist' });
+    }
+
+    await client.query(
+      'UPDATE password_page_templates SET is_active = false WHERE website_type_id = $1 AND is_active = true',
+      [websiteTypeId]
+    );
+    await client.query('UPDATE password_page_templates SET is_active = true WHERE id = $1', [target.rows[0].id]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, activeVersion: version });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[PASSWORD PAGE] Failed to rollback password page template:', err.message);
+    res.status(500).json({ error: 'Failed to rollback password page template' });
   } finally {
     client.release();
   }

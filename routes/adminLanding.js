@@ -5,6 +5,7 @@ const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { refreshLandingContentCache } = require('../lib/landingContent');
 const { ALL_ICON_NAMES } = require('../lib/icons');
+const { moveItem } = require('../lib/reorder');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -162,47 +163,8 @@ router.delete('/steps/:id', requireCsrf, async (req, res) => {
   res.json({ success: true });
 });
 
-// Swaps this row's display_order with its immediate neighbor in the
-// requested direction -- the simplest reordering mechanism that works
-// without any drag-and-drop library, matching this whole admin's
-// no-fancy-JS-libraries, works-on-a-phone constraint. Transactional (both
-// rows locked and updated together) so two concurrent reorder clicks
-// can't leave two rows with the same display_order.
-async function moveItem(pool, table, id, direction) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const currentResult = await client.query(`SELECT * FROM ${table} WHERE id = $1 FOR UPDATE`, [id]);
-    if (currentResult.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return { error: 'not_found' };
-    }
-    const current = currentResult.rows[0];
-
-    const comparator = direction === 'up' ? '<' : '>';
-    const order = direction === 'up' ? 'DESC' : 'ASC';
-    const neighborResult = await client.query(
-      `SELECT * FROM ${table} WHERE display_order ${comparator} $1 ORDER BY display_order ${order} LIMIT 1 FOR UPDATE`,
-      [current.display_order]
-    );
-    if (neighborResult.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return { error: 'no_neighbor' };
-    }
-    const neighbor = neighborResult.rows[0];
-
-    await client.query(`UPDATE ${table} SET display_order = $1 WHERE id = $2`, [neighbor.display_order, current.id]);
-    await client.query(`UPDATE ${table} SET display_order = $1 WHERE id = $2`, [current.display_order, neighbor.id]);
-    await client.query('COMMIT');
-    return { success: true };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
+// v1.1.4: moveItem() itself now lives in lib/reorder.js (also used by the
+// new routes/adminCategories.js) — behavior here is completely unchanged.
 const moveSchema = z.object({ direction: z.enum(['up', 'down']) });
 
 router.put('/steps/:id/move', requireCsrf, async (req, res) => {
