@@ -21,6 +21,7 @@ const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
 const adminWebsiteTypesRouter = require('./routes/adminWebsiteTypes');
+const adminCategoriesRouter = require('./routes/adminCategories');
 const adminDashboardRouter = require('./routes/adminDashboard');
 const adminSettingsRouter = require('./routes/adminSettings');
 const adminSiteSettingsRouter = require('./routes/adminSiteSettings');
@@ -250,13 +251,55 @@ app.use(express.static(path.join(__dirname, 'public')));
 // strict policy."
 app.use('/api/admin', adminCsp);
 app.use('/api/admin', cors({ origin: false }));
-app.use('/api/admin', express.json());
+
+// v1.1.4 Part B bug fix: a template of 2000+ lines failed to save, with
+// "Save new version" appearing to silently do nothing. Root cause —
+// confirmed by actually reproducing it locally, not just inferred —
+// was Express's default express.json() body-size limit, 100kb, which a
+// large pasted HTML template (or email HTML body) easily exceeds. The
+// blanket limit below was previously a bare `express.json()` (100kb,
+// Express's own default) applied to every single request under
+// /api/admin regardless of route.
+//
+// Fix is scoped, not a blanket bump: only the three routes that
+// legitimately accept a full pasted HTML document (Template tab, Email
+// tab's HTML body, and the new Password Page tab — all three save routes
+// share the same "admin pastes a large chunk of HTML" shape) get the
+// raised 10mb ceiling. Every other /api/admin route keeps the original
+// 100kb default — there's no legitimate reason e.g. a Paystack-config
+// update or a field edit needs anything close to that, and a needlessly
+// large blanket limit is itself a minor extra DoS surface even on an
+// authenticated route. This also matches this project's established
+// convention (see HANDOFF.md / lib/rateLimit.js discussion) of scoping
+// body-parsing to the specific route that needs it rather than
+// router-wide — the one thing that's different here is that "the
+// specific route" still has to be decided BEFORE body-parser reads the
+// stream, and by the time a request reaches an inner router the body may
+// already be consumed, so the decision is made once, right here, rather
+// than via a second express.json() call deeper in the chain (which would
+// try to re-read an already-consumed request stream).
+const ADMIN_DEFAULT_JSON_LIMIT = '100kb';
+const ADMIN_LARGE_HTML_JSON_LIMIT = '10mb';
+const LARGE_HTML_ADMIN_ROUTE_RE = /^\/website-types\/\d+\/(template|email-template|password-page)$/;
+
+function adminJsonBodyParser(req, res, next) {
+  // req.path here is already relative to this router's '/api/admin' mount
+  // point (Express strips the matched mount prefix before handing off to
+  // a mounted middleware) — e.g. '/website-types/12/template', not
+  // '/api/admin/website-types/12/template'.
+  const isLargeHtmlRoute = req.method === 'PUT' && LARGE_HTML_ADMIN_ROUTE_RE.test(req.path);
+  const limit = isLargeHtmlRoute ? ADMIN_LARGE_HTML_JSON_LIMIT : ADMIN_DEFAULT_JSON_LIMIT;
+  express.json({ limit })(req, res, next);
+}
+
+app.use('/api/admin', adminJsonBodyParser);
 app.use('/api/admin', adminAuthApiRouter);
 app.use('/api/admin/paystack', adminPaystackRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
 app.use('/api/admin/website-types', adminWebsiteTypesRouter);
+app.use('/api/admin/categories', adminCategoriesRouter);
 app.use('/api/admin/dashboard', adminDashboardRouter);
 app.use('/api/admin/settings', adminSettingsRouter);
 app.use('/api/admin/site-settings', adminSiteSettingsRouter);
@@ -265,6 +308,39 @@ app.use('/api/admin/landing', adminLandingRouter);
 app.use('/api/admin/landing-sections', adminLandingSectionsRouter);
 app.use('/api/admin/pending-deployments', adminRecoveryRouter);
 app.use('/api/admin/funnel', adminFunnelRouter);
+
+// v1.1.4 Part B: body-parser (express.json(), used above) forwards a
+// request whose body exceeds its configured limit — or whose body isn't
+// valid JSON at all — as an error to next(err) rather than responding
+// itself. With no error-handling middleware anywhere on this path,
+// Express's own default handler took over and sent back a generic HTML
+// error page. The admin dashboard's fetch-based forms (admin.js) only
+// ever call `await res.json()` on the response; handed an HTML page
+// instead, that throws, and — because none of those call sites had a
+// surrounding try/catch — the whole save silently failed with no visible
+// error at all. This is the OTHER half of the Part B fix: raising the
+// limit (above) fixes it for anything under the new 10mb ceiling; this
+// handler makes sure anything that's STILL too large (or malformed) gets
+// a clear, visible, genuinely-JSON error back instead of a silent no-op.
+//
+// Deliberately scoped to /api/admin, not a global app-wide error handler —
+// that's still a known, separately-tracked gap (see HANDOFF.md's Known
+// Gaps: no global Express error-handling middleware, async handlers not
+// wrapped to forward rejections to it). Fixing that properly means
+// wrapping every async route handler across the whole app, which is a
+// much larger, separate piece of work — out of scope for this version's
+// six parts. This handler only closes the one specific, newly-relevant
+// failure mode Part B's own fix could otherwise reintroduce (a request
+// that exceeds even the new 10mb limit, or sends malformed JSON).
+app.use('/api/admin', (err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Content too large, please reduce it or contact support.' });
+  }
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    return res.status(400).json({ error: 'Malformed request body.' });
+  }
+  next(err);
+});
 
 // Public event beacon (v1.1.0 Part B): not session-gated (fired from
 // anonymous client-side JS on every public page — see public/funnel.js),
