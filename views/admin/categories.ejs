@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Categories — HeartCode Admin</title>
+</head>
+<body data-page="categories">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'categories' }) %>
+  <main class="admin-main">
+    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Categories</h1>
+    <p class="mb-6 max-w-2xl text-sm text-slate-500">
+      An organizational layer above website types — e.g. "Birthday," "Valentine's" — so <code>/explore</code> can group types into cards instead of one long list.
+      A website type with no category assigned still appears on <code>/explore</code>, in a separate "More Website Types" section — nothing disappears just because it isn't categorized yet.
+      If you have zero active categories, <code>/explore</code> shows the original flat list, exactly as before.
+    </p>
+
+    <div class="admin-card max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Add category</h2>
+      <form id="addCategoryForm">
+        <label class="admin-label" for="categoryName">Name</label>
+        <input class="admin-input" type="text" name="name" id="categoryName" required placeholder="e.g. Birthday">
+        <label class="admin-label" for="categorySlug">Slug (optional — auto-generated from name if left blank)</label>
+        <input class="admin-input" type="text" name="slug" id="categorySlug">
+        <label class="admin-label" for="categoryDescription">Description</label>
+        <textarea class="admin-textarea" name="description" id="categoryDescription" placeholder="Shown on the category card"></textarea>
+        <label class="admin-label" for="categoryIconName">Icon</label>
+        <select class="admin-select" name="iconName" id="categoryIconName">
+          <% iconNames.forEach(function (name) { %><option value="<%= name %>"><%= name %></option><% }); %>
+        </select>
+        <button type="submit" class="admin-btn mt-3">Add category</button>
+      </form>
+      <p id="addCategoryStatus" class="admin-msg" style="display:none;"></p>
+    </div>
+
+    <div id="categoriesList" class="mt-6 space-y-3"></div>
+  </main>
+</div>
+</body>
+</html>
