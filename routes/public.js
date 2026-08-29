@@ -261,10 +261,6 @@ router.get('/robots.txt', (req, res) => {
 
 router.get('/', async (req, res) => {
   const pool = getPool();
-  const result = await pool.query(
-    'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 6'
-  );
-
   const priceFor = await resolveVisitorPricing(req);
 
   // Sanitized to digits only for the count-up widget (public/site-interactions.js
@@ -298,21 +294,98 @@ router.get('/', async (req, res) => {
     }
   ];
 
+  // v1.1.5 Part B: the section formerly known as the fixed, non-CMS
+  // "website type teaser" (hardcoded directly in this view since v1.1.3)
+  // is now a real landing_sections row (section_type 'category_teaser')
+  // — its own admin-editable eyebrow/heading copy comes through
+  // middleSections below like any other section. What it still needs
+  // from HERE, at render time, is the live category/type DATA to show —
+  // that's never admin content, so it's computed fresh on every request,
+  // the same separation of concerns the old typeTeasers local already
+  // used (just narrower in scope now: up to 2 items, not 6, to match the
+  // new section's compact 2-card layout — see this version's delivery
+  // notes on that specific call).
+  //
+  // Primary: first 2 ACTIVE categories by display_order, each carrying
+  // its cheapest active type's price as a single representative "From
+  // $X" figure (chosen over a min–max range — simpler to read at a
+  // glance in a small teaser card, and a range needs two numbers'
+  // worth of visual space this card doesn't have).
+  //
+  // Fallback (zero active categories — a pre-v1.1.4 install, or an
+  // admin who hasn't set any up yet): up to 2 active website TYPES
+  // directly, same non-breaking "don't let an empty category list hide
+  // real content" principle already used for /explore itself in v1.1.4.
+  const categoriesResult = await pool.query(
+    'SELECT * FROM website_categories WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 2'
+  );
+
+  let categoryTeaserCategories = [];
+  let categoryTeaserFallbackTypes = [];
+
+  if (categoriesResult.rowCount > 0) {
+    const categoryIds = categoriesResult.rows.map(c => c.id);
+    // DISTINCT ON + ORDER BY price_usd ASC picks exactly one row per
+    // category — its cheapest active type — in a single query rather
+    // than one query per category.
+    const cheapestTypesResult = await pool.query(
+      `SELECT DISTINCT ON (category_id) *
+       FROM website_types
+       WHERE is_active = true AND category_id = ANY($1)
+       ORDER BY category_id, price_usd ASC, id ASC`,
+      [categoryIds]
+    );
+    const cheapestByCategory = new Map(cheapestTypesResult.rows.map(t => [t.category_id, t]));
+
+    categoryTeaserCategories = categoriesResult.rows.map(c => {
+      const cheapest = cheapestByCategory.get(c.id);
+      return {
+        slug: c.slug,
+        name: c.name,
+        description: c.description,
+        iconName: c.icon_name,
+        // A category with zero active types in it yet (admin created it
+        // but hasn't assigned/activated anything) has no price to show —
+        // the partial renders the card without a price line rather than
+        // a misleading "$0" in that case.
+        ...(cheapest ? priceFor(Number(cheapest.price_usd) || 0) : {})
+      };
+    });
+  } else {
+    const fallbackTypesResult = await pool.query(
+      'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 2'
+    );
+    categoryTeaserFallbackTypes = fallbackTypesResult.rows.map(t => {
+      const priceUsd = Number(t.price_usd) || 0;
+      return {
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        iconName: t.icon_name,
+        ...priceFor(priceUsd)
+      };
+    });
+  }
+
   // v1.1.3: the Skilline-redesigned landing page renders from
   // landing_sections (lib/landingSections.js), not the old
   // landingContent/landingSteps setup that res.locals already carries
   // (that stays wired up only for /explore's shared footer partial — see
   // db/init.js's migration comment). The hero and footer sections are
   // pulled out and passed separately from "everything else" so the view
-  // can place the always-present stats-counter/website-type-teaser grid
-  // right after the hero without depending on admin-set display_order,
-  // and so the footer reliably renders last regardless of where it sits
-  // in that order. Per the build brief's "never completely blank"
-  // requirement, a fresh install with zero rows (or a full landing_sections
-  // read failure — getLandingSections() never throws, just returns [])
-  // falls back to a minimal hardcoded hero built from DEFAULT_CONTENT.hero;
-  // the stats counter and type-teaser grid below are independent of
-  // landing_sections entirely, so they still render either way.
+  // can place the always-present stats counter right after the hero
+  // without depending on admin-set display_order, and so the footer
+  // reliably renders last regardless of where it sits in that order. Per
+  // the build brief's "never completely blank" requirement, a fresh
+  // install with zero rows (or a full landing_sections read failure —
+  // getLandingSections() never throws, just returns []) falls back to a
+  // minimal hardcoded hero built from DEFAULT_CONTENT.hero; the stats
+  // counter below is independent of landing_sections entirely, so it
+  // still renders either way.
+  //
+  // v1.1.5: category_teaser now flows through middleSections like every
+  // other section type — it's no longer pulled out and hardcoded
+  // separately the way the old fixed teaser was.
   const landingSections = await getLandingSections();
   const heroSection = landingSections.find(s => s.sectionType === 'hero') || {
     id: 0, sectionType: 'hero', content: DEFAULT_CONTENT.hero, displayOrder: 1, isActive: true
@@ -327,16 +400,8 @@ router.get('/', async (req, res) => {
     heroSection,
     middleSections,
     footerSection,
-    typeTeasers: result.rows.map(t => {
-      const priceUsd = Number(t.price_usd) || 0;
-      return {
-        slug: t.slug,
-        name: t.name,
-        description: t.description,
-        iconName: t.icon_name,
-        ...priceFor(priceUsd)
-      };
-    })
+    categoryTeaserCategories,
+    categoryTeaserFallbackTypes
   });
 });
 

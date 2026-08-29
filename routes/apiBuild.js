@@ -5,6 +5,7 @@ const { getActiveProviderConfig } = require('../lib/ai-provider');
 const { substitutePlaceholders, substitutePlainText } = require('../lib/template');
 const { createRateLimiter } = require('../lib/rateLimit');
 const { OPTION_BASED_FIELD_TYPES, MULTI_SELECT_FIELD_TYPES } = require('../lib/fieldTypes');
+const { addTargetBlankToExternalLinks } = require('../lib/externalLinks');
 
 const router = express.Router();
 
@@ -287,7 +288,12 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
   // No AI provider is looked up, no AI client is ever instantiated or
   // called — this whole branch never touches lib/ai-provider.js. ----
   if (!websiteType.ai_enabled) {
-    const html = substitutePlaceholders(templateHtml, rawFlatValues, rawArrayValues);
+    // v1.1.5 Part A: external-link post-processing applied here (and
+    // again in lib/finalizeDeployment.js right before deployment — see
+    // lib/externalLinks.js's own comment for why both places) so the
+    // interactive preview's now-real navigation doesn't navigate the
+    // sandboxed iframe itself away with no way back.
+    const html = addTargetBlankToExternalLinks(substitutePlaceholders(templateHtml, rawFlatValues, rawArrayValues));
     return res.json({ html });
   }
 
@@ -305,7 +311,7 @@ router.post('/:slug/generate', express.json(), async (req, res) => {
     // the disabled path rather than spending a token budget on an
     // effectively-empty request.
     console.warn(`[BUILD] Website type "${req.params.slug}" has AI enabled but no output fields configured — skipping AI call.`);
-    const html = substitutePlaceholders(templateHtml, rawFlatValues, rawArrayValues);
+    const html = addTargetBlankToExternalLinks(substitutePlaceholders(templateHtml, rawFlatValues, rawArrayValues));
     return res.json({ html });
   }
 
@@ -426,7 +432,7 @@ ${JSON.stringify(outputSchema)}`;
   // Every value is HTML-escaped inside substitutePlaceholders — these are
   // content values being dropped into an existing template shell, not
   // markup, regardless of how much the AI provider is trusted.
-  const html = substitutePlaceholders(templateHtml, flatValues, arrayValues);
+  const html = addTargetBlankToExternalLinks(substitutePlaceholders(templateHtml, flatValues, arrayValues));
 
   // v1.0.9: also hand back the AI's raw parsed JSON output (unescaped,
   // exactly as validated above) alongside the rendered html. This call is
