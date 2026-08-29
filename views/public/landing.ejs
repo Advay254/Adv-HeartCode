@@ -36,13 +36,14 @@
     cta_image_cards: '../partials/landing-sections/cta-image-cards',
     bullet_list: '../partials/landing-sections/bullet-list',
     testimonials: '../partials/landing-sections/testimonials',
-    category_teaser: '../partials/landing-sections/category-teaser'
+    category_teaser: '../partials/landing-sections/category-teaser',
+    faq: '../partials/landing-sections/faq'
   };
 %>
 <% middleSections.forEach(function (section) { %>
   <% var partialPath = SECTION_PARTIALS[section.sectionType]; %>
   <% if (partialPath) { %>
-    <%- include(partialPath, { section: section, categoryTeaserCategories: categoryTeaserCategories, categoryTeaserFallbackTypes: categoryTeaserFallbackTypes }) %>
+    <%- include(partialPath, { section: section, categoryTeaserCategories: categoryTeaserCategories, categoryTeaserFallbackTypes: categoryTeaserFallbackTypes, faqEntries: faqEntries }) %>
   <% } %>
 <% }); %>
 

@@ -22,6 +22,13 @@
 
 <main class="bg-white px-4 py-16 sm:px-6">
   <div class="mx-auto max-w-6xl">
+    <%# v1.1.6 Part E: every card description below now carries
+        line-clamp-2 -- a display-only visual cap, not a data change. A
+        description saved before this version's 140-character server-side
+        limit existed can still be arbitrarily long in the database; this
+        keeps ANY length from stretching one grid row taller than its
+        siblings (CSS Grid stretches every item in a row to the tallest),
+        without truncating or otherwise touching the stored value itself. %>
     <% if (categories.length === 0) { %>
       <%# v1.1.4 Part D: zero categories exist at all -- render EXACTLY as
           this page did before this version (flat grid, no category UI),
@@ -42,7 +49,7 @@
                 <%- getIconSvg(t.iconName) %>
               </div>
               <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
-              <p class="mt-1 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+              <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
               <div class="mt-5">
                 <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
                 <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>
@@ -65,7 +72,7 @@
               <%- getIconSvg(c.iconName) %>
             </div>
             <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= c.name %></h2>
-            <p class="mt-1 flex-1 text-sm text-hc-ink/60"><%= c.description %></p>
+            <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= c.description %></p>
             <p class="mt-5 text-xs font-semibold uppercase tracking-wide text-hc-blue"><%= c.typeCount %> website type<%= c.typeCount === 1 ? '' : 's' %></p>
           </a>
         <% }); %>
@@ -81,7 +88,7 @@
                 <%- getIconSvg(t.iconName) %>
               </div>
               <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
-              <p class="mt-1 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+              <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
               <div class="mt-5">
                 <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
                 <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>

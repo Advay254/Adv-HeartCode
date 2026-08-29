@@ -13,6 +13,30 @@
     </p>
   </header>
   <main class="site-main">
+    <!--
+      v1.1.6 Part F: sandbox-limitation disclaimer, preview.ejs ONLY --
+      this view is never reused for the deployed-site output itself (that
+      HTML comes from a completely separate code path — see
+      lib/finalizeDeployment.js / lib/cloudflarePages.js — this page only
+      ever wraps it in an iframe for interactive testing), so this notice
+      has no way to leak onto a real deployed client site.
+
+      Copy is deliberately non-technical -- no "sandbox"/"iframe"/
+      "allow-same-origin" -- per the brief: reassuring, not alarming, and
+      not something a non-technical client needs to parse as a warning
+      about their own site being broken.
+
+      Styled with this file's OWN existing (pre-Skilline-redesign) design
+      tokens from site.css's :root -- --surface-alt/--border/--text-dim
+      for the shell, --warning for a soft left-accent that reads as "a
+      heads-up," not --danger (which would read as an error). Not
+      hc-panel/Tailwind: this page hasn't been migrated to that newer
+      design system yet, and introducing it for one banner on an
+      otherwise-unmigrated page would look more inconsistent, not less.
+    -->
+    <div style="margin:0 0 1rem; padding:0.75rem 1rem; border-radius:8px; background:var(--surface-alt); border:1px solid var(--border); border-left:3px solid var(--warning); font-size:0.85rem; color:var(--text-dim);">
+      Heads up — a few small things like animations or responsive behavior might look slightly different here than they will once your site is live. Nothing to worry about — it'll work as expected after deployment.
+    </div>
     <div class="preview-frame-wrap" id="previewFrameWrap">
       <!--
         v1.1.5 Part A — sandbox is "allow-scripts allow-popups allow-forms",

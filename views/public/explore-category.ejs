@@ -22,6 +22,8 @@
 
 <main class="bg-white px-4 py-16 sm:px-6">
   <div class="mx-auto max-w-6xl">
+    <%# v1.1.6 Part E: see views/public/explore.ejs's own comment on this
+        same line-clamp-2 addition — display-only, no stored data touched. %>
     <% if (websiteTypes.length === 0) { %>
       <div class="mx-auto max-w-md py-16 text-center" data-reveal>
         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-6 [&>svg]:w-6">
@@ -38,7 +40,7 @@
               <%- getIconSvg(t.iconName) %>
             </div>
             <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
-            <p class="mt-1 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+            <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
             <div class="mt-5">
               <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
               <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>
