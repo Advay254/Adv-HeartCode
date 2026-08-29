@@ -32,6 +32,25 @@
         <input class="admin-input" type="url" name="og_image_url" id="ogImageUrl" placeholder="https://example.com/og-image.png">
         <p class="mt-1 text-xs text-slate-400">Paste a hosted image URL — no upload here yet, same as the template/hero image workflow already in use.</p>
 
+        <!-- v1.1.6 Part D: Organization structured data. Every field here
+             is optional — leave any blank and it's simply left out of the
+             Organization JSON-LD entirely (see routes/public.js), not
+             emitted empty. -->
+        <h2 class="mt-5 text-sm font-semibold text-hc-ink">Organization info (for search engines)</h2>
+        <p class="mt-1 text-xs text-slate-400">Feeds the Organization structured data search engines read — none of this is shown directly on the site itself.</p>
+        <label class="admin-label" for="logoUrl">Logo URL</label>
+        <input class="admin-input" type="url" name="logo_url" id="logoUrl" placeholder="https://example.com/logo.png">
+        <label class="admin-label" for="contactEmail">Contact email</label>
+        <input class="admin-input" type="email" name="contact_email" id="contactEmail" placeholder="hello@example.com">
+        <label class="admin-label" for="socialTwitterUrl">X / Twitter URL</label>
+        <input class="admin-input" type="url" name="social_twitter_url" id="socialTwitterUrl" placeholder="https://x.com/yourhandle">
+        <label class="admin-label" for="socialFacebookUrl">Facebook URL</label>
+        <input class="admin-input" type="url" name="social_facebook_url" id="socialFacebookUrl" placeholder="https://facebook.com/yourpage">
+        <label class="admin-label" for="socialInstagramUrl">Instagram URL</label>
+        <input class="admin-input" type="url" name="social_instagram_url" id="socialInstagramUrl" placeholder="https://instagram.com/yourhandle">
+        <label class="admin-label" for="socialLinkedinUrl">LinkedIn URL</label>
+        <input class="admin-input" type="url" name="social_linkedin_url" id="socialLinkedinUrl" placeholder="https://linkedin.com/company/yourcompany">
+
         <button type="submit" class="admin-btn mt-4">Save site settings</button>
       </form>
       <p id="siteSettingsStatus" class="admin-msg" style="display:none;"></p>
