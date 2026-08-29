@@ -22,6 +22,7 @@ const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
 const adminWebsiteTypesRouter = require('./routes/adminWebsiteTypes');
 const adminCategoriesRouter = require('./routes/adminCategories');
+const adminFaqRouter = require('./routes/adminFaq');
 const adminDashboardRouter = require('./routes/adminDashboard');
 const adminSettingsRouter = require('./routes/adminSettings');
 const adminSiteSettingsRouter = require('./routes/adminSiteSettings');
@@ -41,6 +42,7 @@ const { seedEmailProviderFromEnvIfNeeded } = require('./lib/emailProvider');
 const { getIconSvg } = require('./lib/icons');
 const { getLandingImageAsset } = require('./lib/landingImageAssets');
 const { escapeHtml, highlightWord } = require('./lib/template');
+const { renderErrorPageHtml } = require('./lib/errorPage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -300,6 +302,7 @@ app.use('/api/admin/email-providers', adminEmailProvidersRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
 app.use('/api/admin/website-types', adminWebsiteTypesRouter);
 app.use('/api/admin/categories', adminCategoriesRouter);
+app.use('/api/admin/faq', adminFaqRouter);
 app.use('/api/admin/dashboard', adminDashboardRouter);
 app.use('/api/admin/settings', adminSettingsRouter);
 app.use('/api/admin/site-settings', adminSiteSettingsRouter);
@@ -365,6 +368,80 @@ app.get('/health', async (req, res) => {
     console.error('[HEALTH] DB check failed:', err.message);
     res.status(500).json({ status: 'error', db: 'disconnected', version: APP_VERSION });
   }
+});
+// Not wrapped in asyncHandler (see lib/asyncHandler.js, applied everywhere
+// else in routes/) -- deliberately audited and left alone, not missed.
+// This handler already fully try/catches its own only await (pool.query)
+// and always resolves the response in either branch; there is no rejection
+// path here that could ever reach an unhandled state in the first place,
+// so wrapping it would be inert padding rather than closing a real gap.
+
+// ---- global error-handling middleware (v1.1.6 Part A) ----
+// Registered LAST -- after every route, every router mount, and static
+// file serving above -- so it's the true final link in the middleware
+// chain, exactly as Express requires for a catch-all error handler (an
+// (err, req, res, next) => {} signature is only ever invoked via
+// next(err), and only reached if nothing before it already sent a
+// response).
+//
+// This closes the reliability gap HANDOFF.md's "Known gaps" section
+// flagged as the top priority carried into this version: "No global
+// Express error-handling middleware, and async route handlers aren't
+// wrapped to forward rejections to it." Both halves are needed together
+// and neither is sufficient alone:
+//   1. lib/asyncHandler.js wraps every async route handler across every
+//      router in routes/ (see that file's own comment) -- this is what
+//      actually gets a REJECTED promise from an async handler routed to
+//      next(err) at all. Express 4 does this automatically ONLY for a
+//      synchronous throw, never for an async rejection.
+//   2. This middleware is what actually DOES something useful once an
+//      error reaches next(err) -- before this version, an error that
+//      somehow got here anyway fell through to Express's own built-in
+//      handler, which sends a raw stack trace / file paths to the client.
+//
+// This is a safety net for the UNHANDLED case only -- it deliberately
+// changes nothing about any route that already sends its own explicit
+// error response (every zod validation failure across this app's ~90
+// routes, adminAuth's login-failure JSON, the /api/admin body-parser
+// handler a few lines above this one, etc.) -- none of those call
+// next(err), so none of them ever reach this handler; their existing
+// behavior is completely untouched.
+app.use((err, req, res, next) => {
+  // Real error detail (message + stack) is logged server-side ONLY. This
+  // is the one and only place that detail is ever written down anywhere
+  // for an unhandled error -- neither response branch below includes any
+  // of it.
+  console.error('[UNHANDLED ERROR]', err && err.stack ? err.stack : err);
+
+  // Express itself can only safely finish a response that hasn't been
+  // written to yet. If something already streamed part of a response
+  // before throwing (rare -- none of this app's own routes do this today,
+  // but a future one might), the correct move is to delegate to Express's
+  // own built-in handler, which knows how to close out an in-flight
+  // response without corrupting it, rather than attempting a second
+  // res.status()/res.send() on top of one already in progress.
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const status = typeof (err && err.status) === 'number' ? err.status
+    : typeof (err && err.statusCode) === 'number' ? err.statusCode
+    : 500;
+
+  // API/admin-fetch requests get JSON; regular page visits get the HTML
+  // error page. Detected via route prefix first (every JSON-speaking
+  // surface in this app -- /api/build, /api/admin, /api/events,
+  // /api/webhooks -- lives under /api/), falling back to the Accept
+  // header for the rare case a non-/api/ request explicitly asks for
+  // JSON.
+  const wantsJson = req.originalUrl.startsWith('/api/')
+    || (req.headers.accept || '').includes('application/json');
+
+  if (wantsJson) {
+    return res.status(status).json({ error: 'Something went wrong. Please try again.' });
+  }
+
+  res.status(status).type('html').send(renderErrorPageHtml());
 });
 
 // Periodic cleanup: sweeps old pending_deployments and funnel_events rows,
