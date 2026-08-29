@@ -2023,6 +2023,7 @@
       if (section.sectionType === 'bullet_list') return `${c.heading || ''} — ${(c.items || []).length} item(s)`;
       if (section.sectionType === 'testimonials') return `${c.heading || ''} — ${(c.items || []).length} testimonial(s)`;
       if (section.sectionType === 'footer') return `${(c.link_columns || []).length} link column(s)`;
+      if (section.sectionType === 'category_teaser') return c.heading || '';
       return '';
     }
 
@@ -2046,6 +2047,29 @@
         primary_cta_url: readField(panel, 'primary_cta_url'),
         secondary_cta_text: readField(panel, 'secondary_cta_text'),
         secondary_cta_url: readField(panel, 'secondary_cta_url')
+      };
+    }
+
+    // ---- category_teaser (v1.1.5 Part B) ----
+    // Deliberately the smallest form here — just the copy around the
+    // cards. The cards themselves show live category/website-type data
+    // (which categories exist, which type is cheapest in each), never
+    // admin-authored JSON, so there's nothing to edit for them here — see
+    // lib/landingSectionTypes.js's comment on categoryTeaserSchema.
+    function renderCategoryTeaserForm(c) {
+      return `
+        ${textField('Eyebrow text (optional)', 'eyebrow_text', c.eyebrow_text)}
+        ${textField('Heading', 'heading', c.heading)}
+        ${textField('Highlighted word (must match a word/phrase in the heading exactly)', 'highlighted_word', c.highlighted_word)}
+        <p class="mt-2 text-xs text-slate-500">
+          The cards below this heading show your first 2 active Website Categories automatically (or, if you haven't set any up yet, your first 2 active website types instead) — manage which ones from the Categories page, not here.
+        </p>`;
+    }
+    function collectCategoryTeaserForm(panel) {
+      return {
+        eyebrow_text: readField(panel, 'eyebrow_text'),
+        heading: readField(panel, 'heading'),
+        highlighted_word: readField(panel, 'highlighted_word')
       };
     }
 
@@ -2281,7 +2305,8 @@
       cta_image_cards: { render: renderCtaImageCardsForm, collect: collectCtaImageCardsForm },
       bullet_list: { render: renderBulletListForm, collect: collectBulletListForm },
       testimonials: { render: renderTestimonialsForm, collect: collectTestimonialsForm },
-      footer: { render: renderFooterForm, collect: collectFooterForm }
+      footer: { render: renderFooterForm, collect: collectFooterForm },
+      category_teaser: { render: renderCategoryTeaserForm, collect: collectCategoryTeaserForm }
     };
 
     // Wires whichever single top-level array field a section's form has
