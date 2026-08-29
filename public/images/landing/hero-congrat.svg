@@ -1,0 +1,8 @@
+<svg width="370" height="110" viewBox="0 0 370 110" xmlns="http://www.w3.org/2000/svg">
+	<rect width="370" height="110" rx="20" fill="#FFFFFF" fill-opacity="0.92"/>
+	<rect x="26" y="30" width="50" height="50" rx="12" fill="#F48C06"/>
+	<path d="M38 45h26a3 3 0 013 3v14a3 3 0 01-3 3H38a3 3 0 01-3-3V48a3 3 0 013-3z" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"/>
+	<path d="M35.5 46.5L51 58l15.5-11.5" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+	<text x="96" y="53" font-family="Poppins, Arial, sans-serif" font-size="20" font-weight="700" fill="#4B4B4B">Congratulations</text>
+	<text x="96" y="77" font-family="Poppins, Arial, sans-serif" font-size="15" fill="#6B6B6B">Your site is built successfully</text>
+</svg>
