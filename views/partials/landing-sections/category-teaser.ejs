@@ -1,0 +1,49 @@
+<%
+  var ct = section.content;
+  var headingHtml = highlightWord(ct.heading, ct.highlighted_word, 'text-sk-blue');
+  // v1.1.5: categories take priority; the fallback to raw website types
+  // (pre-v1.1.4 install, or zero active categories set up yet) only
+  // kicks in when there are zero categories to show — see
+  // routes/public.js's GET / handler for how these two locals are
+  // computed. "See all categories" links to /explore either way — even
+  // in the fallback branch, /explore itself independently falls back to
+  // its own flat type list when there are zero categories (v1.1.4), so
+  // the link is never a dead end.
+  var showingCategories = categoryTeaserCategories && categoryTeaserCategories.length > 0;
+  var teaserItems = showingCategories ? categoryTeaserCategories : (categoryTeaserFallbackTypes || []);
+  var teaserHref = function (item) { return showingCategories ? ('/explore/' + item.slug) : ('/build/' + item.slug); };
+%>
+<section class="bg-white px-4 py-20 sm:px-6" data-reveal>
+  <div class="mx-auto max-w-6xl">
+    <div class="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
+      <div>
+        <% if (ct.eyebrow_text) { %><p class="text-xs font-semibold uppercase tracking-widest text-sk-blue"><%= ct.eyebrow_text %></p><% } %>
+        <h2 class="mt-3 text-3xl font-bold text-hc-ink sm:text-4xl"><%- headingHtml %></h2>
+      </div>
+      <a href="/explore" class="hc-pill-btn-outline hidden sm:inline-flex">See all categories</a>
+    </div>
+
+    <% if (teaserItems.length === 0) { %>
+      <p class="mt-10 text-center text-hc-ink/60">Nothing available right now — check back soon.</p>
+    <% } else { %>
+      <div class="mt-12 grid gap-6 sm:grid-cols-2">
+        <% teaserItems.forEach(function (item) { %>
+          <a href="<%= teaserHref(item) %>" class="hc-panel hc-panel-hover block p-6" data-reveal>
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-hc-blue/10 text-hc-blue [&>svg]:h-6 [&>svg]:w-6">
+              <%- getIconSvg(item.iconName) %>
+            </div>
+            <h3 class="mt-4 text-lg font-semibold text-hc-ink"><%= item.name %></h3>
+            <p class="mt-1 line-clamp-2 text-sm text-hc-ink/60"><%= item.description %></p>
+            <% if (item.displayPrimary) { %>
+              <p class="mt-4 text-base font-semibold text-hc-blue">From <%= item.displayPrimary %></p>
+            <% } %>
+          </a>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <div class="mt-10 flex justify-center sm:hidden">
+      <a href="/explore" class="hc-pill-btn-outline">See all categories</a>
+    </div>
+  </div>
+</section>
