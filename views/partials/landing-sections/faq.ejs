@@ -1,0 +1,44 @@
+<%
+  var fc = section.content;
+  var headingHtml = highlightWord(fc.heading, fc.highlighted_word, 'text-sk-blue');
+  var entries = faqEntries || [];
+%>
+<!--
+  v1.1.6 Part D: like category-teaser.ejs, this section's own content
+  (section.content) is just the heading/eyebrow copy — the actual
+  questions come from `faqEntries`, fetched fresh from the faq_entries
+  table by routes/public.js's GET / handler (see lib/landingSectionTypes.js's
+  faqSchema comment for why). The FAQPage JSON-LD emitted alongside this
+  page (see public-head.ejs / routes/public.js) is built from that exact
+  same `entries` array, so the structured data can never drift out of
+  sync with what's actually visible here.
+
+  Uses native <details>/<summary> rather than a JS-driven accordion —
+  keyboard- and screen-reader-accessible with zero JavaScript, consistent
+  with this app's "no inline <script> blocks" CSP posture: a JS accordion
+  would need its own event wiring in site.js for what a browser already
+  does for free.
+-->
+<section class="bg-sk-blue-pale/30 px-4 py-20 sm:px-6" data-reveal>
+  <div class="mx-auto max-w-3xl">
+    <div class="text-center">
+      <% if (fc.eyebrow_text) { %><p class="text-xs font-semibold uppercase tracking-widest text-sk-blue"><%= fc.eyebrow_text %></p><% } %>
+      <h2 class="mt-3 text-3xl font-bold text-hc-ink sm:text-4xl"><%- headingHtml %></h2>
+    </div>
+
+    <% if (entries.length === 0) { %>
+      <p class="mt-10 text-center text-hc-ink/60">Nothing here yet — check back soon.</p>
+    <% } else { %>
+      <div class="mt-10 flex flex-col gap-3">
+        <% entries.forEach(function (entry) { %>
+          <details class="hc-panel group p-5">
+            <summary class="cursor-pointer list-none text-base font-semibold text-hc-ink marker:content-none">
+              <%= entry.question %>
+            </summary>
+            <p class="mt-3 text-sm leading-relaxed text-hc-ink/70"><%= entry.answer %></p>
+          </details>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</section>
