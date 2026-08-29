@@ -149,3 +149,22 @@ button:disabled { opacity: 0.6; cursor: default; }
   border: none;
   display: block;
 }
+
+/* v1.1.5 Part A: native Fullscreen API target is the WRAPPER div, not the
+   iframe itself — requesting fullscreen on the iframe directly would work
+   too, but the wrapper also has the border/border-radius styling above,
+   which fullscreen-ing the iframe alone would visually clip/lose. Only
+   the standard (unprefixed) and WebKit-prefixed forms are covered —
+   Firefox has supported the unprefixed :fullscreen pseudo-class since
+   ESR 64 (well past this app's realistic browser support floor), and
+   there is no realistic remaining browser needing the old -moz- prefix. */
+#previewFrameWrap:fullscreen,
+#previewFrameWrap:-webkit-full-screen {
+  border: none;
+  border-radius: 0;
+  background: #fff;
+}
+#previewFrameWrap:fullscreen #previewFrame,
+#previewFrameWrap:-webkit-full-screen #previewFrame {
+  height: 100vh;
+}

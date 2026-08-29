@@ -102,7 +102,12 @@
 
     function resetSubmitButton() {
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Generate my site';
+      // v1.1.5 Part D: "Generate my site" read like a generic AI/builder
+      // tool action rather than something someone building a personal
+      // occasion site would say — changed here and in build.ejs's initial
+      // button text (kept in sync deliberately; this is the only other
+      // place that string appears).
+      submitBtn.textContent = 'Build my site';
     }
 
     form.addEventListener('submit', function (e) {
@@ -131,7 +136,7 @@
 
       saveDraft();
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Generating…';
+      submitBtn.textContent = 'Building…';
 
       fetch('/api/build/' + encodeURIComponent(slug) + '/generate', {
         method: 'POST',
@@ -178,6 +183,81 @@
     });
   }
 
+  // v1.1.5 Part A: preview-only additions injected into the iframe's OWN
+  // srcdoc html string — NOT reached into from outside afterward. This is
+  // deliberate, not just a style choice: the iframe's sandbox no longer
+  // includes allow-same-origin (see views/public/preview.ejs's own
+  // comment on the sandbox attribute), so this parent page's JS has no
+  // way to reach iframe.contentDocument even if it wanted to — the only
+  // way to add behavior INSIDE the iframe's own document is to put it in
+  // the HTML string before it's ever assigned to srcdoc.
+
+  // Small, subtle, low-opacity corner badge — visible enough to notice,
+  // not obtrusive enough to interfere with actually experiencing the
+  // preview. pointer-events:none so it can never intercept a click meant
+  // for the real page underneath it.
+  function buildPreviewWatermarkHtml() {
+    return '<div style="position:fixed;bottom:10px;right:10px;z-index:2147483647;pointer-events:none;' +
+      'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:11px;font-weight:600;' +
+      'letter-spacing:0.05em;color:rgba(0,0,0,0.35);background:rgba(255,255,255,0.55);padding:4px 10px;' +
+      'border-radius:999px;">PREVIEW</div>';
+  }
+
+  // Casual, opportunistic-copying deterrent ONLY — not real protection,
+  // and never described as such anywhere in this app's own copy (see
+  // this version's delivery notes). Blocks the right-click context menu
+  // and a few common "view/inspect source" keyboard shortcuts; does
+  // nothing against the browser's own dev menu, a view-source: URL typed
+  // directly, or anyone who knows another way in. Runs INSIDE the
+  // iframe's own document (via allow-scripts) so it actually applies to
+  // the generated site's content, not just this page's outer chrome — see
+  // initPreviewPage below for the matching parent-page-level listener
+  // that covers everything OUTSIDE the iframe.
+  function buildPreviewDeterrentScript() {
+    return '<script>(function(){' +
+      "document.addEventListener('contextmenu',function(e){e.preventDefault();});" +
+      "document.addEventListener('keydown',function(e){" +
+      "var k=(e.key||'').toLowerCase();" +
+      "if(k==='f12'){e.preventDefault();return;}" +
+      "if((e.ctrlKey||e.metaKey)&&e.shiftKey&&k==='i'){e.preventDefault();return;}" +
+      "if((e.ctrlKey||e.metaKey)&&k==='u'){e.preventDefault();return;}" +
+      '});' +
+      '})();</script>';
+  }
+
+  function injectPreviewExtras(html) {
+    var extras = buildPreviewWatermarkHtml() + buildPreviewDeterrentScript();
+    return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, extras + '</body>') : html + extras;
+  }
+
+  // Whitespace-only minification — NOT real minification (no attribute
+  // reordering, no comment-aware edge cases beyond what's handled below).
+  // The entire point is friction ("makes casual copy-paste-and-reuse
+  // meaningfully less pleasant" per this feature's own spec), not
+  // compression or protection — a determined person can trivially
+  // reformat minified HTML back to readable form with any online
+  // "beautify" tool in seconds. <script>/<style>/<pre>/<textarea>
+  // contents are protected from whitespace collapsing (swapped for
+  // placeholders before collapsing, restored after) since collapsing
+  // whitespace inside those can change actual behavior or displayed
+  // content, not just formatting.
+  function minifyHtmlForPreview(html) {
+    var protectedBlocks = [];
+    var withPlaceholders = html.replace(/<(script|style|pre|textarea)\b[^>]*>[\s\S]*?<\/\1>/gi, function (block) {
+      protectedBlocks.push(block);
+      return '\u0000HC_PROTECTED_' + (protectedBlocks.length - 1) + '\u0000';
+    });
+
+    var collapsed = withPlaceholders
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/>\s+</g, '><')
+      .trim();
+
+    return collapsed.replace(/\u0000HC_PROTECTED_(\d+)\u0000/g, function (m, i) {
+      return protectedBlocks[Number(i)];
+    });
+  }
+
   function initPreviewPage() {
     var slug = document.body.dataset.slug;
     var html = sessionStorage.getItem(previewKey(slug));
@@ -189,10 +269,12 @@
 
     var iframe = document.getElementById('previewFrame');
     // srcdoc (a string already in hand), not src (a URL to fetch).
-    // sandbox="allow-same-origin" only, no allow-scripts: this is a
-    // passive visual preview of static generated markup with no current
-    // need for scripts to run inside it — the more restrictive default.
-    iframe.srcdoc = html;
+    // sandbox="allow-scripts allow-popups allow-forms", deliberately
+    // WITHOUT allow-same-origin — see the matching comment on the
+    // <iframe> tag itself in views/public/preview.ejs for the full
+    // reasoning (this is a documented sandbox-escape footgun to avoid,
+    // not an oversight).
+    iframe.srcdoc = minifyHtmlForPreview(injectPreviewExtras(html));
 
     var backBtn = document.getElementById('backBtn');
     if (backBtn) {
@@ -200,6 +282,50 @@
         window.location.href = '/build/' + encodeURIComponent(slug);
       });
     }
+
+    // Fullscreen toggle — native Fullscreen API on the WRAPPER div (see
+    // public/site.css's :fullscreen rules), not the iframe directly, so
+    // the wrapper's existing border/rounding is cleanly reset rather than
+    // fighting the fullscreen element's own UA styling. This is IN
+    // ADDITION to nothing else — there is no pre-existing "mobile-frame
+    // expand/collapse toggle" anywhere in this codebase to sit alongside;
+    // this is the only frame-size control this page has ever had. (Flagged
+    // explicitly rather than silently built as if replacing something —
+    // see this version's delivery notes.)
+    var fullscreenBtn = document.getElementById('fullscreenBtn');
+    var frameWrap = document.getElementById('previewFrameWrap');
+    if (fullscreenBtn && frameWrap) {
+      fullscreenBtn.addEventListener('click', function () {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        } else if (frameWrap.requestFullscreen) {
+          frameWrap.requestFullscreen();
+        } else if (frameWrap.webkitRequestFullscreen) {
+          frameWrap.webkitRequestFullscreen();
+        }
+      });
+      var syncFullscreenLabel = function () {
+        var isFullscreen = document.fullscreenElement === frameWrap || document.webkitFullscreenElement === frameWrap;
+        fullscreenBtn.textContent = isFullscreen ? 'Exit fullscreen' : 'View fullscreen';
+      };
+      document.addEventListener('fullscreenchange', syncFullscreenLabel);
+      document.addEventListener('webkitfullscreenchange', syncFullscreenLabel);
+    }
+
+    // Casual copy-protection deterrent, PARENT-page half (see
+    // buildPreviewDeterrentScript above for the matching iframe-content
+    // half — the two are separate because the sandboxed iframe's document
+    // is no longer reachable from here at all once allow-same-origin is
+    // removed, so this page's own chrome needs its own listener). Same
+    // "deterrent, not protection" caveat applies here too.
+    document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    document.addEventListener('keydown', function (e) {
+      var key = (e.key || '').toLowerCase();
+      if (key === 'f12') { e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'i') { e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && key === 'u') { e.preventDefault(); return; }
+    });
   }
 
   function initCheckoutPage() {
