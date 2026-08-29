@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const {
@@ -95,7 +96,7 @@ pageRouter.get(`${INTERNAL_ADMIN_PREFIX}/login`, (req, res) => {
 // bind a CSRF token to — see the comment in views/admin/login.ejs).
 const apiRouter = express.Router();
 
-apiRouter.post('/login', async (req, res) => {
+apiRouter.post('/login', asyncHandler(async (req, res) => {
   const ip = req.ip;
 
   if (isLockedOut(ip)) {
@@ -144,15 +145,15 @@ apiRouter.post('/login', async (req, res) => {
   // that actually calls res.cookie().
   res.cookie(COOKIE_NAME, cookieValue, { ...cookieOptions, maxAge: cookieOptions.maxAge * 1000 });
   res.json({ success: true });
-});
+}));
 
-apiRouter.post('/logout', requireAdminSession, requireCsrf, async (req, res) => {
+apiRouter.post('/logout', requireAdminSession, requireCsrf, asyncHandler(async (req, res) => {
   const pool = getPool();
   const cookieValue = getSessionCookie(req);
   await destroySession(pool, cookieValue);
   res.clearCookie(COOKIE_NAME, { path: '/' });
   res.json({ success: true });
-});
+}));
 
 apiRouter.get('/me', requireAdminSession, (req, res) => {
   res.json({ authenticated: true });

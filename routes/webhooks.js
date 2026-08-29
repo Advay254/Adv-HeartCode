@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const crypto = require('crypto');
 const { z } = require('zod');
 const { getActivePaystackKeys } = require('../lib/paystack');
@@ -23,7 +24,7 @@ const webhookEventSchema = z.object({
 // break verification even for a genuine, unmodified request.
 router.use(express.raw({ type: 'application/json', limit: '1mb' }));
 
-router.post('/paystack', async (req, res) => {
+router.post('/paystack', asyncHandler(async (req, res) => {
   const signature = req.headers['x-paystack-signature'];
   const rawBody = req.body; // Buffer, thanks to express.raw() above
 
@@ -96,6 +97,6 @@ router.post('/paystack', async (req, res) => {
   } catch (err) {
     console.error(`[WEBHOOK] Unexpected error finalizing ${reference}:`, err.message);
   }
-});
+}));
 
 module.exports = router;

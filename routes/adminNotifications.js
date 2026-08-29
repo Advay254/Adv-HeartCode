@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { encrypt, decrypt } = require('../lib/crypto');
@@ -96,13 +97,13 @@ function serializeChannel(row) {
   };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM notification_channels ORDER BY channel_type ASC, id ASC');
   res.json(result.rows.map(serializeChannel));
-});
+}));
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createChannelSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid request body', details: parsed.error.issues });
@@ -154,9 +155,9 @@ router.post('/', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.put('/:id', requireCsrf, async (req, res) => {
+router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid channel id' });
@@ -200,9 +201,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
     [nextLabel, JSON.stringify(nextConfig), nextIsActive, id]
   );
   res.json(serializeChannel(result.rows[0]));
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid channel id' });
@@ -213,13 +214,13 @@ router.delete('/:id', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Channel not found' });
   }
   res.json({ success: true });
-});
+}));
 
 // v1.1.1 established this exact pattern for email providers — fires a
 // real test payload through THIS SPECIFIC channel (not gated on
 // is_active) so the admin can confirm it actually works before relying on
 // it during a real sale.
-router.post('/:id/test', requireCsrf, async (req, res) => {
+router.post('/:id/test', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid channel id' });
@@ -255,6 +256,6 @@ router.post('/:id/test', requireCsrf, async (req, res) => {
     console.error(`[NOTIFICATIONS] Test send failed for channel #${parsed.data.id}:`, err.message);
     res.status(502).json({ success: false, error: err.message });
   }
-});
+}));
 
 module.exports = router;

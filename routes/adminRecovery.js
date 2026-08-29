@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -30,7 +31,7 @@ const paginationSchema = z.object({
 //     actually looking at: either a genuinely abandoned checkout, or one
 //     where payment succeeded but the webhook never fired and the client
 //     never landed back on the callback page.
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const parsed = paginationSchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid query parameters' });
@@ -78,7 +79,7 @@ router.get('/', async (req, res) => {
     totalPages,
     total
   });
-});
+}));
 
 const referenceParamsSchema = z.object({
   reference: z.string().trim().min(1).max(100)
@@ -95,7 +96,7 @@ const referenceParamsSchema = z.object({
 // Cloudflare, deployed_sites, or pending_deployments unless that
 // verification actually comes back successful. Nothing destructive
 // happens on any non-success outcome; the row is untouched either way.
-router.post('/:reference/retry', requireCsrf, async (req, res) => {
+router.post('/:reference/retry', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = referenceParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid reference' });
@@ -123,7 +124,7 @@ router.post('/:reference/retry', requireCsrf, async (req, res) => {
 
   console.error(`[RECOVERY] finalizeDeployment error retrying ${reference}:`, result.error);
   return res.status(502).json({ outcome: 'error', error: result.error || 'Failed to retry this deployment' });
-});
+}));
 
 // DELETE /api/admin/pending-deployments/:reference — plain housekeeping,
 // for a row the admin has confirmed is genuinely abandoned and wants to
@@ -131,7 +132,7 @@ router.post('/:reference/retry', requireCsrf, async (req, res) => {
 // only ever removes an UNRESOLVED checkout attempt, never a completed
 // deployment (a completed one has already moved to deployed_sites and
 // isn't reachable through this table or this route at all).
-router.delete('/:reference', requireCsrf, async (req, res) => {
+router.delete('/:reference', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = referenceParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid reference' });
@@ -156,6 +157,6 @@ router.delete('/:reference', requireCsrf, async (req, res) => {
   sitePasswordCache.takeOnce(reference);
 
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

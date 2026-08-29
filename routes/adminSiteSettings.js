@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -19,10 +20,26 @@ const updateSchema = z.object({
   favicon_url: z.string().trim().max(2000).optional(),
   og_image_url: z.string().trim().max(2000).optional(),
   meta_description: z.string().trim().max(500).optional(),
-  site_title: z.string().trim().max(200).optional()
+  site_title: z.string().trim().max(200).optional(),
+  // v1.1.6 Part D: Organization structured data fields. Validated the
+  // same permissive way favicon_url/og_image_url already are above --
+  // trimmed + length-capped only, no .url()/.email() format enforcement
+  // — so an empty string still passes through cleanly to "clear this
+  // value" (this route's own established convention: every field here is
+  // a plain per-key upsert, not the separate null-means-unchanged /
+  // empty-means-clear convention used for encrypted admin config
+  // elsewhere in this app -- see HANDOFF.md's "Secrets convention" note,
+  // which applies to Paystack/AI provider keys specifically, not this
+  // table).
+  logo_url: z.string().trim().max(2000).optional(),
+  contact_email: z.string().trim().max(254).optional(),
+  social_twitter_url: z.string().trim().max(2000).optional(),
+  social_facebook_url: z.string().trim().max(2000).optional(),
+  social_instagram_url: z.string().trim().max(2000).optional(),
+  social_linkedin_url: z.string().trim().max(2000).optional()
 });
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   // Reads straight from the DB here, not the cached lib/siteSettings.js
   // helper -- the admin editing this form should always see the actual
   // current value, never a value that could be up to 60s stale from the
@@ -37,9 +54,9 @@ router.get('/', async (req, res) => {
     if (row.value !== null && row.value !== undefined) values[row.key] = row.value;
   }
   res.json(values);
-});
+}));
 
-router.put('/', requireCsrf, async (req, res) => {
+router.put('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid site settings data' });
@@ -65,6 +82,6 @@ router.put('/', requireCsrf, async (req, res) => {
 
   const fresh = await refreshSiteSettingsCache();
   res.json(fresh);
-});
+}));
 
 module.exports = router;

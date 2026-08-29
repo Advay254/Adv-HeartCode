@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -25,7 +26,7 @@ const statsQuerySchema = z.object({
   websiteTypeId: z.coerce.number().int().positive().optional()
 });
 
-router.get('/stats', async (req, res) => {
+router.get('/stats', asyncHandler(async (req, res) => {
   const parsed = statsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid query parameters' });
@@ -70,6 +71,6 @@ router.get('/stats', async (req, res) => {
   });
 
   res.json({ days, websiteTypeId: websiteTypeId || null, stages });
-});
+}));
 
 module.exports = router;

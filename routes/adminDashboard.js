@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -14,7 +15,7 @@ const paginationSchema = z.object({
   search: z.string().trim().max(200).optional().default('')
 });
 
-router.get('/stats', async (req, res) => {
+router.get('/stats', asyncHandler(async (req, res) => {
   const pool = getPool();
 
   const [paystackResult, providerResult, typeCountsResult, deploymentStatsResult, breakdownResult, subscriberCountResult] = await Promise.all([
@@ -70,9 +71,9 @@ router.get('/stats', async (req, res) => {
       revenueUsd: Number(r.revenue_usd)
     }))
   });
-});
+}));
 
-router.get('/deployments', async (req, res) => {
+router.get('/deployments', asyncHandler(async (req, res) => {
   const parsed = paginationSchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid query parameters' });
@@ -124,9 +125,9 @@ router.get('/deployments', async (req, res) => {
     totalPages,
     total
   });
-});
+}));
 
-router.get('/subscribers', async (req, res) => {
+router.get('/subscribers', asyncHandler(async (req, res) => {
   const parsed = paginationSchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid query parameters' });
@@ -164,7 +165,7 @@ router.get('/subscribers', async (req, res) => {
     totalPages,
     total
   });
-});
+}));
 
 const optOutParamsSchema = z.object({
   email: z.string().trim().email().max(254)
@@ -173,7 +174,7 @@ const optOutBodySchema = z.object({
   optedOut: z.boolean()
 });
 
-router.put('/subscribers/:email/opt-out', requireCsrf, async (req, res) => {
+router.put('/subscribers/:email/opt-out', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = optOutParamsSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid email' });
@@ -194,9 +195,9 @@ router.put('/subscribers/:email/opt-out', requireCsrf, async (req, res) => {
   }
 
   res.json({ email: result.rows[0].email, optedOut: result.rows[0].opted_out });
-});
+}));
 
-router.get('/subscribers/export', async (req, res) => {
+router.get('/subscribers/export', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query(
     'SELECT email, first_seen_at, opted_out FROM subscriber_emails ORDER BY first_seen_at DESC'
@@ -218,6 +219,6 @@ router.get('/subscribers/export', async (req, res) => {
   res.set('Content-Type', 'text/csv');
   res.set('Content-Disposition', 'attachment; filename="subscribers.csv"');
   res.send(lines.join('\n'));
-});
+}));
 
 module.exports = router;

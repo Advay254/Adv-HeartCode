@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -23,7 +24,7 @@ function formatFooterLink(l) {
   return { id: l.id, label: l.label, url: l.url, displayOrder: l.display_order };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const [contentResult, stepsResult, linksResult] = await Promise.all([
     pool.query('SELECT * FROM landing_content ORDER BY id ASC LIMIT 1'),
@@ -43,7 +44,7 @@ router.get('/', async (req, res) => {
     steps: stepsResult.rows.map(formatStep),
     footerLinks: linksResult.rows.map(formatFooterLink)
   });
-});
+}));
 
 const contentSchema = z.object({
   heroHeadline: z.string().trim().max(200).optional(),
@@ -53,7 +54,7 @@ const contentSchema = z.object({
   footerText: z.string().trim().max(300).optional()
 });
 
-router.put('/content', requireCsrf, async (req, res) => {
+router.put('/content', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = contentSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid landing content' });
@@ -101,7 +102,7 @@ router.put('/content', requireCsrf, async (req, res) => {
 
   await refreshLandingContentCache();
   res.json({ success: true });
-});
+}));
 
 // ---- steps ----
 
@@ -111,7 +112,7 @@ const stepSchema = z.object({
   description: z.string().trim().min(1).max(300)
 });
 
-router.post('/steps', requireCsrf, async (req, res) => {
+router.post('/steps', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = stepSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid step data' });
@@ -126,9 +127,9 @@ router.post('/steps', requireCsrf, async (req, res) => {
   );
   await refreshLandingContentCache();
   res.status(201).json(formatStep(result.rows[0]));
-});
+}));
 
-router.put('/steps/:id', requireCsrf, async (req, res) => {
+router.put('/steps/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   if (!idParsed.success) return res.status(400).json({ error: 'Invalid step id' });
   const bodyParsed = stepSchema.partial().safeParse(req.body);
@@ -151,9 +152,9 @@ router.put('/steps/:id', requireCsrf, async (req, res) => {
   );
   await refreshLandingContentCache();
   res.json(formatStep(result.rows[0]));
-});
+}));
 
-router.delete('/steps/:id', requireCsrf, async (req, res) => {
+router.delete('/steps/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   if (!idParsed.success) return res.status(400).json({ error: 'Invalid step id' });
   const pool = getPool();
@@ -161,13 +162,13 @@ router.delete('/steps/:id', requireCsrf, async (req, res) => {
   if (result.rowCount === 0) return res.status(404).json({ error: 'Step not found' });
   await refreshLandingContentCache();
   res.json({ success: true });
-});
+}));
 
 // v1.1.4: moveItem() itself now lives in lib/reorder.js (also used by the
 // new routes/adminCategories.js) — behavior here is completely unchanged.
 const moveSchema = z.object({ direction: z.enum(['up', 'down']) });
 
-router.put('/steps/:id/move', requireCsrf, async (req, res) => {
+router.put('/steps/:id/move', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   const bodyParsed = moveSchema.safeParse(req.body);
   if (!idParsed.success || !bodyParsed.success) return res.status(400).json({ error: 'Invalid request' });
@@ -177,7 +178,7 @@ router.put('/steps/:id/move', requireCsrf, async (req, res) => {
   if (result.error === 'no_neighbor') return res.status(200).json({ success: true }); // already at the end — no-op, not an error
   await refreshLandingContentCache();
   res.json({ success: true });
-});
+}));
 
 // ---- footer links ----
 
@@ -186,7 +187,7 @@ const footerLinkSchema = z.object({
   url: z.string().trim().min(1).max(500)
 });
 
-router.post('/footer-links', requireCsrf, async (req, res) => {
+router.post('/footer-links', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = footerLinkSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid footer link data' });
 
@@ -200,9 +201,9 @@ router.post('/footer-links', requireCsrf, async (req, res) => {
   );
   await refreshLandingContentCache();
   res.status(201).json(formatFooterLink(result.rows[0]));
-});
+}));
 
-router.put('/footer-links/:id', requireCsrf, async (req, res) => {
+router.put('/footer-links/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   if (!idParsed.success) return res.status(400).json({ error: 'Invalid footer link id' });
   const bodyParsed = footerLinkSchema.partial().safeParse(req.body);
@@ -220,9 +221,9 @@ router.put('/footer-links/:id', requireCsrf, async (req, res) => {
   );
   await refreshLandingContentCache();
   res.json(formatFooterLink(result.rows[0]));
-});
+}));
 
-router.delete('/footer-links/:id', requireCsrf, async (req, res) => {
+router.delete('/footer-links/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   if (!idParsed.success) return res.status(400).json({ error: 'Invalid footer link id' });
   const pool = getPool();
@@ -230,9 +231,9 @@ router.delete('/footer-links/:id', requireCsrf, async (req, res) => {
   if (result.rowCount === 0) return res.status(404).json({ error: 'Footer link not found' });
   await refreshLandingContentCache();
   res.json({ success: true });
-});
+}));
 
-router.put('/footer-links/:id/move', requireCsrf, async (req, res) => {
+router.put('/footer-links/:id/move', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   const bodyParsed = moveSchema.safeParse(req.body);
   if (!idParsed.success || !bodyParsed.success) return res.status(400).json({ error: 'Invalid request' });
@@ -242,6 +243,6 @@ router.put('/footer-links/:id/move', requireCsrf, async (req, res) => {
   if (result.error === 'no_neighbor') return res.status(200).json({ success: true });
   await refreshLandingContentCache();
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

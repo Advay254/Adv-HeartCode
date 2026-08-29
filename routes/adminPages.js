@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { getPool } = require('../db/init');
 const { deriveCsrfToken } = require('../lib/auth');
 const { requireAdminSession, getSessionCookie } = require('../middleware/requireAdminSession');
@@ -60,7 +61,7 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types`, (req, res) => {
   res.render('admin/website-types/index');
 });
 
-router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, async (req, res) => {
+router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM website_types WHERE id = $1', [req.params.id]);
   if (result.rowCount === 0) {
@@ -78,10 +79,14 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, async (req, res) => {
     websiteType: result.rows[0],
     categories: categoriesResult.rows
   });
-});
+}));
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/categories`, (req, res) => {
   res.render('admin/categories');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/faq`, (req, res) => {
+  res.render('admin/faq');
 });
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {

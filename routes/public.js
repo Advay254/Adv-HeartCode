@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const crypto = require('crypto');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
@@ -201,7 +202,7 @@ async function resolveChargeForCheckout(req, priceUsd) {
 // are listed — an inactive type's /build/:slug page 404s (see that route
 // below), so listing it in the sitemap would just be an invitation for a
 // crawler to index a dead end.
-router.get('/sitemap.xml', async (req, res) => {
+router.get('/sitemap.xml', asyncHandler(async (req, res) => {
   const rootUrl = `${req.protocol}://${req.get('host')}`;
   const pool = getPool();
   const result = await pool.query(
@@ -227,7 +228,7 @@ router.get('/sitemap.xml', async (req, res) => {
 
   res.set('Content-Type', 'application/xml');
   res.send(xml);
-});
+}));
 
 // Revised per Advay's explicit choice: the admin path is deliberately NOT
 // listed here (see middleware/adminSlug.js for where "keep it out of
@@ -259,7 +260,7 @@ router.get('/robots.txt', (req, res) => {
   res.send(lines.join('\n'));
 });
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const priceFor = await resolveVisitorPricing(req);
 
@@ -276,14 +277,42 @@ router.get('/', async (req, res) => {
   // existing site_settings values (already loaded onto res.locals by this
   // router's own middleware above) plus the request's own root URL — no
   // new admin input required for this to work out of the box.
+  //
+  // v1.1.6 Part D: Organization gains logo/description/sameAs/contactPoint,
+  // each ONLY included when the admin has actually set the underlying
+  // site_settings value — an unset optional field is omitted from the
+  // object entirely (never emitted as an empty string), so a fresh
+  // install's Organization entity is unchanged from before this version
+  // until an admin fills something in on the Site Settings page. logo
+  // prefers the new dedicated logo_url over og_image_url (kept as a
+  // fallback purely for continuity with any install that already set an
+  // OG image before logo_url existed) — see db/init.js's migration
+  // comment for why the two are deliberately separate fields, not one
+  // reused for both purposes.
   const rootUrl = `${req.protocol}://${req.get('host')}`;
+  const orgLogo = res.locals.siteSettings.logo_url || res.locals.siteSettings.og_image_url || '';
+  const sameAs = [
+    res.locals.siteSettings.social_twitter_url,
+    res.locals.siteSettings.social_facebook_url,
+    res.locals.siteSettings.social_instagram_url,
+    res.locals.siteSettings.social_linkedin_url
+  ].filter(Boolean);
   const structuredData = [
     {
       '@context': 'https://schema.org',
       '@type': 'Organization',
       name: res.locals.siteSettings.site_title,
       url: rootUrl,
-      ...(res.locals.siteSettings.og_image_url ? { logo: res.locals.siteSettings.og_image_url } : {})
+      ...(res.locals.siteSettings.meta_description ? { description: res.locals.siteSettings.meta_description } : {}),
+      ...(orgLogo ? { logo: orgLogo } : {}),
+      ...(sameAs.length > 0 ? { sameAs } : {}),
+      ...(res.locals.siteSettings.contact_email ? {
+        contactPoint: {
+          '@type': 'ContactPoint',
+          email: res.locals.siteSettings.contact_email,
+          contactType: 'customer support'
+        }
+      } : {})
     },
     {
       '@context': 'https://schema.org',
@@ -293,6 +322,34 @@ router.get('/', async (req, res) => {
       description: res.locals.siteSettings.meta_description
     }
   ];
+
+  // v1.1.6 Part D: FAQPage JSON-LD, built from the SAME query result the
+  // 'faq' landing section's partial renders from (faqEntries, passed to
+  // res.render below) — one shared source, so the structured data can
+  // never list a question the visible page doesn't, or vice versa.
+  // Entirely absent from `structuredData` (not emitted as an empty
+  // FAQPage) when there are zero active entries — Google's own guidance
+  // for FAQPage markup is that it should mirror visible on-page content,
+  // and there's nothing visible to mirror in that case (see
+  // views/partials/landing-sections/faq.ejs's own empty-state branch).
+  const faqEntriesResult = await pool.query(
+    'SELECT question, answer FROM faq_entries WHERE is_active = true ORDER BY display_order ASC, id ASC'
+  );
+  const faqEntries = faqEntriesResult.rows;
+  if (faqEntries.length > 0) {
+    structuredData.push({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqEntries.map(entry => ({
+        '@type': 'Question',
+        name: entry.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: entry.answer
+        }
+      }))
+    });
+  }
 
   // v1.1.5 Part B: the section formerly known as the fixed, non-CMS
   // "website type teaser" (hardcoded directly in this view since v1.1.3)
@@ -401,9 +458,10 @@ router.get('/', async (req, res) => {
     middleSections,
     footerSection,
     categoryTeaserCategories,
-    categoryTeaserFallbackTypes
+    categoryTeaserFallbackTypes,
+    faqEntries
   });
-});
+}));
 
 // v1.1.4 Part D: shared by GET /explore and GET /explore/:categorySlug so
 // both format a website_types row into the exact same shape the card
@@ -420,7 +478,7 @@ function formatExploreType(t, priceFor) {
   };
 }
 
-router.get('/explore', async (req, res) => {
+router.get('/explore', asyncHandler(async (req, res) => {
   const pool = getPool();
 
   // v1.1.4 Part D: categories are fetched regardless — the view itself
@@ -472,9 +530,9 @@ router.get('/explore', async (req, res) => {
     // filtered.
     websiteTypes: allTypes
   });
-});
+}));
 
-router.get('/explore/:categorySlug', async (req, res) => {
+router.get('/explore/:categorySlug', asyncHandler(async (req, res) => {
   const pool = getPool();
   const categoryResult = await pool.query(
     'SELECT * FROM website_categories WHERE slug = $1 AND is_active = true',
@@ -501,9 +559,9 @@ router.get('/explore/:categorySlug', async (req, res) => {
     category: { name: category.name, description: category.description, iconName: category.icon_name },
     websiteTypes: typesResult.rows.map(t => formatExploreType(t, priceFor))
   });
-});
+}));
 
-router.get('/build/:slug', async (req, res) => {
+router.get('/build/:slug', asyncHandler(async (req, res) => {
   const pool = getPool();
   const typeResult = await pool.query(
     'SELECT * FROM website_types WHERE slug = $1 AND is_active = true',
@@ -566,9 +624,9 @@ router.get('/build/:slug', async (req, res) => {
       dropdownOptions: f.dropdown_options
     }))
   });
-});
+}));
 
-router.get('/build/:slug/preview', async (req, res) => {
+router.get('/build/:slug/preview', asyncHandler(async (req, res) => {
   const pool = getPool();
   const typeResult = await pool.query(
     'SELECT * FROM website_types WHERE slug = $1 AND is_active = true',
@@ -586,9 +644,9 @@ router.get('/build/:slug/preview', async (req, res) => {
     pageTitle: `Preview — ${typeResult.rows[0].name}`,
     websiteType: { slug: typeResult.rows[0].slug, name: typeResult.rows[0].name }
   });
-});
+}));
 
-router.get('/build/:slug/checkout', async (req, res) => {
+router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
   const pool = getPool();
   const typeResult = await pool.query(
     'SELECT * FROM website_types WHERE slug = $1 AND is_active = true',
@@ -616,14 +674,14 @@ router.get('/build/:slug/checkout', async (req, res) => {
     pageTitle: `Checkout — ${t.name}`,
     websiteType: { id: t.id, slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) }
   });
-});
+}));
 
 // Checkout initiation: takes the already-generated site HTML, client
 // email, and an optional site password; stores a pending_deployments row;
 // asks Paystack to initialize a transaction; returns the URL to redirect
 // the browser to. Nothing is deployed yet — that only happens once
 // payment is confirmed, via the webhook or the callback page below.
-router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req, res) => {
+router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), asyncHandler(async (req, res) => {
   const ip = req.ip;
   if (!checkoutLimiter.tryConsume(ip)) {
     return res.status(429).json({ error: 'Too many checkout attempts, please try again later' });
@@ -739,14 +797,14 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), async (req,
   }
 
   res.json({ authorizationUrl: initData.data.authorization_url, reference });
-});
+}));
 
 // Paystack redirects the browser here after payment. finalizeDeployment()
 // is idempotent (see lib/finalizeDeployment.js) — this may be the FIRST
 // thing to finalize the deployment, or it may run after (or concurrently
 // with) the webhook already having done so; either way exactly one
 // deployment and one email happen, and this page just shows the result.
-router.get('/build/:slug/checkout/callback', async (req, res) => {
+router.get('/build/:slug/checkout/callback', asyncHandler(async (req, res) => {
   const reference = req.query.reference;
 
   if (!reference || typeof reference !== 'string') {
@@ -773,7 +831,7 @@ router.get('/build/:slug/checkout/callback', async (req, res) => {
   }
 
   res.render('public/checkout-callback', { pageTitle: 'Checkout result', outcome, siteUrl, reference, slug: req.params.slug });
-});
+}));
 
 // v1.1.2 Part C: resend site details, client self-service, no account
 // system needed. Rate limited per IP using an ADMIN-CONFIGURABLE daily cap
@@ -821,7 +879,7 @@ const resendDetailsBodySchema = z.object({
 const RESEND_DETAILS_GENERIC_MESSAGE =
   "If that email matches a site we've deployed, we've sent the details to it — check your spam folder if it doesn't arrive shortly.";
 
-router.post('/api/resend-details', express.json({ limit: '10kb' }), async (req, res) => {
+router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler(async (req, res) => {
   if (!(await resendDetailsLimiter.tryConsume(req.ip))) {
     return res.status(429).json({
       error: "You've reached today's check limit — try again tomorrow."
@@ -870,6 +928,6 @@ router.post('/api/resend-details', express.json({ limit: '10kb' }), async (req, 
   }
 
   res.status(200).json({ message: RESEND_DETAILS_GENERIC_MESSAGE });
-});
+}));
 
 module.exports = router;

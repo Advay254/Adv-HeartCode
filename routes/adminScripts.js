@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -34,7 +35,7 @@ function formatScript(row) {
   };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM site_scripts ORDER BY placement ASC, id ASC');
 
@@ -43,9 +44,9 @@ router.get('/', async (req, res) => {
     grouped[row.placement].push(formatScript(row));
   }
   res.json(grouped);
-});
+}));
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid script data' });
@@ -92,9 +93,9 @@ router.post('/', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.put('/:id', requireCsrf, async (req, res) => {
+router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   if (!idParsed.success) {
     return res.status(400).json({ error: 'Invalid script id' });
@@ -125,9 +126,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
 
   await refreshSiteScriptsCache();
   res.json(formatScript(result.rows[0]));
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
   if (!idParsed.success) {
     return res.status(400).json({ error: 'Invalid script id' });
@@ -141,6 +142,6 @@ router.delete('/:id', requireCsrf, async (req, res) => {
 
   await refreshSiteScriptsCache();
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

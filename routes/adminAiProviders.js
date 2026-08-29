@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
@@ -69,7 +70,7 @@ function serializeProvider(row, keys) {
   };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const providers = await pool.query('SELECT * FROM ai_providers ORDER BY created_at ASC');
   const keys = await pool.query('SELECT * FROM ai_provider_keys ORDER BY provider_id ASC, priority ASC');
@@ -81,9 +82,9 @@ router.get('/', async (req, res) => {
   }
 
   res.json(providers.rows.map(p => serializeProvider(p, keysByProvider[p.id])));
-});
+}));
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createProviderSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'label and a valid baseUrl are required' });
@@ -96,9 +97,9 @@ router.post('/', requireCsrf, async (req, res) => {
     [label, baseUrl]
   );
   res.status(201).json(serializeProvider(result.rows[0], []));
-});
+}));
 
-router.post('/:id/keys', requireCsrf, async (req, res) => {
+router.post('/:id/keys', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -122,9 +123,9 @@ router.post('/:id/keys', requireCsrf, async (req, res) => {
     [providerId, encrypted, priority]
   );
   res.status(201).json(maskKeyRow(result.rows[0]));
-});
+}));
 
-router.delete('/:id/keys/:keyId', requireCsrf, async (req, res) => {
+router.delete('/:id/keys/:keyId', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = keyIdParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid provider or key id' });
@@ -140,9 +141,9 @@ router.delete('/:id/keys/:keyId', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Key not found' });
   }
   res.json({ success: true });
-});
+}));
 
-router.post('/:id/fetch-models', requireCsrf, async (req, res) => {
+router.post('/:id/fetch-models', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -198,9 +199,9 @@ router.post('/:id/fetch-models', requireCsrf, async (req, res) => {
   }
 
   res.status(502).json({ error: 'All keys failed to fetch models', details: errors });
-});
+}));
 
-router.put('/:id', requireCsrf, async (req, res) => {
+router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -247,9 +248,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -262,6 +263,6 @@ router.delete('/:id', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Provider not found' });
   }
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

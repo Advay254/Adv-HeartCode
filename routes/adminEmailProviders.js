@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
@@ -118,13 +119,13 @@ function serializeProvider(row) {
   };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM email_providers ORDER BY created_at ASC');
   res.json(result.rows.map(serializeProvider));
-});
+}));
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createProviderSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid request body', details: parsed.error.issues });
@@ -155,9 +156,9 @@ router.post('/', requireCsrf, async (req, res) => {
     [data.providerType, data.label, JSON.stringify(config)]
   );
   res.status(201).json(serializeProvider(result.rows[0]));
-});
+}));
 
-router.put('/:id', requireCsrf, async (req, res) => {
+router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -228,9 +229,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -241,13 +242,13 @@ router.delete('/:id', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Provider not found' });
   }
   res.json({ success: true });
-});
+}));
 
 // v1.1.1 Part C: sends a real test email through THIS SPECIFIC provider
 // (not necessarily the active one) before the admin commits to activating
 // it — a misconfigured SMTP provider silently failing is a much worse
 // discovery moment during a real client deployment than during setup.
-router.post('/:id/test', requireCsrf, async (req, res) => {
+router.post('/:id/test', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid provider id' });
@@ -284,6 +285,6 @@ router.post('/:id/test', requireCsrf, async (req, res) => {
     console.error(`[EMAIL-PROVIDERS] Test send failed for provider #${providerId}:`, err.message);
     res.status(502).json({ success: false, error: err.message });
   }
-});
+}));
 
 module.exports = router;

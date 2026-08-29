@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -44,7 +45,12 @@ const rollbackParamsSchema = z.object({
 
 const createTypeSchema = z.object({
   name: z.string().trim().min(1).max(200),
-  description: z.string().max(2000).optional(),
+  // v1.1.6 Part E: lowered from 2000 -> 140. Same card-layout-consistency
+  // reasoning as routes/adminCategories.js's own createCategorySchema
+  // (see that file's comment) -- a website type's description renders in
+  // the exact same kind of fixed-size /explore card, now with the same
+  // line-clamp-2 safety net for anything already saved longer than this.
+  description: z.string().max(140).optional(),
   // v1.0.6: priceKes -> priceUsd. This is now the ONLY price field the
   // application reads or writes — website_types.price_kes is left in the
   // schema (unused) purely for backward compatibility with pre-1.0.6 rows.
@@ -67,7 +73,8 @@ const createTypeSchema = z.object({
 
 const updateTypeSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
-  description: z.string().max(2000).optional(),
+  // v1.1.6 Part E: see createTypeSchema's comment above.
+  description: z.string().max(140).optional(),
   isActive: z.boolean().optional(),
   priceUsd: z.coerce.number().min(0).optional(),
   displayOrder: z.coerce.number().int().optional(),
@@ -177,7 +184,7 @@ function formatOutputField(f) {
 
 // ---- website types ----
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const types = await pool.query('SELECT * FROM website_types ORDER BY display_order ASC, id ASC');
 
@@ -210,9 +217,9 @@ router.get('/', async (req, res) => {
   }
 
   res.json(results);
-});
+}));
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createTypeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'name is required' });
@@ -259,9 +266,9 @@ router.post('/', requireCsrf, async (req, res) => {
     fieldCount: 0,
     activeTemplateVersion: null
   });
-});
+}));
 
-router.put('/:id', requireCsrf, async (req, res) => {
+router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -358,9 +365,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
     seoDescription: t.seo_description,
     categoryId: t.category_id
   });
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -375,11 +382,11 @@ router.delete('/:id', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Website type not found' });
   }
   res.json({ success: true });
-});
+}));
 
 // ---- fields ----
 
-router.get('/:id/fields', async (req, res) => {
+router.get('/:id/fields', asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -392,9 +399,9 @@ router.get('/:id/fields', async (req, res) => {
     [id]
   );
   res.json(result.rows.map(formatField));
-});
+}));
 
-router.post('/:id/fields', requireCsrf, async (req, res) => {
+router.post('/:id/fields', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -454,7 +461,7 @@ router.post('/:id/fields', requireCsrf, async (req, res) => {
     ]
   );
   res.status(201).json(formatField(result.rows[0]));
-});
+}));
 
 // v1.1.4 Part A: registered BEFORE PUT /:id/fields/:fieldId deliberately —
 // Express matches routes in registration order, and a plain `:fieldId`
@@ -466,7 +473,7 @@ router.post('/:id/fields', requireCsrf, async (req, res) => {
 // real running server, not just by reasoning about it — the first
 // version of this endpoint (with routes in the other order) returned
 // a fieldId-not-found-shaped error instead of ever running this handler.
-router.put('/:id/fields/reorder', requireCsrf, async (req, res) => {
+router.put('/:id/fields/reorder', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -527,9 +534,9 @@ router.put('/:id/fields/reorder', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
+router.put('/:id/fields/:fieldId', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = fieldIdParamsSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type or field id' });
@@ -598,9 +605,9 @@ router.put('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
     [next.field_key, next.field_label, next.field_type, next.placeholder_text, next.is_required, next.dropdown_options, next.display_order, fieldId]
   );
   res.json({ ...formatField(result.rows[0]), keyChanged: nextKey !== current.field_key, oldFieldKey: current.field_key });
-});
+}));
 
-router.delete('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
+router.delete('/:id/fields/:fieldId', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = fieldIdParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type or field id' });
@@ -616,11 +623,11 @@ router.delete('/:id/fields/:fieldId', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Field not found' });
   }
   res.json({ success: true });
-});
+}));
 
 // ---- templates ----
 
-router.get('/:id/template', async (req, res) => {
+router.get('/:id/template', asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -645,9 +652,9 @@ router.get('/:id/template', async (req, res) => {
       : null,
     history: history.rows.map(h => ({ version: h.version, createdAt: h.created_at }))
   });
-});
+}));
 
-router.put('/:id/template', requireCsrf, async (req, res) => {
+router.put('/:id/template', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -793,9 +800,9 @@ router.put('/:id/template', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.post('/:id/template/rollback/:version', requireCsrf, async (req, res) => {
+router.post('/:id/template/rollback/:version', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = rollbackParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id or version' });
@@ -834,7 +841,7 @@ router.post('/:id/template/rollback/:version', requireCsrf, async (req, res) => 
   } finally {
     client.release();
   }
-});
+}));
 
 // ---- email templates (v1.0.9 Part A) ----
 //
@@ -860,7 +867,7 @@ const emailTemplateSchema = z.object({
   htmlBody: z.string().min(1).max(5000000)
 });
 
-router.get('/:id/email-template', async (req, res) => {
+router.get('/:id/email-template', asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -883,9 +890,9 @@ router.get('/:id/email-template', async (req, res) => {
       : null,
     history: history.rows.map(h => ({ version: h.version, createdAt: h.created_at }))
   });
-});
+}));
 
-router.put('/:id/email-template', requireCsrf, async (req, res) => {
+router.put('/:id/email-template', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -1002,9 +1009,9 @@ router.put('/:id/email-template', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.post('/:id/email-template/rollback/:version', requireCsrf, async (req, res) => {
+router.post('/:id/email-template/rollback/:version', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = rollbackParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id or version' });
@@ -1041,7 +1048,7 @@ router.post('/:id/email-template/rollback/:version', requireCsrf, async (req, re
   } finally {
     client.release();
   }
-});
+}));
 
 // ---- password page templates (v1.1.4 Part C) ----
 //
@@ -1065,7 +1072,7 @@ const passwordPageSchema = z.object({
   htmlContent: z.string().min(1).max(5000000)
 });
 
-router.get('/:id/password-page', async (req, res) => {
+router.get('/:id/password-page', asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -1088,9 +1095,9 @@ router.get('/:id/password-page', async (req, res) => {
       : null,
     history: history.rows.map(h => ({ version: h.version, createdAt: h.created_at }))
   });
-});
+}));
 
-router.put('/:id/password-page', requireCsrf, async (req, res) => {
+router.put('/:id/password-page', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -1166,9 +1173,9 @@ router.put('/:id/password-page', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
-router.post('/:id/password-page/rollback/:version', requireCsrf, async (req, res) => {
+router.post('/:id/password-page/rollback/:version', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = rollbackParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id or version' });
@@ -1205,7 +1212,7 @@ router.post('/:id/password-page/rollback/:version', requireCsrf, async (req, res
   } finally {
     client.release();
   }
-});
+}));
 
 // ---- AI config (v1.0.6) ----
 //
@@ -1249,7 +1256,7 @@ const updateOutputFieldSchema = z.object({
   displayOrder: z.coerce.number().int().optional()
 });
 
-router.get('/:id/ai', async (req, res) => {
+router.get('/:id/ai', asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -1277,9 +1284,9 @@ router.get('/:id/ai', async (req, res) => {
     aiUserPromptTemplate: t.ai_user_prompt_template,
     outputFields: outputFieldsResult.rows.map(formatOutputField)
   });
-});
+}));
 
-router.put('/:id/ai', requireCsrf, async (req, res) => {
+router.put('/:id/ai', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -1315,9 +1322,9 @@ router.put('/:id/ai', requireCsrf, async (req, res) => {
     aiSystemPrompt: t.ai_system_prompt,
     aiUserPromptTemplate: t.ai_user_prompt_template
   });
-});
+}));
 
-router.post('/:id/ai/output-fields', requireCsrf, async (req, res) => {
+router.post('/:id/ai/output-fields', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type id' });
@@ -1368,9 +1375,9 @@ router.post('/:id/ai/output-fields', requireCsrf, async (req, res) => {
     ]
   );
   res.status(201).json(formatOutputField(result.rows[0]));
-});
+}));
 
-router.put('/:id/ai/output-fields/:fieldId', requireCsrf, async (req, res) => {
+router.put('/:id/ai/output-fields/:fieldId', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = fieldIdParamsSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid website type or output field id' });
@@ -1411,9 +1418,9 @@ router.put('/:id/ai/output-fields/:fieldId', requireCsrf, async (req, res) => {
     [next.output_type, next.description, next.object_shape, next.display_order, fieldId]
   );
   res.json(formatOutputField(result.rows[0]));
-});
+}));
 
-router.delete('/:id/ai/output-fields/:fieldId', requireCsrf, async (req, res) => {
+router.delete('/:id/ai/output-fields/:fieldId', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = fieldIdParamsSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid website type or output field id' });
@@ -1429,6 +1436,6 @@ router.delete('/:id/ai/output-fields/:fieldId', requireCsrf, async (req, res) =>
     return res.status(404).json({ error: 'Output field not found' });
   }
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

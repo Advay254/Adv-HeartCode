@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -13,7 +14,7 @@ router.use(requireAdminSession);
 // getLandingSections() cache, which only ever returns active rows. No
 // caching here either: this is a low-traffic, admin-only, always-fresh
 // read, same reasoning as routes/adminLanding.js's own GET handlers.
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM landing_sections ORDER BY display_order ASC, id ASC');
   res.json({
@@ -21,14 +22,14 @@ router.get('/', async (req, res) => {
     sectionTypes: SECTION_TYPES,
     defaultContent: DEFAULT_CONTENT
   });
-});
+}));
 
 const createSchema = z.object({
   sectionType: z.enum(SECTION_TYPES),
   content: z.record(z.string(), z.unknown()).optional()
 });
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid section_type' });
@@ -55,11 +56,11 @@ router.post('/', requireCsrf, async (req, res) => {
   );
   await refreshLandingSectionsCache();
   res.status(201).json(formatSection(result.rows[0]));
-});
+}));
 
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
 
-router.put('/:id/content', requireCsrf, async (req, res) => {
+router.put('/:id/content', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = idSchema.safeParse(req.params);
   if (!idParsed.success) return res.status(400).json({ error: 'Invalid section id' });
 
@@ -84,11 +85,11 @@ router.put('/:id/content', requireCsrf, async (req, res) => {
   );
   await refreshLandingSectionsCache();
   res.json(formatSection(result.rows[0]));
-});
+}));
 
 const activeSchema = z.object({ isActive: z.boolean() });
 
-router.put('/:id/active', requireCsrf, async (req, res) => {
+router.put('/:id/active', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = idSchema.safeParse(req.params);
   const bodyParsed = activeSchema.safeParse(req.body);
   if (!idParsed.success || !bodyParsed.success) return res.status(400).json({ error: 'Invalid request' });
@@ -101,9 +102,9 @@ router.put('/:id/active', requireCsrf, async (req, res) => {
   if (result.rowCount === 0) return res.status(404).json({ error: 'Section not found' });
   await refreshLandingSectionsCache();
   res.json(formatSection(result.rows[0]));
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = idSchema.safeParse(req.params);
   if (!idParsed.success) return res.status(400).json({ error: 'Invalid section id' });
   const pool = getPool();
@@ -111,7 +112,7 @@ router.delete('/:id', requireCsrf, async (req, res) => {
   if (result.rowCount === 0) return res.status(404).json({ error: 'Section not found' });
   await refreshLandingSectionsCache();
   res.json({ success: true });
-});
+}));
 
 // Swaps this row's display_order with its immediate neighbor — identical
 // mechanism (and identical reasoning) to routes/adminLanding.js's
@@ -154,7 +155,7 @@ async function moveSection(pool, id, direction) {
 
 const moveSchema = z.object({ direction: z.enum(['up', 'down']) });
 
-router.put('/:id/move', requireCsrf, async (req, res) => {
+router.put('/:id/move', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = idSchema.safeParse(req.params);
   const bodyParsed = moveSchema.safeParse(req.body);
   if (!idParsed.success || !bodyParsed.success) return res.status(400).json({ error: 'Invalid request' });
@@ -164,6 +165,6 @@ router.put('/:id/move', requireCsrf, async (req, res) => {
   if (result.error === 'no_neighbor') return res.status(200).json({ success: true }); // already at the end — no-op, not an error
   await refreshLandingSectionsCache();
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

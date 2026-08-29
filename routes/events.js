@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { createRateLimiter } = require('../lib/rateLimit');
@@ -44,7 +45,7 @@ const eventLimiter = createRateLimiter({ max: 60, windowMs: 60 * 60 * 1000 });
 // this or feel slower because of it. That cuts both ways here too — this
 // route does the minimum necessary work and returns 204 with no body,
 // rather than anything a beacon-style caller would never read anyway.
-router.post('/', express.json(), async (req, res) => {
+router.post('/', express.json(), asyncHandler(async (req, res) => {
   if (!eventLimiter.tryConsume(req.ip)) {
     return res.status(429).end();
   }
@@ -75,6 +76,6 @@ router.post('/', express.json(), async (req, res) => {
   }
 
   res.status(204).end();
-});
+}));
 
 module.exports = router;

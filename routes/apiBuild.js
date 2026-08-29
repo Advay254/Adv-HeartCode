@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { getActiveProviderConfig } = require('../lib/ai-provider');
@@ -178,7 +179,7 @@ function validateAiOutput(parsed, outputFields) {
   return true;
 }
 
-router.post('/:slug/generate', express.json(), async (req, res) => {
+router.post('/:slug/generate', express.json(), asyncHandler(async (req, res) => {
   const ip = req.ip;
   const pool = getPool();
 
@@ -442,6 +443,6 @@ ${JSON.stringify(outputSchema)}`;
   // the client carries it through checkout the same way raw_field_values
   // already does (v1.0.8). See public/site.js and routes/public.js.
   res.json({ html, aiOutputValues: parsedOutput });
-});
+}));
 
 module.exports = router;

@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -16,19 +17,19 @@ router.use(requireAdminSession);
 // doesn't know about; each setting this app actually reads gets its own
 // narrow, validated route instead.
 
-router.get('/kenyan-payment-currency', async (req, res) => {
+router.get('/kenyan-payment-currency', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query(
     "SELECT value FROM site_settings WHERE key = 'kenyan_payment_currency'"
   );
   res.json({ value: result.rowCount > 0 ? result.rows[0].value : 'USD' });
-});
+}));
 
 const updateKenyanCurrencySchema = z.object({
   value: z.enum(['USD', 'KES'])
 });
 
-router.put('/kenyan-payment-currency', requireCsrf, async (req, res) => {
+router.put('/kenyan-payment-currency', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = updateKenyanCurrencySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'value must be "USD" or "KES"' });
@@ -41,7 +42,7 @@ router.put('/kenyan-payment-currency', requireCsrf, async (req, res) => {
     [parsed.data.value]
   );
   res.json({ value: parsed.data.value });
-});
+}));
 
 // v1.1.2 Part C: admin-configurable daily-per-IP cap on the public
 // resend-details lookup (routes/public.js's POST /api/resend-details) —
@@ -52,15 +53,15 @@ const updateResendDetailsRateLimitSchema = z.object({
   value: z.coerce.number().int().min(1).max(1000)
 });
 
-router.get('/resend-details-rate-limit', async (req, res) => {
+router.get('/resend-details-rate-limit', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query(
     "SELECT value FROM site_settings WHERE key = 'resend_details_rate_limit_per_day'"
   );
   res.json({ value: result.rowCount > 0 ? result.rows[0].value : '1' });
-});
+}));
 
-router.put('/resend-details-rate-limit', requireCsrf, async (req, res) => {
+router.put('/resend-details-rate-limit', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = updateResendDetailsRateLimitSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'value must be a whole number between 1 and 1000' });
@@ -73,7 +74,7 @@ router.put('/resend-details-rate-limit', requireCsrf, async (req, res) => {
     [String(parsed.data.value)]
   );
   res.json({ value: parsed.data.value });
-});
+}));
 
 // v1.1.1 Part D: lets Advay get REAL evidence of whether ip-api.com (and,
 // if that fails, the ipwho.is fallback added this version) is actually
@@ -96,7 +97,7 @@ const geoDiagnosticQuerySchema = z.object({
   ip: z.string().trim().min(1).max(64).optional()
 });
 
-router.get('/geo-diagnostic', async (req, res) => {
+router.get('/geo-diagnostic', asyncHandler(async (req, res) => {
   const parsed = geoDiagnosticQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid ip query parameter' });
@@ -116,6 +117,6 @@ router.get('/geo-diagnostic', async (req, res) => {
     console.error('[ADMIN-SETTINGS] Geo diagnostic failed unexpectedly:', err.message);
     res.status(500).json({ error: 'Diagnostic failed to run', details: err.message });
   }
-});
+}));
 
 module.exports = router;

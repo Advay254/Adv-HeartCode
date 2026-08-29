@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -28,18 +29,35 @@ function formatCategory(c) {
 const createCategorySchema = z.object({
   name: z.string().trim().min(1).max(200),
   slug: z.string().trim().max(100).optional(),
-  description: z.string().max(1000).optional(),
+  // v1.1.6 Part E: lowered from 1000 -> 140. A category's description
+  // renders inside a fixed-size /explore card (views/public/explore.ejs)
+  // alongside a title, icon, and type-count line -- with no cap, a long
+  // description could make that one card's grid ROW taller than its
+  // siblings (CSS Grid stretches every item in a row to the tallest one).
+  // 140 characters is short enough to read as a one-line teaser at this
+  // card's width in the common case, and paired with the SAME cards'
+  // new line-clamp-2 (a display-only, non-destructive safety net for
+  // anything already saved longer than this before the limit existed —
+  // see explore.ejs/explore-category.ejs) so layout stays consistent
+  // either way. This only constrains NEW saves going forward -- an
+  // existing row already over 140 characters is untouched in the
+  // database by this change; it simply can't be re-saved without being
+  // shortened first (or with description omitted from the PUT body
+  // entirely, in which case updateCategorySchema below never even
+  // evaluates the existing value against this limit -- see current.description
+  // in the PUT handler below).
+  description: z.string().max(140).optional(),
   iconName: z.enum(CATEGORY_ICON_NAMES).optional()
 });
 
 const updateCategorySchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(140).optional(),
   iconName: z.enum(CATEGORY_ICON_NAMES).optional(),
   isActive: z.boolean().optional()
 });
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const categories = await pool.query('SELECT * FROM website_categories ORDER BY display_order ASC, id ASC');
 
@@ -55,9 +73,9 @@ router.get('/', async (req, res) => {
     results.push({ ...formatCategory(c), typeCount: Number(countResult.rows[0].count) });
   }
   res.json(results);
-});
+}));
 
-router.post('/', requireCsrf, async (req, res) => {
+router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = createCategorySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'name is required' });
@@ -84,9 +102,9 @@ router.post('/', requireCsrf, async (req, res) => {
     [name, baseSlug, description || '', iconName || DEFAULT_ICON_NAME, nextOrder]
   );
   res.status(201).json({ ...formatCategory(result.rows[0]), typeCount: 0 });
-});
+}));
 
-router.put('/:id', requireCsrf, async (req, res) => {
+router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const paramsParsed = idParamSchema.safeParse(req.params);
   if (!paramsParsed.success) {
     return res.status(400).json({ error: 'Invalid category id' });
@@ -119,9 +137,9 @@ router.put('/:id', requireCsrf, async (req, res) => {
   );
   const countResult = await pool.query('SELECT COUNT(*) FROM website_types WHERE category_id = $1', [id]);
   res.json({ ...formatCategory(result.rows[0]), typeCount: Number(countResult.rows[0].count) });
-});
+}));
 
-router.delete('/:id', requireCsrf, async (req, res) => {
+router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = idParamSchema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid category id' });
@@ -137,9 +155,9 @@ router.delete('/:id', requireCsrf, async (req, res) => {
     return res.status(404).json({ error: 'Category not found' });
   }
   res.json({ success: true });
-});
+}));
 
-router.put('/:id/move', requireCsrf, async (req, res) => {
+router.put('/:id/move', requireCsrf, asyncHandler(async (req, res) => {
   const idParsed = idParamSchema.safeParse(req.params);
   const bodyParsed = moveSchema.safeParse(req.body);
   if (!idParsed.success || !bodyParsed.success) {
@@ -154,6 +172,6 @@ router.put('/:id/move', requireCsrf, async (req, res) => {
     return res.status(200).json({ success: true }); // already at the end — no-op, not an error
   }
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

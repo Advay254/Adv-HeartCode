@@ -1,4 +1,5 @@
 const express = require('express');
+const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
@@ -46,7 +47,7 @@ function serialize(row) {
   };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM paystack_config WHERE id = 1');
 
@@ -62,14 +63,14 @@ router.get('/', async (req, res) => {
   }
 
   res.json(serialize(result.rows[0]));
-});
+}));
 
 // Convention for "leave this field alone" vs "clear it": a field that is
 // `null` or omitted from the request body means "don't change this value";
 // a field explicitly sent as an empty string "" means "clear it". This
 // lets the client save mode/public-key changes without being forced to
 // resend a secret key it never decrypted in the first place.
-router.put('/', requireCsrf, async (req, res) => {
+router.put('/', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = paystackUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid request body', details: parsed.error.issues });
@@ -128,6 +129,6 @@ router.put('/', requireCsrf, async (req, res) => {
   } finally {
     client.release();
   }
-});
+}));
 
 module.exports = router;
