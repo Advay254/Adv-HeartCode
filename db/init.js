@@ -854,9 +854,79 @@ SELECT 'category_teaser', jsonb_build_object(
     'highlighted_word', 'whoever you are building this for'
   ), 2
 WHERE NOT EXISTS (SELECT 1 FROM landing_sections WHERE section_type = 'category_teaser');
+
+-- v1.1.6 Part D: FAQ CRUD + FAQPage/Organization structured data.
+--
+-- faq_entries is a real, independently-managed table -- NOT admin-authored
+-- JSON on a landing_sections row -- same "same list-management pattern
+-- used for Categories/Fields" reasoning website_categories got in v1.1.4:
+-- an admin manages the actual questions on their own dedicated page
+-- (routes/adminFaq.js), while the 'faq' landing_sections row (seeded
+-- below) only carries the heading/eyebrow copy around them. See
+-- lib/landingSectionTypes.js's faqSchema comment for the full reasoning.
+CREATE TABLE IF NOT EXISTS faq_entries (
+  id SERIAL PRIMARY KEY,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Same drop-and-recreate-every-boot pattern as v1.1.5's own widening of
+-- this exact constraint just above -- cheap, and a fresh DB gets the same
+-- constraint from SCHEMA above regardless, so this only ever does real
+-- work on a pre-1.1.6 database.
+ALTER TABLE landing_sections DROP CONSTRAINT IF EXISTS landing_sections_section_type_check;
+ALTER TABLE landing_sections ADD CONSTRAINT landing_sections_section_type_check
+  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq'));
+
+-- Deliberately NOT auto-seeded into landing_sections the way v1.1.5's
+-- category_teaser migration seeded itself into every install (that one
+-- was REPLACING a fixed section that already existed on every page;
+-- there is no prior FAQ section for this one to stand in for). A fresh
+-- FAQ section with zero faq_entries rows behind it would just render its
+-- "Nothing here yet" empty state on every existing site until an admin
+-- both adds it AND writes real questions -- shipping that automatically
+-- would put a half-finished-looking section on every live site the
+-- moment this migration runs. An admin who wants this section adds it
+-- themselves from the Landing Sections page (same "Add section" flow as
+-- any other type), once they've actually written some FAQ entries on the
+-- new FAQ admin page to back it.
+--
+-- Placement note (this version's own call, not spec-mandated): the
+-- "Add section" flow always appends a new section at the end of
+-- display_order (see routes/adminLandingSections.js's POST / handler) --
+-- meaning an admin adding this lands it directly above the footer by
+-- default, which is exactly where an FAQ block conventionally belongs
+-- (a last trust-building/objection-handling section right before someone
+-- either converts or leaves). No special-cased default display_order was
+-- needed to achieve that; it falls out of existing "add section" behavior
+-- for free.
+
+-- Organization structured data (see public-head.ejs's existing
+-- Organization entity, unchanged in shape since v1.1.2) gains a real logo
+-- field and optional contact/social links here -- reusing the exact same
+-- generic site_settings key-value table every other site-wide setting
+-- already lives in, same ON CONFLICT DO NOTHING seeding pattern as
+-- v1.0.7's own settings above. All default to '' (omitted from the
+-- rendered JSON-LD entirely when blank -- see routes/public.js) so
+-- nothing changes on any existing install until an admin actually fills
+-- one in. og_image_url (v1.0.7) is intentionally left as Open Graph's own
+-- field, not reused as the Organization logo -- the two serve visually
+-- different purposes (a social-share preview image vs. a small square
+-- brand mark) and an admin may reasonably want different images for each.
+INSERT INTO site_settings (key, value) VALUES
+  ('logo_url', ''),
+  ('contact_email', ''),
+  ('social_twitter_url', ''),
+  ('social_facebook_url', ''),
+  ('social_instagram_url', ''),
+  ('social_linkedin_url', '')
+ON CONFLICT (key) DO NOTHING;
 `;
 
-const CURRENT_VERSION = '1.1.5';
+const CURRENT_VERSION = '1.1.6';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
