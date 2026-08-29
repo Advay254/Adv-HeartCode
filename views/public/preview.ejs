@@ -8,22 +8,49 @@
 <div class="site-shell">
   <header class="site-header">
     <h1>Preview: <%= websiteType.name %></h1>
+    <p style="margin:0.25rem 0 0; font-size:0.85rem; color:#666;">
+      This is a fully interactive preview — buttons, links, and any animations in the site work normally. It's not a real deployment yet.
+    </p>
   </header>
   <main class="site-main">
-    <div class="preview-frame-wrap">
-      <!-- sandbox="allow-same-origin" only — no allow-scripts. This is a
-           passive visual preview of generated static markup; nothing here
-           needs to run script inside the frame, so it stays on the more
-           restrictive default rather than loosening it without a reason. -->
-      <iframe id="previewFrame" sandbox="allow-same-origin" title="Site preview"></iframe>
+    <div class="preview-frame-wrap" id="previewFrameWrap">
+      <!--
+        v1.1.5 Part A — sandbox is "allow-scripts allow-popups allow-forms",
+        deliberately WITHOUT "allow-same-origin":
+          - allow-scripts: lets the generated site's own JS actually run
+            (animations, interactive buttons, in-page nav) instead of the
+            previous fully static/inert render.
+          - allow-popups: lets a link with target="_blank" (see the new
+            external-link post-processing in lib/externalLinks.js) actually
+            open a new tab instead of being silently blocked.
+          - allow-forms: in case a pasted template has its own <form>
+            elements that submit/interact.
+        allow-same-origin is excluded ON PURPOSE, not an oversight — do
+        NOT add it back. Combining allow-scripts with allow-same-origin on
+        the SAME iframe is a documented browser sandbox-escape footgun:
+        together, they let the sandboxed document's script reach back into
+        the parent page's actual origin (this page, and everything it can
+        reach — including, if this were ever reused for an authenticated
+        surface, session cookies). Without allow-same-origin, the iframe's
+        document has an opaque, unique origin no matter what — its script
+        can run freely INSIDE itself, but has no way out. The one
+        real-feature cost: this parent page's own JS can no longer read or
+        reach into iframe.contentDocument (cross-origin now, by design) —
+        nothing in this preview flow ever needed to; see public/site.js's
+        initPreviewPage() for how the watermark/copy-protection additions
+        below work AROUND that constraint instead (injected into the
+        iframe's own HTML string before it's set, not reached into
+        afterward from outside).
+      -->
+      <iframe id="previewFrame" sandbox="allow-scripts allow-popups allow-forms" title="Site preview"></iframe>
     </div>
     <p style="margin-top:1rem;">
       <button type="button" id="backBtn" class="btn-secondary">Back</button>
+      <button type="button" id="fullscreenBtn" class="btn-secondary">View fullscreen</button>
       <a class="btn" href="/build/<%= websiteType.slug %>/checkout">Deploy this site</a>
     </p>
   </main>
 </div>
-<script src="/site.js" defer></script>
 <%- include('../partials/public-footer-scripts') %>
 </body>
 </html>
