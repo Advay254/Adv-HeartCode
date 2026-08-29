@@ -810,9 +810,53 @@ CREATE TABLE IF NOT EXISTS website_categories (
 );
 
 ALTER TABLE website_types ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES website_categories(id) ON DELETE SET NULL;
+
+-- v1.1.5 Part B: widened to allow the new 'category_teaser' section type
+-- (replaces the old fixed, non-CMS website-type-teaser section — see
+-- lib/landingSectionTypes.js's comment on categoryTeaserSchema). Same
+-- drop-and-recreate-every-boot pattern already established for
+-- template_fields.field_type in v1.0.8 — cheap, and simpler than
+-- tracking whether the constraint definition already matches; a fresh DB
+-- gets the same constraint from SCHEMA above anyway, so this is only
+-- ever doing real work on a pre-1.1.5 database.
+ALTER TABLE landing_sections DROP CONSTRAINT IF EXISTS landing_sections_section_type_check;
+ALTER TABLE landing_sections ADD CONSTRAINT landing_sections_section_type_check
+  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser'));
+
+-- v1.1.5 Part B: seeds the new category_teaser row with corrected copy
+-- (no "business" wording — see this version's delivery notes) into an
+-- ALREADY-populated landing_sections table, unlike the v1.1.3 seed block
+-- above (which only ever fires once, on a truly empty table). Guarded on
+-- the section_type itself existing yet, not on the table being empty, so
+-- this correctly fires exactly once whether hit on a fresh install
+-- (moments after the v1.1.3 seed just populated the table earlier in
+-- this same migration run) or on an existing install upgrading from
+-- v1.1.4.
+--
+-- The UPDATE shifts every existing row at display_order 2 or higher
+-- (EXCLUDING the footer's fixed 99, which always renders in its own
+-- guaranteed slot regardless of display_order — see
+-- views/public/landing.ejs) up by one BEFORE the INSERT claims order 2 —
+-- so on an upgrading install this section lands in the exact same visual
+-- position the old fixed teaser occupied (directly after hero, before
+-- feature_cards), not appended to the end where an admin would have to
+-- notice and manually reorder it. Both statements share the identical
+-- guard condition so they either both fire (first time) or both no-op
+-- (every time after).
+UPDATE landing_sections SET display_order = display_order + 1
+WHERE display_order >= 2 AND display_order < 99
+  AND NOT EXISTS (SELECT 1 FROM landing_sections WHERE section_type = 'category_teaser');
+
+INSERT INTO landing_sections (section_type, content, display_order)
+SELECT 'category_teaser', jsonb_build_object(
+    'eyebrow_text', 'Website categories',
+    'heading', 'Built for whoever you are building this for',
+    'highlighted_word', 'whoever you are building this for'
+  ), 2
+WHERE NOT EXISTS (SELECT 1 FROM landing_sections WHERE section_type = 'category_teaser');
 `;
 
-const CURRENT_VERSION = '1.1.4';
+const CURRENT_VERSION = '1.1.5';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
