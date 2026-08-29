@@ -25,6 +25,48 @@
     return div.innerHTML;
   }
 
+  // ---- card description character counter (v1.1.6 Part E) ----
+  // Same 140-character ceiling as the server-side zod schemas in
+  // routes/adminCategories.js and routes/adminWebsiteTypes.js — chosen to
+  // keep a description card-height-consistent on /explore's grids (see
+  // those cards' own line-clamp-2, added this same version) without
+  // relying on truncation to hide an overly long one. This constant isn't
+  // actually IMPORTED by the server (there's no shared build step between
+  // this static file and the Express routes), so it's duplicated by
+  // value, not by reference — if this number ever changes, it must be
+  // changed in all four places (this constant, both website-types
+  // schemas, and the categories schema) — same acknowledged, precedented
+  // duplication as e.g. lib/cloudflarePages.js's MAX_SEED_LENGTH existing
+  // independently of anything else.
+  const CARD_DESCRIPTION_MAX_LENGTH = 140;
+
+  // Attaches a live "N / 140 characters" counter directly after
+  // `textareaEl`, turning red past the limit. Safe to call more than once
+  // on the same element (e.g. a dynamically-recreated edit row) — reuses
+  // an existing counter it already inserted rather than stacking a second
+  // one, detected via the `data-char-counter-for` marker rather than
+  // nextElementSibling (which would break the moment any OTHER element,
+  // like a validation message, is ever inserted between the two).
+  function attachCharCounter(textareaEl, maxLen) {
+    if (!textareaEl) return;
+    maxLen = maxLen || CARD_DESCRIPTION_MAX_LENGTH;
+    let counter = textareaEl.parentElement.querySelector(`[data-char-counter-for="${textareaEl.id}"]`);
+    if (!counter) {
+      counter = document.createElement('p');
+      counter.className = 'mt-1 text-xs text-slate-400';
+      counter.dataset.charCounterFor = textareaEl.id;
+      textareaEl.insertAdjacentElement('afterend', counter);
+    }
+    function update() {
+      const len = textareaEl.value.length;
+      counter.textContent = `${len} / ${maxLen} characters`;
+      counter.classList.toggle('text-red-500', len > maxLen);
+      counter.classList.toggle('text-slate-400', len <= maxLen);
+    }
+    textareaEl.addEventListener('input', update);
+    update();
+  }
+
   // ---- shared nav/logout, present on every dashboard page ----
   // v1.0.8 Part D: sidebar is a fixed column on desktop (lg:) and an
   // off-canvas drawer on mobile, toggled via the topbar hamburger button,
@@ -751,6 +793,7 @@
   // ---- website types: list page ----
   function initWebsiteTypesIndexPage() {
     const slug = document.body.dataset.slug;
+    attachCharCounter(document.getElementById('typeDescription'));
 
     async function load() {
       const res = await window.adminFetch('/api/admin/website-types');
@@ -808,6 +851,7 @@
     const typeId = document.body.dataset.typeId;
     let currentFields = [];
     let currentOutputFields = [];
+    attachCharCounter(document.getElementById('detailsDescription'));
 
     function placeholderTokenForField(f) {
       return `{{${f.fieldKey}}}`;
@@ -1764,7 +1808,14 @@
           site_title: form.site_title.value,
           meta_description: form.meta_description.value,
           favicon_url: form.favicon_url.value,
-          og_image_url: form.og_image_url.value
+          og_image_url: form.og_image_url.value,
+          // v1.1.6 Part D
+          logo_url: form.logo_url.value,
+          contact_email: form.contact_email.value,
+          social_twitter_url: form.social_twitter_url.value,
+          social_facebook_url: form.social_facebook_url.value,
+          social_instagram_url: form.social_instagram_url.value,
+          social_linkedin_url: form.social_linkedin_url.value
         })
       });
       const statusEl = document.getElementById('siteSettingsStatus');
@@ -2024,6 +2075,7 @@
       if (section.sectionType === 'testimonials') return `${c.heading || ''} — ${(c.items || []).length} testimonial(s)`;
       if (section.sectionType === 'footer') return `${(c.link_columns || []).length} link column(s)`;
       if (section.sectionType === 'category_teaser') return c.heading || '';
+      if (section.sectionType === 'faq') return c.heading || '';
       return '';
     }
 
@@ -2066,6 +2118,28 @@
         </p>`;
     }
     function collectCategoryTeaserForm(panel) {
+      return {
+        eyebrow_text: readField(panel, 'eyebrow_text'),
+        heading: readField(panel, 'heading'),
+        highlighted_word: readField(panel, 'highlighted_word')
+      };
+    }
+
+    // ---- faq (v1.1.6 Part D) ----
+    // Same shape as category_teaser above, for the same reason: the
+    // actual questions live on their own dedicated FAQ admin page (see
+    // lib/landingSectionTypes.js's faqSchema comment), so this form is
+    // just the copy around them.
+    function renderFaqForm(c) {
+      return `
+        ${textField('Eyebrow text (optional)', 'eyebrow_text', c.eyebrow_text)}
+        ${textField('Heading', 'heading', c.heading)}
+        ${textField('Highlighted word (must match a word/phrase in the heading exactly)', 'highlighted_word', c.highlighted_word)}
+        <p class="mt-2 text-xs text-slate-500">
+          The questions themselves are managed on the <a href="/${config.adminSlug || ''}/faq" class="text-hc-blue">FAQ page</a>, not here.
+        </p>`;
+    }
+    function collectFaqForm(panel) {
       return {
         eyebrow_text: readField(panel, 'eyebrow_text'),
         heading: readField(panel, 'heading'),
@@ -2306,7 +2380,8 @@
       bullet_list: { render: renderBulletListForm, collect: collectBulletListForm },
       testimonials: { render: renderTestimonialsForm, collect: collectTestimonialsForm },
       footer: { render: renderFooterForm, collect: collectFooterForm },
-      category_teaser: { render: renderCategoryTeaserForm, collect: collectCategoryTeaserForm }
+      category_teaser: { render: renderCategoryTeaserForm, collect: collectCategoryTeaserForm },
+      faq: { render: renderFaqForm, collect: collectFaqForm }
     };
 
     // Wires whichever single top-level array field a section's form has
@@ -2511,13 +2586,14 @@
         <label class="admin-label">Name</label>
         <input class="admin-input" type="text" data-field="name" value="${escapeHtml(category.name)}">
         <label class="admin-label">Description</label>
-        <textarea class="admin-textarea" data-field="description">${escapeHtml(category.description || '')}</textarea>
+        <textarea class="admin-textarea" id="editCategoryDescription-${id}" data-field="description">${escapeHtml(category.description || '')}</textarea>
         <label class="admin-label">Icon</label>
         <select class="admin-select" data-field="iconName"></select>
         <div class="mt-2 flex gap-2">
           <button type="button" class="admin-btn admin-btn-sm save-edit">Save changes</button>
           <button type="button" class="admin-btn-outline admin-btn-sm cancel-edit">Cancel</button>
         </div>`;
+      attachCharCounter(row.querySelector('[data-field="description"]'));
       const iconSelect = row.querySelector('[data-field="iconName"]');
       window.HC_CATEGORY_ICON_NAMES.forEach(name => {
         const opt = document.createElement('option');
@@ -2595,6 +2671,142 @@
     // from that already-rendered <select> rather than duplicating
     // lib/icons.js's CATEGORY_ICON_NAMES list a third time in JS.
     window.HC_CATEGORY_ICON_NAMES = Array.from(document.getElementById('categoryIconName').options).map(o => o.value);
+    attachCharCounter(document.getElementById('categoryDescription'));
+
+    load();
+  }
+
+  // ---- FAQ page (v1.1.6 Part D) ----
+  // Deliberately structured identically to initCategoriesPage() just
+  // above -- same "same list-management pattern used for Categories/
+  // Fields" reasoning as routes/adminFaq.js itself. Simpler than
+  // categories in a few ways that fall directly out of the schema having
+  // no slug and no icon: no dedicated icon-picker wiring, and the confirm
+  // dialog needs no "children are uncategorized, not deleted" caveat
+  // (deleting an FAQ entry has no downstream row anywhere else to worry
+  // about).
+  function initFaqPage() {
+    function render(entries) {
+      const list = document.getElementById('faqList');
+      list.innerHTML = entries.map((f, i) => `
+        <div class="admin-card" data-id="${f.id}">
+          <div class="flex flex-wrap items-start gap-3">
+            <div class="flex shrink-0 flex-col gap-1">
+              <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${f.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${f.id}" ${i === entries.length - 1 ? 'disabled' : ''}>↓</button>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-sm text-hc-ink">${escapeHtml(f.question)}</strong>
+                <span class="admin-badge ${f.isActive ? 'admin-badge-active' : ''}">${f.isActive ? 'active' : 'inactive'}</span>
+              </div>
+              <p class="mt-1 text-sm text-hc-ink/60">${escapeHtml(f.answer)}</p>
+              <div id="editRow-${f.id}" style="display:none;" class="mt-3"></div>
+            </div>
+            <div class="flex shrink-0 flex-wrap gap-2">
+              <button type="button" class="admin-btn-outline admin-btn-sm edit-faq" data-id="${f.id}">Edit</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm toggle-faq" data-id="${f.id}" data-active="${f.isActive}">${f.isActive ? 'Deactivate' : 'Activate'}</button>
+              <button type="button" class="admin-btn-danger admin-btn-sm remove-faq" data-id="${f.id}">Remove</button>
+            </div>
+          </div>
+        </div>`).join('') || '<p class="text-sm text-slate-400">No FAQ entries yet.</p>';
+
+      list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'up')));
+      list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'down')));
+      list.querySelectorAll('.toggle-faq').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const isActive = btn.dataset.active === 'true';
+          const res = await window.adminFetch(`/api/admin/faq/${btn.dataset.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: !isActive })
+          });
+          if (res.ok) load();
+        });
+      });
+      list.querySelectorAll('.remove-faq').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this FAQ entry? This cannot be undone.')) return;
+          const res = await window.adminFetch(`/api/admin/faq/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+      list.querySelectorAll('.edit-faq').forEach(btn => {
+        btn.addEventListener('click', () => openEditRow(btn.dataset.id, entries));
+      });
+    }
+
+    function openEditRow(id, entries) {
+      const entry = entries.find(f => String(f.id) === String(id));
+      if (!entry) return;
+      const row = document.getElementById(`editRow-${id}`);
+      row.style.display = 'block';
+      row.innerHTML = `
+        <label class="admin-label">Question</label>
+        <input class="admin-input" type="text" data-field="question" value="${escapeHtml(entry.question)}">
+        <label class="admin-label">Answer</label>
+        <textarea class="admin-textarea" data-field="answer">${escapeHtml(entry.answer)}</textarea>
+        <div class="mt-2 flex gap-2">
+          <button type="button" class="admin-btn admin-btn-sm save-edit">Save changes</button>
+          <button type="button" class="admin-btn-outline admin-btn-sm cancel-edit">Cancel</button>
+        </div>`;
+      row.querySelector('.cancel-edit').addEventListener('click', () => {
+        row.style.display = 'none';
+        row.innerHTML = '';
+      });
+      row.querySelector('.save-edit').addEventListener('click', async () => {
+        const res = await window.adminFetch(`/api/admin/faq/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            question: row.querySelector('[data-field="question"]').value,
+            answer: row.querySelector('[data-field="answer"]').value
+          })
+        });
+        if (res.ok) {
+          load();
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to save FAQ entry.');
+        }
+      });
+    }
+
+    async function move(id, direction) {
+      const res = await window.adminFetch(`/api/admin/faq/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+      if (res.ok) load();
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/faq');
+      const entries = await res.json();
+      render(entries);
+    }
+
+    document.getElementById('addFaqForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/faq', {
+        method: 'POST',
+        body: JSON.stringify({
+          question: form.question.value,
+          answer: form.answer.value
+        })
+      });
+      const statusEl = document.getElementById('addFaqStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        statusEl.className = 'admin-msg admin-msg-success';
+        statusEl.textContent = 'Question added.';
+        form.reset();
+        load();
+      } else {
+        const data = await res.json();
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to add question.';
+      }
+    });
 
     load();
   }
@@ -2618,5 +2830,6 @@
     if (page === 'landing-page') initLandingPagePage();
     if (page === 'landing-sections') initLandingSectionsPage();
     if (page === 'categories') initCategoriesPage();
+    if (page === 'faq') initFaqPage();
   });
 })();
