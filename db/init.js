@@ -819,9 +819,33 @@ ALTER TABLE website_types ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCE
 -- tracking whether the constraint definition already matches; a fresh DB
 -- gets the same constraint from SCHEMA above anyway, so this is only
 -- ever doing real work on a pre-1.1.5 database.
+--
+-- v1.1.6 INCIDENT FIX: added NOT VALID. This was v1.1.5's original,
+-- validating ALTER -- the very first time this constraint was EVER
+-- (re-)applied via migration since the table's original CREATE TABLE.
+-- Production had a landing_sections row, from outside any of this app's
+-- own validated write paths (routes/adminLandingSections.js's POST/PUT
+-- always zod-enum-validates sectionType -- this could not have come from
+-- there), whose section_type was never covered by ANY constraint list --
+-- dormant and harmless (views/public/landing.ejs simply skips any
+-- section_type with no matching SECTION_PARTIALS entry, so it never
+-- rendered, never errored, and nobody noticed). This ALTER re-validating
+-- ALL rows on every single boot is what surfaced it, the very next time
+-- ANY change touched this constraint (v1.1.6's own widening below,
+-- itself a strict superset that could not otherwise have newly rejected
+-- anything v1.1.5 already accepted) -- crashing boot entirely. NOT VALID
+-- tells Postgres to skip validating EXISTING rows against this
+-- constraint -- it still fully applies to any NEW insert/update from this
+-- point forward (routes/adminLandingSections.js's own zod validation was
+-- never the gap; this is a second, redundant layer of protection at the
+-- DB level, same as everywhere else in this schema). Nothing is deleted,
+-- renamed, or otherwise touched -- the unknown row simply continues
+-- sitting there exactly as before, invisible to rendering, until an
+-- admin investigates it directly (see initDB()'s new diagnostic query
+-- below, which will name it directly in the boot log).
 ALTER TABLE landing_sections DROP CONSTRAINT IF EXISTS landing_sections_section_type_check;
 ALTER TABLE landing_sections ADD CONSTRAINT landing_sections_section_type_check
-  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser'));
+  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser')) NOT VALID;
 
 -- v1.1.5 Part B: seeds the new category_teaser row with corrected copy
 -- (no "business" wording — see this version's delivery notes) into an
@@ -876,10 +900,11 @@ CREATE TABLE IF NOT EXISTS faq_entries (
 -- Same drop-and-recreate-every-boot pattern as v1.1.5's own widening of
 -- this exact constraint just above -- cheap, and a fresh DB gets the same
 -- constraint from SCHEMA above regardless, so this only ever does real
--- work on a pre-1.1.6 database.
+-- work on a pre-1.1.6 database. Also NOT VALID -- see the incident note
+-- on the v1.1.5 ALTER just above for why.
 ALTER TABLE landing_sections DROP CONSTRAINT IF EXISTS landing_sections_section_type_check;
 ALTER TABLE landing_sections ADD CONSTRAINT landing_sections_section_type_check
-  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq'));
+  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq')) NOT VALID;
 
 -- Deliberately NOT auto-seeded into landing_sections the way v1.1.5's
 -- category_teaser migration seeded itself into every install (that one
@@ -948,6 +973,31 @@ async function initDB() {
     console.log('[DB] Running migrations...');
     await db.query(MIGRATIONS);
     console.log('[DB] Migrations ready.');
+
+    // v1.1.6 INCIDENT DIAGNOSTIC: purely informational, never blocks boot
+    // (see db/init.js's NOT VALID comment on landing_sections_section_type_check
+    // for the incident this responds to). Surfaces any landing_sections
+    // row with a section_type outside every currently-known type directly
+    // in this log, right here, on every boot -- so identifying it never
+    // again requires a separate SQL console. Wrapped in its own try/catch
+    // so a problem with this diagnostic itself (e.g. running against an
+    // unexpectedly old schema mid-migration) can never turn a successful
+    // init into a failed one -- it is deliberately not allowed to be a
+    // new way for this exact incident to recur.
+    try {
+      const unknownSections = await db.query(
+        `SELECT id, section_type, display_order, is_active FROM landing_sections
+         WHERE section_type NOT IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq')`
+      );
+      if (unknownSections.rowCount > 0) {
+        console.warn(
+          '[DB] WARNING: landing_sections has row(s) with a section_type this app does not recognize (harmless -- they are simply never rendered -- but worth cleaning up):',
+          JSON.stringify(unknownSections.rows)
+        );
+      }
+    } catch (diagErr) {
+      console.warn('[DB] Unknown-section-type diagnostic query failed (non-fatal):', diagErr.message);
+    }
 
     const existing = await db.query(
       'SELECT id FROM schema_version WHERE version = $1',
