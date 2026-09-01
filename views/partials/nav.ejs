@@ -1,80 +1,105 @@
 <!-- v1.0.8 Part D: mobile top bar (hamburger + brand), sidebar (desktop:
      always visible, sticky; mobile: off-canvas drawer toggled by the
      hamburger, see public/dashboard-assets/admin.js's initNav), and the
-     mobile backdrop overlay. Grouped into Overview / Content / Revenue /
-     System, matching how these pages actually relate to each other
-     rather than one flat list. -->
+     mobile backdrop overlay.
+
+     v1.1.7 (TailAdmin visual redesign): the top bar is now a persistent
+     header at every breakpoint (not just mobile) carrying a session
+     indicator + logout — see src/styles/admin.css's own comment on
+     .admin-topbar for why the right-hand side is scoped to just that
+     (no search bar, no notification bell, no multi-user profile menu:
+     none of that exists in this single-admin app). The sidebar's nav is
+     now grouped into collapsible accordion sections (Content / Revenue /
+     System) instead of a flat list under static group labels — same
+     three groupings as before, just collapsible now, plus a fourth page
+     (Landing Sections) that existed in the app already but had no nav
+     entry at all until now; it's filed under Content next to the two
+     pages that link to it. The group containing the current page starts
+     expanded (rendered server-side below, not computed by JS) so there's
+     no flash of a collapsed-then-expanding menu on load. -->
+<%
+  const navGroups = [
+    {
+      label: 'Content',
+      items: [
+        { page: 'website-types', href: `/${slug}/website-types`, icon: 'layout-template', label: 'Website Types' },
+        { page: 'landing-sections', href: `/${slug}/landing-sections`, icon: 'sparkles', label: 'Landing Sections' },
+        { page: 'landing-page', href: `/${slug}/landing-page`, icon: 'globe', label: 'Landing Page' },
+        { page: 'faq', href: `/${slug}/faq`, icon: 'book-open', label: 'FAQ' },
+        { page: 'categories', href: `/${slug}/categories`, icon: 'gift', label: 'Categories' },
+        { page: 'site-settings', href: `/${slug}/site-settings`, icon: 'wrench', label: 'Site Settings' },
+        { page: 'scripts', href: `/${slug}/scripts`, icon: 'palette', label: 'Scripts' }
+      ]
+    },
+    {
+      label: 'Revenue',
+      items: [
+        { page: 'submissions', href: `/${slug}/submissions`, icon: 'circle-check', label: 'Submissions' },
+        { page: 'payments', href: `/${slug}/payments`, icon: 'credit-card', label: 'Payments' },
+        { page: 'recovery', href: `/${slug}/recovery`, icon: 'shield-check', label: 'Recovery' },
+        { page: 'funnel', href: `/${slug}/funnel`, icon: 'users', label: 'Funnel' }
+      ]
+    },
+    {
+      label: 'System',
+      items: [
+        { page: 'ai-provider', href: `/${slug}/ai-provider`, icon: 'zap', label: 'AI Provider' },
+        { page: 'email-providers', href: `/${slug}/email-providers`, icon: 'mail', label: 'Email Providers' },
+        { page: 'notifications', href: `/${slug}/notifications`, icon: 'bell', label: 'Notifications' }
+      ]
+    }
+  ];
+%>
 <div class="admin-topbar">
-  <button type="button" id="sidebarToggle" class="admin-btn-outline admin-btn-sm [&>svg]:h-5 [&>svg]:w-5" aria-label="Open menu" aria-expanded="false">
-    <%- getIconSvg('menu') %>
-  </button>
-  <span class="font-display text-lg uppercase tracking-wide text-hc-blue">HeartCode</span>
-  <span class="w-9"></span>
+  <div class="admin-topbar-left">
+    <button type="button" id="sidebarToggle" class="admin-topbar-menu-btn" aria-label="Open menu" aria-expanded="false">
+      <%- getIconSvg('menu') %>
+    </button>
+    <span class="admin-topbar-brand">HeartCode</span>
+  </div>
+  <div class="admin-topbar-identity">
+    <span data-avatar><%- getIconSvg('circle-user') %></span>
+    Admin
+    <button type="button" id="logoutBtn" class="admin-btn-outline admin-btn-sm ml-2">Logout</button>
+  </div>
 </div>
 
 <div class="admin-sidebar-overlay" id="sidebarOverlay"></div>
 
 <aside class="admin-sidebar" id="adminSidebar">
-  <div class="mb-6 flex items-center justify-between">
-    <span class="font-display text-lg uppercase tracking-wide text-hc-blue">HeartCode Admin</span>
-    <button type="button" id="sidebarClose" class="text-slate-400 hover:text-hc-ink [&>svg]:h-5 [&>svg]:w-5 lg:hidden" aria-label="Close menu">
+  <div class="admin-sidebar-header">
+    <span class="admin-sidebar-brand">HeartCode Admin</span>
+    <button type="button" id="sidebarClose" class="admin-sidebar-close" aria-label="Close menu">
       <%- getIconSvg('x') %>
     </button>
   </div>
 
-  <nav>
-    <p class="admin-nav-group-label">Overview</p>
+  <nav class="admin-sidebar-nav">
     <a href="/<%= slug %>/" class="admin-nav-link <%= activePage === 'overview' ? 'active' : '' %>">
       <%- getIconSvg('house') %> Overview
     </a>
 
-    <p class="admin-nav-group-label">Content</p>
-    <a href="/<%= slug %>/website-types" class="admin-nav-link <%= activePage === 'website-types' ? 'active' : '' %>">
-      <%- getIconSvg('layout-template') %> Website Types
-    </a>
-    <a href="/<%= slug %>/categories" class="admin-nav-link <%= activePage === 'categories' ? 'active' : '' %>">
-      <%- getIconSvg('gift') %> Categories
-    </a>
-    <a href="/<%= slug %>/faq" class="admin-nav-link <%= activePage === 'faq' ? 'active' : '' %>">
-      <%- getIconSvg('book-open') %> FAQ
-    </a>
-    <a href="/<%= slug %>/landing-page" class="admin-nav-link <%= activePage === 'landing-page' ? 'active' : '' %>">
-      <%- getIconSvg('sparkles') %> Landing Page
-    </a>
-    <a href="/<%= slug %>/site-settings" class="admin-nav-link <%= activePage === 'site-settings' ? 'active' : '' %>">
-      <%- getIconSvg('wrench') %> Site Settings
-    </a>
-    <a href="/<%= slug %>/scripts" class="admin-nav-link <%= activePage === 'scripts' ? 'active' : '' %>">
-      <%- getIconSvg('globe') %> Scripts
-    </a>
-
-    <p class="admin-nav-group-label">Revenue</p>
-    <a href="/<%= slug %>/submissions" class="admin-nav-link <%= activePage === 'submissions' ? 'active' : '' %>">
-      <%- getIconSvg('circle-check') %> Submissions
-    </a>
-    <a href="/<%= slug %>/recovery" class="admin-nav-link <%= activePage === 'recovery' ? 'active' : '' %>">
-      <%- getIconSvg('shield-check') %> Recovery
-    </a>
-    <a href="/<%= slug %>/funnel" class="admin-nav-link <%= activePage === 'funnel' ? 'active' : '' %>">
-      <%- getIconSvg('users') %> Funnel
-    </a>
-    <a href="/<%= slug %>/payments" class="admin-nav-link <%= activePage === 'payments' ? 'active' : '' %>">
-      <%- getIconSvg('credit-card') %> Payments
-    </a>
-
-    <p class="admin-nav-group-label">System</p>
-    <a href="/<%= slug %>/ai-provider" class="admin-nav-link <%= activePage === 'ai-provider' ? 'active' : '' %>">
-      <%- getIconSvg('zap') %> AI Provider
-    </a>
-    <a href="/<%= slug %>/email-providers" class="admin-nav-link <%= activePage === 'email-providers' ? 'active' : '' %>">
-      <%- getIconSvg('mail') %> Email Providers
-    </a>
-    <a href="/<%= slug %>/notifications" class="admin-nav-link <%= activePage === 'notifications' ? 'active' : '' %>">
-      <%- getIconSvg('bell') %> Notifications
-    </a>
+    <% navGroups.forEach(function (group, groupIndex) { %>
+      <% const isGroupActive = group.items.some(function (item) { return item.page === activePage; }); %>
+      <p class="admin-nav-group-label"><%= group.label %></p>
+      <button
+        type="button"
+        class="admin-nav-group-toggle <%= isGroupActive ? 'is-open' : '' %>"
+        data-nav-toggle
+        aria-expanded="<%= isGroupActive ? 'true' : 'false' %>"
+        aria-controls="navGroup<%= groupIndex %>"
+      >
+        <%- getIconSvg(group.items[0].icon) %>
+        <%= group.label %>
+        <span class="admin-nav-group-chevron"><%- getIconSvg('chevron-down') %></span>
+      </button>
+      <div class="admin-nav-group-children <%= isGroupActive ? 'is-open' : '' %>" id="navGroup<%= groupIndex %>">
+        <% group.items.forEach(function (item) { %>
+          <a href="<%= item.href %>" class="admin-nav-sublink <%= activePage === item.page ? 'active' : '' %>">
+            <%= item.label %>
+          </a>
+        <% }); %>
+      </div>
+    <% }); %>
   </nav>
-
-  <div class="mt-6 border-t border-slate-200 pt-4">
-    <button type="button" id="logoutBtn" class="admin-btn-outline w-full">Logout</button>
-  </div>
 </aside>
