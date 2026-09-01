@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>Payments — HeartCode Admin</title>
+<title>Payments | HeartCode Admin</title>
 </head>
 <body data-page="payments">
 <div class="admin-shell">
@@ -46,12 +46,12 @@
 
     <div class="admin-card mt-6 max-w-xl">
       <h2 class="text-sm font-semibold text-hc-ink">Kenyan visitor payment currency</h2>
-      <p class="mt-1 text-sm text-slate-500">
-        Controls what currency Kenyan visitors are actually charged in. Leave this on USD until M-Pesa is set up and enabled on your Paystack account — until then, Kenyan visitors are charged in USD by card, exactly like everyone else.
+      <p class="mt-1 text-sm text-gray-500">
+        Controls what currency Kenyan visitors are actually charged in. Leave this on USD until M-Pesa is set up and enabled on your Paystack account. Until then, Kenyan visitors are charged in USD by card, exactly like everyone else.
       </p>
       <label class="admin-label" for="kenyanCurrencySelect">Charge Kenyan visitors in</label>
       <select class="admin-select" id="kenyanCurrencySelect">
-        <option value="USD">USD (default — until M-Pesa is set up)</option>
+        <option value="USD">USD (default, until M-Pesa is set up)</option>
         <option value="KES">KES (M-Pesa is set up on Paystack)</option>
       </select>
       <button type="button" id="saveKenyanCurrencyBtn" class="admin-btn mt-4">Save</button>
@@ -65,8 +65,8 @@
          needed. Every click is a fresh, uncached lookup. -->
     <div class="admin-card mt-6 max-w-xl">
       <h2 class="text-sm font-semibold text-hc-ink">Geolocation health check</h2>
-      <p class="mt-1 text-sm text-slate-500">
-        Runs a live geolocation lookup (bypassing the normal 1-hour cache) and shows exactly what happened — which provider(s) were tried, whether each succeeded or failed, and why. Defaults to testing your own connection; for a real answer to "why did a Kenyan visitor see USD", paste in a real visitor's IP address from your logs instead.
+      <p class="mt-1 text-sm text-gray-500">
+        Runs a live geolocation lookup (bypassing the normal 1-hour cache) and shows exactly what happened: which provider(s) were tried, whether each succeeded or failed, and why. Defaults to testing your own connection; for a real answer to "why did a Kenyan visitor see USD", paste in a real visitor's IP address from your logs instead.
       </p>
       <label class="admin-label" for="geoDiagnosticIp">IP address to test (optional)</label>
       <input class="admin-input" id="geoDiagnosticIp" type="text" placeholder="Leave blank to test your own connection">

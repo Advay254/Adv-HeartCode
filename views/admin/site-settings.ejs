@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>Site Settings — HeartCode Admin</title>
+<title>Site Settings | HeartCode Admin</title>
 </head>
 <body data-page="site-settings">
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'site-settings' }) %>
   <main class="admin-main">
     <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Site Settings</h1>
-    <p class="mb-6 max-w-2xl text-sm text-slate-500">
+    <p class="mb-6 max-w-2xl text-sm text-gray-500">
       Feeds the landing page's stats section and every public page's favicon/meta tags. Admin dashboard's own look is unaffected.
     </p>
 
@@ -30,14 +30,14 @@
         <input class="admin-input" type="url" name="favicon_url" id="faviconUrl" placeholder="https://example.com/favicon.png">
         <label class="admin-label" for="ogImageUrl">Social share image (OG) URL</label>
         <input class="admin-input" type="url" name="og_image_url" id="ogImageUrl" placeholder="https://example.com/og-image.png">
-        <p class="mt-1 text-xs text-slate-400">Paste a hosted image URL — no upload here yet, same as the template/hero image workflow already in use.</p>
+        <p class="mt-1 text-xs text-gray-400">Paste a hosted image URL. No upload here yet, same as the template/hero image workflow already in use.</p>
 
         <!-- v1.1.6 Part D: Organization structured data. Every field here
-             is optional — leave any blank and it's simply left out of the
+             is optional, leave any blank and it's simply left out of the
              Organization JSON-LD entirely (see routes/public.js), not
              emitted empty. -->
         <h2 class="mt-5 text-sm font-semibold text-hc-ink">Organization info (for search engines)</h2>
-        <p class="mt-1 text-xs text-slate-400">Feeds the Organization structured data search engines read — none of this is shown directly on the site itself.</p>
+        <p class="mt-1 text-xs text-gray-400">Feeds the Organization structured data search engines read. None of this is shown directly on the site itself.</p>
         <label class="admin-label" for="logoUrl">Logo URL</label>
         <input class="admin-input" type="url" name="logo_url" id="logoUrl" placeholder="https://example.com/logo.png">
         <label class="admin-label" for="contactEmail">Contact email</label>
@@ -57,14 +57,14 @@
     </div>
 
     <!-- v1.1.2 Part C: separate small card + its own save button, same
-         pattern as the Payments page's Kenyan-currency toggle — this is a
+         pattern as the Payments page's Kenyan-currency toggle, this is a
          single standalone setting, not part of the bulk site-settings
          form above (which is scoped to the public <head>/landing-page
          values in lib/siteSettings.js's DEFAULTS). -->
     <div class="admin-card mt-6 max-w-xl">
-      <h2 class="text-sm font-semibold text-hc-ink">Resend site details — daily limit</h2>
-      <p class="mt-1 text-sm text-slate-500">
-        Caps how many times a single visitor (by IP) can use the public <a href="/resend-details" class="text-hc-blue">/resend-details</a> lookup per day. Kept low by default since this endpoint's job is looking up deployment history by email address.
+      <h2 class="text-sm font-semibold text-hc-ink">Resend site details: daily limit</h2>
+      <p class="mt-1 text-sm text-gray-500">
+        Caps how many times a single visitor (by IP) can use the public <a href="/resend-details" class="text-brand-500">/resend-details</a> lookup per day. Kept low by default since this endpoint's job is looking up deployment history by email address.
       </p>
       <label class="admin-label" for="resendDetailsRateLimit">Lookups per IP per day</label>
       <input class="admin-input" type="number" id="resendDetailsRateLimit" min="1" max="1000" step="1">

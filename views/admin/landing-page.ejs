@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>Landing Page — HeartCode Admin</title>
+<title>Landing Page | HeartCode Admin</title>
 </head>
 <body data-page="landing-page">
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'landing-page' }) %>
   <main class="admin-main">
     <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Footer (Explore page)</h1>
-    <p class="mb-6 max-w-2xl text-sm text-slate-500">
+    <p class="mb-6 max-w-2xl text-sm text-gray-500">
       Edits the footer text and links shown on <code>/explore</code>. The homepage (<code>/</code>) itself is now
-      managed from <a href="/<%= slug %>/landing-sections" class="text-hc-blue underline">Landing Sections</a> — the
+      managed from <a href="/<%= slug %>/landing-sections" class="text-brand-500 underline">Landing Sections</a>, the
       hero text and "how it works" steps that used to live on this page no longer affect anything visible, so
       they've been removed from here.
     </p>

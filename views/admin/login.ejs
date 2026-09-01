@@ -4,13 +4,13 @@
 <%- include('../partials/head') %>
 <title>HeartCode Admin Login</title>
 </head>
-<body data-page="login" data-slug="<%= slug %>" class="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+<body data-page="login" data-slug="<%= slug %>" class="flex min-h-screen items-center justify-center bg-gray-50 px-4">
   <div class="w-full max-w-sm">
     <div class="mb-6 flex items-center justify-center gap-2">
-      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-hc-blue text-hc-yellow [&>svg]:h-4 [&>svg]:w-4">
+      <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-accent-500 [&>svg]:h-4 [&>svg]:w-4">
         <%- getIconSvg('heart') %>
       </span>
-      <span class="font-display text-xl uppercase tracking-wide text-hc-blue">HeartCode Admin</span>
+      <span class="font-display text-xl uppercase tracking-wide text-brand-500">HeartCode Admin</span>
     </div>
     <div class="admin-card">
       <form id="loginForm">
@@ -20,7 +20,10 @@
         <label class="admin-label" for="passwordInput">Password</label>
         <div class="flex items-center gap-2">
           <input class="admin-input" type="password" name="password" id="passwordInput" autocomplete="current-password" required>
-          <button type="button" id="togglePassword" aria-label="Show password" class="admin-btn-outline shrink-0 px-3 py-2">👁</button>
+          <button type="button" id="togglePassword" aria-label="Show password" class="admin-btn-outline shrink-0 px-3 py-2 [&>svg]:h-4 [&>svg]:w-4">
+            <span id="togglePasswordShowIcon"><%- getIconSvg('eye') %></span>
+            <span id="togglePasswordHideIcon" class="hidden"><%- getIconSvg('eye-off') %></span>
+          </button>
         </div>
 
         <button type="submit" class="admin-btn mt-4 w-full">Log in</button>

@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>FAQ — HeartCode Admin</title>
+<title>FAQ | HeartCode Admin</title>
 </head>
 <body data-page="faq">
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'faq' }) %>
   <main class="admin-main">
     <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">FAQ</h1>
-    <p class="mb-6 max-w-2xl text-sm text-slate-500">
+    <p class="mb-6 max-w-2xl text-sm text-gray-500">
       Questions and answers shown in the homepage's FAQ section, and in the FAQPage structured data search engines read from the same content.
-      Add an "FAQ" section from the <a href="/<%= slug %>/landing-sections" class="text-hc-blue">Landing Sections</a> page to actually show this on the homepage — entries here have no effect until that section exists and is active.
+      Add an "FAQ" section from the <a href="/<%= slug %>/landing-sections" class="text-brand-500">Landing Sections</a> page to actually show this on the homepage. Entries here have no effect until that section exists and is active.
       An inactive entry here is hidden from both the visible section and the structured data.
     </p>
 

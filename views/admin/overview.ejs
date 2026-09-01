@@ -2,15 +2,54 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>Overview — HeartCode Admin</title>
+<title>Overview | HeartCode Admin</title>
 </head>
 <body data-page="overview">
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'overview' }) %>
   <main class="admin-main">
     <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink">Overview</h1>
-    <div id="statsContainer">
-      <p class="admin-msg">Loading…</p>
+
+    <!-- v1.1.7: the four stat cards are rendered here (icon + label,
+         server-side, from lib/icons.js) rather than built entirely in
+         admin.js's template-literal HTML, since admin.js has no access
+         to getIconSvg() (server-only). initOverviewPage() now just fills
+         in the value/caption slots below by id instead of rebuilding
+         the whole grid's markup on every load. -->
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon"><%- getIconSvg('credit-card') %></div>
+        <p class="admin-stat-label">Payments</p>
+        <div id="statPaymentsValue" class="admin-stat-value">&hellip;</div>
+        <div id="statPaymentsCaption" class="admin-stat-caption"></div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon"><%- getIconSvg('zap') %></div>
+        <p class="admin-stat-label">AI Provider</p>
+        <div id="statAiProviderValue" class="admin-stat-value">&hellip;</div>
+        <div id="statAiProviderCaption" class="admin-stat-caption"></div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon"><%- getIconSvg('layout-template') %></div>
+        <p class="admin-stat-label">Website Types</p>
+        <div id="statWebsiteTypesValue" class="admin-stat-value">&hellip;</div>
+        <div id="statWebsiteTypesCaption" class="admin-stat-caption"></div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon"><%- getIconSvg('rocket') %></div>
+        <p class="admin-stat-label">Deployments</p>
+        <div id="statDeploymentsValue" class="admin-stat-value">&hellip;</div>
+        <div id="statDeploymentsCaption" class="admin-stat-caption"></div>
+      </div>
+    </div>
+
+    <p id="statsError" class="admin-msg admin-msg-error" style="display:none;">Failed to load stats.</p>
+
+    <div class="admin-table-wrap mt-6">
+      <table class="admin-table is-responsive-stack">
+        <thead><tr><th>Type</th><th>Deployments</th><th>Revenue</th></tr></thead>
+        <tbody id="statsBreakdownBody"><tr><td colspan="3" data-label="">Loading&hellip;</td></tr></tbody>
+      </table>
     </div>
   </main>
 </div>

@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>Email Providers — HeartCode Admin</title>
+<title>Email Providers | HeartCode Admin</title>
 </head>
 <body data-page="email-providers">
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'email-providers' }) %>
   <main class="admin-main">
     <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink">Email Providers</h1>
-    <p class="mb-6 max-w-2xl text-sm text-slate-500">
-      Add one or more email providers below, then mark one active — that's the one used for every outgoing email (site-ready notifications, per-website-type templates). Test a provider before activating it; a misconfigured SMTP provider fails silently otherwise.
+    <p class="mb-6 max-w-2xl text-sm text-gray-500">
+      Add one or more email providers below, then mark one active. That's the one used for every outgoing email (site-ready notifications, per-website-type templates). Test a provider before activating it; a misconfigured SMTP provider fails silently otherwise.
     </p>
 
     <div class="admin-card max-w-xl">
@@ -33,7 +33,7 @@
           <input class="admin-input" type="password" id="resendApiKey" placeholder="re_...">
           <label class="admin-label" for="resendFromAddress">From address</label>
           <input class="admin-input" type="text" id="resendFromAddress" placeholder="hello@yourdomain.com">
-          <p class="mt-1 text-xs text-slate-500">Must be on a Resend-verified domain.</p>
+          <p class="mt-1 text-xs text-gray-500">Must be on a Resend-verified domain.</p>
         </div>
 
         <!-- SMTP fields (shared by Gmail / Brevo / Generic presets) -->
