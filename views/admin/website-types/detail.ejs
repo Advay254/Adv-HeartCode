@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <%- include('../../partials/head') %>
-<title><%= websiteType.name %> — HeartCode Admin</title>
+<title><%= websiteType.name %> | HeartCode Admin</title>
 </head>
 <body data-page="website-types-detail" data-type-id="<%= websiteType.id %>">
 <div class="admin-shell">
   <%- include('../../partials/nav', { activePage: 'website-types' }) %>
   <main class="admin-main">
-    <p class="mb-2"><a href="/<%= slug %>/website-types" class="text-sm text-hc-blue">← All website types</a></p>
+    <p class="mb-2"><a href="/<%= slug %>/website-types" class="text-sm text-brand-500">← All website types</a></p>
     <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink"><%= websiteType.name %></h1>
 
     <div class="admin-tabs">
@@ -43,7 +43,7 @@
           <label class="admin-checkbox-label"><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
 
           <h2 class="mt-5 text-sm font-semibold text-hc-ink">Custom deploy slug</h2>
-          <p class="mt-1 text-xs text-slate-500">
+          <p class="mt-1 text-xs text-gray-500">
             Optional. Leave blank to keep the default random slug. Use <code>{{field_key}}</code> for a raw field's submitted value,
             <code>{{random}}</code> / <code>{{random:N}}</code> for N random letters+digits, <code>{{random:numbers:N}}</code> for N digits,
             <code>{{random:letters:N}}</code> for N letters. Example: <code>happybirthday-from{{user_name}}-to{{recepient_name}}</code>.
@@ -51,14 +51,14 @@
           <label class="admin-label" for="detailsDeploySlugPattern">Pattern</label>
           <input class="admin-input font-mono" type="text" name="deploySlugPattern" id="detailsDeploySlugPattern" value="<%= websiteType.deploy_slug_pattern || '' %>" placeholder="e.g. happybirthday-from{{user_name}}-to{{recepient_name}}">
 
-          <h2 class="mt-5 text-sm font-semibold text-hc-ink">SEO overrides <span class="font-normal text-slate-400">(optional)</span></h2>
-          <p class="mt-1 text-xs text-slate-500">
-            Lets this type's <code>/build/<%= websiteType.slug %></code> page target its own specific search intent — e.g. "Birthday Website Generator" instead of your site's generic title. Leave blank to keep using your site-wide title/description (Site Settings page) for this type.
+          <h2 class="mt-5 text-sm font-semibold text-hc-ink">SEO overrides <span class="font-normal text-gray-400">(optional)</span></h2>
+          <p class="mt-1 text-xs text-gray-500">
+            Lets this type's <code>/build/<%= websiteType.slug %></code> page target its own specific search intent, e.g. "Birthday Website Generator", instead of your site's generic title. Leave blank to keep using your site-wide title/description (Site Settings page) for this type.
           </p>
           <label class="admin-label" for="detailsSeoTitle">Page title override</label>
           <input class="admin-input" type="text" name="seoTitle" id="detailsSeoTitle" value="<%= websiteType.seo_title || '' %>" placeholder="e.g. Birthday Website Generator">
           <label class="admin-label" for="detailsSeoDescription">Meta description override</label>
-          <textarea class="admin-textarea" name="seoDescription" id="detailsSeoDescription" placeholder="e.g. Build a custom birthday website in minutes — pick a style, add your details, and share a link."><%= websiteType.seo_description || '' %></textarea>
+          <textarea class="admin-textarea" name="seoDescription" id="detailsSeoDescription" placeholder="e.g. Build a custom birthday website in minutes: pick a style, add your details, and share a link."><%= websiteType.seo_description || '' %></textarea>
 
           <button type="submit" class="admin-btn mt-4">Save details</button>
         </form>
@@ -72,8 +72,8 @@
         <form id="addFieldForm">
           <label class="admin-label" for="fieldKeyInput">Field key (letters, numbers, underscore only)</label>
           <input class="admin-input" type="text" name="fieldKey" id="fieldKeyInput" required pattern="[a-z0-9_]+">
-          <p class="mt-1 text-xs text-slate-500">
-            Used as <code>{{field_key}}</code> in the Template/AI/Email tabs. Changing this on an existing field won't update any place that already references the old key — you'll be asked to confirm.
+          <p class="mt-1 text-xs text-gray-500">
+            Used as <code>{{field_key}}</code> in the Template/AI/Email tabs. Changing this on an existing field won't update any place that already references the old key. You'll be asked to confirm.
           </p>
           <label class="admin-label" for="fieldLabelInput">Label</label>
           <input class="admin-input" type="text" name="fieldLabel" id="fieldLabelInput" required>
@@ -112,26 +112,26 @@
     <section id="tab-ai" class="tab-panel" style="display:none;">
       <div class="admin-card max-w-xl">
         <label class="admin-checkbox-label"><input type="checkbox" id="aiEnabledToggle"> Use AI for this website type</label>
-        <p class="mt-2 text-xs text-slate-500">
-          Off (default): form submissions go straight to the template using the raw values a client typed — no AI call, no cost.
+        <p class="mt-2 text-xs text-gray-500">
+          Off (default): form submissions go straight to the template using the raw values a client typed. No AI call, no cost.
           On: the raw values are sent to your configured AI provider first, using the prompt and output fields below, and the AI's response fills the template instead.
         </p>
       </div>
 
       <div id="aiConfigSection" style="display:none;">
         <div class="admin-card mt-6 max-w-xl">
-          <p class="text-sm text-slate-500">Available raw field tokens: <span id="aiAvailableFields" class="font-mono text-xs">—</span></p>
+          <p class="text-sm text-gray-500">Available raw field tokens: <span id="aiAvailableFields" class="font-mono text-xs">none</span></p>
           <label class="admin-label" for="aiSystemPrompt">System prompt</label>
           <textarea class="admin-textarea" id="aiSystemPrompt" placeholder="You are a copywriting engine for a bakery's website..."></textarea>
           <label class="admin-label" for="aiUserPromptTemplate">User prompt template</label>
-          <textarea class="admin-textarea" id="aiUserPromptTemplate" placeholder="Client's raw input — vibe: {{vibe_description}}, business name: {{business_name}}"></textarea>
+          <textarea class="admin-textarea" id="aiUserPromptTemplate" placeholder="Client's raw input, vibe: {{vibe_description}}, business name: {{business_name}}"></textarea>
           <button type="button" id="saveAiConfigBtn" class="admin-btn mt-3">Save AI configuration</button>
           <p id="aiConfigStatus" class="admin-msg" style="display:none;"></p>
         </div>
 
         <div class="admin-card mt-6 max-w-xl">
           <h2 class="text-sm font-semibold text-hc-ink">Add output field</h2>
-          <p class="mt-1 text-xs text-slate-500">These describe exactly what structured JSON to request from the AI — each becomes a placeholder usable in the Template tab.</p>
+          <p class="mt-1 text-xs text-gray-500">These describe exactly what structured JSON to request from the AI. Each becomes a placeholder usable in the Template tab.</p>
           <form id="addOutputFieldForm">
             <label class="admin-label" for="outputKeyInput">Output key (letters, numbers, underscore only)</label>
             <input class="admin-input" type="text" name="outputKey" id="outputKeyInput" required pattern="[a-z0-9_]+">
@@ -159,11 +159,11 @@
 
     <section id="tab-template" class="tab-panel" style="display:none;">
       <div class="admin-card max-w-2xl">
-        <p class="text-sm text-slate-500">Available placeholders: <span id="availablePlaceholders" class="font-mono text-xs">—</span></p>
+        <p class="text-sm text-gray-500">Available placeholders: <span id="availablePlaceholders" class="font-mono text-xs">none</span></p>
         <form id="templateForm">
-          <label class="admin-label" for="templateFileInput">Or upload a .txt/.html file (fills the box below — nothing is saved until you click "Save new version")</label>
+          <label class="admin-label" for="templateFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
           <input class="admin-input" type="file" id="templateFileInput" accept=".txt,.html,text/plain,text/html">
-          <label class="admin-label" for="htmlContent">HTML content (current version: <span id="currentVersion">—</span>)</label>
+          <label class="admin-label" for="htmlContent">HTML content (current version: <span id="currentVersion">none</span>)</label>
           <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="htmlContent"></textarea>
           <button type="submit" class="admin-btn mt-3">Save new version</button>
         </form>
@@ -179,18 +179,18 @@
 
     <section id="tab-email" class="tab-panel" style="display:none;">
       <div class="admin-card max-w-2xl">
-        <p class="text-sm text-slate-500">Available variables: <span id="availableEmailPlaceholders" class="font-mono text-xs">—</span></p>
-        <p class="mt-2 text-xs text-slate-500">
+        <p class="text-sm text-gray-500">Available variables: <span id="availableEmailPlaceholders" class="font-mono text-xs">none</span></p>
+        <p class="mt-2 text-xs text-gray-500">
           <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>, and <code>site_password</code>
-          are always available (a field or AI output with the same name can't override them). There's no conditional syntax yet — a template that
+          are always available (a field or AI output with the same name can't override them). There's no conditional syntax yet. A template that
           always prints <code>Password: {{site_password}}</code> will show a blank password line for sites with no password set.
           Loop syntax (<code>{{#each field}}...{{/each}}</code>) only works in the HTML body, not the subject line.
           Leave this tab untouched to keep sending the original generic "your site is ready" email.
         </p>
         <form id="emailTemplateForm">
-          <label class="admin-label" for="emailSubject">Subject (current version: <span id="currentEmailVersion">—</span>)</label>
+          <label class="admin-label" for="emailSubject">Subject (current version: <span id="currentEmailVersion">none</span>)</label>
           <input class="admin-input" type="text" id="emailSubject" required>
-          <label class="admin-label" for="emailBodyFileInput">Or upload a .txt/.html file (fills the box below — nothing is saved until you click "Save new version")</label>
+          <label class="admin-label" for="emailBodyFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
           <input class="admin-input" type="file" id="emailBodyFileInput" accept=".txt,.html,text/plain,text/html">
           <label class="admin-label" for="emailHtmlBody">HTML body</label>
           <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="emailHtmlBody"></textarea>
@@ -208,18 +208,18 @@
 
     <section id="tab-password-page" class="tab-panel" style="display:none;">
       <div class="admin-card max-w-2xl">
-        <p class="text-sm text-slate-500">
+        <p class="text-sm text-gray-500">
           Available placeholders: <span class="font-mono text-xs">{{website_type_name}}, {{password_input_and_button}}</span>
         </p>
-        <p class="mt-2 text-xs text-slate-500">
-          This page renders BEFORE any site content unlocks, so it only has these two tokens — not the full field/AI set the Template tab has.
+        <p class="mt-2 text-xs text-gray-500">
+          This page renders BEFORE any site content unlocks, so it only has these two tokens, not the full field/AI set the Template tab has.
           <code>{{password_input_and_button}}</code> is a fixed functional element (the actual password input, submit button, and check logic are
-          always code-controlled for correctness) — design everything else around it. Leave this tab untouched to keep using the original generic gate design.
+          always code-controlled for correctness): design everything else around it. Leave this tab untouched to keep using the original generic gate design.
         </p>
         <form id="passwordPageForm">
-          <label class="admin-label" for="passwordPageFileInput">Or upload a .txt/.html file (fills the box below — nothing is saved until you click "Save new version")</label>
+          <label class="admin-label" for="passwordPageFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
           <input class="admin-input" type="file" id="passwordPageFileInput" accept=".txt,.html,text/plain,text/html">
-          <label class="admin-label" for="passwordPageHtmlContent">HTML content (current version: <span id="currentPasswordPageVersion">—</span>)</label>
+          <label class="admin-label" for="passwordPageHtmlContent">HTML content (current version: <span id="currentPasswordPageVersion">none</span>)</label>
           <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="passwordPageHtmlContent" placeholder="e.g. <div style=&quot;text-align:center;padding:2rem;&quot;><h2>{{website_type_name}} is locked</h2>{{password_input_and_button}}</div>"></textarea>
           <button type="submit" class="admin-btn mt-3">Save new version</button>
         </form>
