@@ -3,13 +3,22 @@
    ADMIN-facing views only; the public site keeps its own separate
    stylesheet (src/styles/main.css), untouched by this file.
 
-   Same palette/fonts as the public site (hc-blue/hc-yellow/hc-ink, Anton +
-   Inter — see tailwind.theme.js, the shared source both configs pull
-   from) but a deliberately more restrained execution: rectangular
-   controls instead of pills, modest rounded-lg/xl corners instead of the
-   public site's asymmetric signature shape, tighter spacing throughout.
-   This is a working tool an admin uses on a phone at a bakery counter,
-   not a marketing surface — the visual language says so. */
+   v1.1.7 (TailAdmin visual redesign): this file's component classes now
+   follow TailAdmin's visual language (rounded-lg cards with a light
+   border and a soft shadow, gray-* neutrals, brand-* and accent-* status
+   and interaction colors — see tailwind.admin.config.js's own comment for
+   where those color scales came from). The CLASS NAMES themselves are
+   unchanged from v1.0.8 (admin-card, admin-btn, admin-table, etc.) —
+   every admin view already scans for these exact names, so this redesign
+   is a reskin of what's already wired up, not a rename. Same architecture
+   as before: server-rendered EJS + vanilla JS + this one Tailwind CLI
+   pipeline. No dark mode (deliberately dropped for this version — every
+   `dark:` variant TailAdmin itself ships is simply absent here, not
+   hidden or disabled).
+
+   Font pairing (Anton display + Inter sans) is unchanged from v1.0.8 —
+   this redesign is a color/layout/component pass, not a typography
+   change. */
 @import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:opsz,wght@14..32,100..900&display=swap");
 
 @tailwind base;
@@ -23,7 +32,11 @@
   /* v1.0.8: RGB-triplet form required for opacity-modifier utilities —
      see tailwind.theme.js's comment and src/styles/main.css's matching
      :root block for the full story (this admin bundle needed the exact
-     same fix). */
+     same fix). Kept as-is in v1.1.7: hc-ink stays the admin's heading
+     color (see tailwind.admin.config.js's comment on why brand-*
+     replaces hc-blue for interactive elements but hc-ink is left alone),
+     and hc-blue/hc-yellow remain available for the two spots that still
+     use them directly (nothing here needed them beyond that). */
   --hc-blue-rgb: 24 63 173;
   --hc-yellow-rgb: 241 191 10;
   --hc-ink-rgb: 20 21 29;
@@ -32,27 +45,68 @@
 @layer components {
   /* ---- layout shell ---- */
 
-  /* Desktop: fixed-width sidebar + main content side by side.
-     Mobile (<1024px, Tailwind's `lg`): sidebar becomes an off-canvas
-     drawer (see .admin-sidebar's translate transform below), and
-     .admin-topbar (hidden on desktop) provides the hamburger toggle. */
   .admin-shell {
-    @apply flex min-h-screen flex-col bg-slate-50 lg:flex-row;
+    @apply flex min-h-screen flex-col bg-gray-50 lg:flex-row;
   }
 
+  /* Persistent header bar (TailAdmin's AppHeader pattern, scoped down):
+     visible at EVERY breakpoint now, not just mobile — v1.0.8's topbar
+     only existed below `lg` as a hamburger+brand strip. TailAdmin's own
+     header carries a search bar, notification bell, and multi-user
+     profile menu; none of that is real here (single admin, no team
+     accounts, no search index to search), so the right side is scoped to
+     what's actually true: a session indicator and a logout action. */
   .admin-topbar {
-    @apply sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden;
+    @apply sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 lg:px-6;
   }
+
+  .admin-topbar-left {
+    @apply flex items-center gap-3;
+  }
+
+  .admin-topbar-menu-btn {
+    @apply flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 lg:hidden [&>svg]:h-5 [&>svg]:w-5;
+  }
+
+  .admin-topbar-brand {
+    @apply font-display text-lg uppercase tracking-wide text-brand-500 lg:hidden;
+  }
+
+  .admin-topbar-identity {
+    @apply flex items-center gap-2 rounded-lg border border-gray-200 py-1.5 pl-1.5 pr-3 text-sm font-medium text-gray-700;
+  }
+
+  .admin-topbar-identity [data-avatar] {
+    @apply flex h-7 w-7 items-center justify-center rounded-full bg-brand-50 text-brand-500 [&>svg]:h-4 [&>svg]:w-4;
+  }
+
+  /* ---- sidebar ---- */
 
   .admin-sidebar {
-    @apply fixed inset-y-0 left-0 z-40 w-72 -translate-x-full overflow-y-auto border-r border-slate-200 bg-white p-4 transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:translate-x-0;
+    @apply fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col overflow-y-auto border-r border-gray-200 bg-white transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:translate-x-0;
   }
   .admin-sidebar.is-open {
     @apply translate-x-0;
   }
 
+  .admin-sidebar-header {
+    @apply flex items-center justify-between border-b border-gray-200 px-5 py-5;
+  }
+
+  .admin-sidebar-brand {
+    @apply flex items-center gap-2 font-display text-lg uppercase tracking-wide text-brand-500;
+  }
+
+  .admin-sidebar-close {
+    @apply text-gray-400 hover:text-gray-700 [&>svg]:h-5 [&>svg]:w-5 lg:hidden;
+  }
+
+  .admin-sidebar-nav {
+    @apply flex-1 overflow-y-auto px-4 py-4;
+  }
+
   .admin-sidebar-overlay {
-    @apply fixed inset-0 z-30 hidden bg-black/40 lg:hidden;
+    @apply fixed inset-0 z-30 hidden bg-gray-900/40 lg:hidden;
   }
   .admin-sidebar-overlay.is-open {
     @apply block;
@@ -65,79 +119,164 @@
   /* ---- nav ---- */
 
   .admin-nav-group-label {
-    @apply mb-2 mt-6 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 first:mt-0;
+    @apply mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400 first:mt-0;
   }
 
+  /* Leaf nav item (used both for the ungrouped Overview link at the top,
+     and for the sub-items inside each collapsible group below) —
+     TailAdmin's .menu-item pattern, ported to this project's existing
+     admin-nav-link name rather than adopting TailAdmin's own class
+     names, since every nav entry already carries this class. */
   .admin-nav-link {
-    @apply flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-hc-ink [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0;
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 [&>svg]:h-[18px] [&>svg]:w-[18px] [&>svg]:shrink-0 [&>svg]:text-gray-500;
   }
   .admin-nav-link.active {
-    @apply bg-hc-blue/10 text-hc-blue;
+    @apply bg-brand-50 text-brand-500 [&>svg]:text-brand-500;
   }
 
-  /* ---- buttons — rectangular, not the public site's pills ---- */
+  /* Sub-items (inside an expanded group) sit one level in — matches
+     TailAdmin's own menu-dropdown-item treatment (no repeated icon per
+     sub-item, just indentation + text) more closely than repeating a
+     full icon per row would. */
+  .admin-nav-sublink {
+    @apply block rounded-lg py-2.5 pl-11 pr-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100;
+  }
+  .admin-nav-sublink.active {
+    @apply bg-brand-50 text-brand-500;
+  }
+
+  /* Group parent — a button, not a link (it toggles, it doesn't
+     navigate). Same visual weight as a leaf .admin-nav-link, plus a
+     trailing chevron that rotates on expand and adopts the brand color
+     while open, exactly mirroring TailAdmin's menu-item-arrow-active. */
+  .admin-nav-group-toggle {
+    @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 [&>svg:first-child]:h-[18px] [&>svg:first-child]:w-[18px] [&>svg:first-child]:shrink-0 [&>svg:first-child]:text-gray-500;
+  }
+  .admin-nav-group-toggle.is-open {
+    @apply bg-brand-50 text-brand-500 [&>svg:first-child]:text-brand-500;
+  }
+  .admin-nav-group-chevron {
+    @apply ml-auto h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200;
+  }
+  .admin-nav-group-toggle.is-open .admin-nav-group-chevron {
+    @apply rotate-180 text-brand-500;
+  }
+
+  /* The collapsible wrapper itself. A CSS transition can't animate
+     to/from `auto`, so instead of JS measuring scrollHeight on every
+     toggle, .is-open jumps straight to a fixed cap comfortably above the
+     tallest real group (Content, the longest, tops out around 320px
+     across 7 items) — the transition still animates smoothly since both
+     endpoints are fixed values, and because the cap only ever exceeds
+     the content's real height, there's never a visible gap. This also
+     means the initially-active group (rendered with is-open server-side
+     in nav.ejs, from real request state, not guessed) shows correctly
+     expanded with zero JS dependency and zero flash-of-collapsed-content
+     on load. overflow-hidden is what makes the collapsed (max-height: 0)
+     state actually hide its contents rather than just clip visually. */
+  .admin-nav-group-children {
+    @apply overflow-hidden transition-[max-height] duration-200 ease-out;
+    max-height: 0;
+  }
+  .admin-nav-group-children.is-open {
+    max-height: 24rem;
+  }
+
+  /* ---- buttons ---- */
 
   .admin-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-hc-blue px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-hc-blue/90 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-theme-xs transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-brand-300;
   }
   .admin-btn-outline {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-semibold text-gray-700 shadow-theme-xs transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .admin-btn-danger {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-3.5 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-error-200 bg-white px-3.5 py-2 text-sm font-semibold text-error-600 shadow-theme-xs transition-colors hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .admin-btn-sm {
-    @apply px-2.5 py-1 text-xs;
+    @apply px-2.5 py-1.5 text-xs;
   }
 
   /* ---- cards / surfaces ---- */
 
+  /* TailAdmin's own signature container: rounded-lg border border-gray-200
+     shadow-theme-sm — called out by name in this version's build brief,
+     so this is a direct, literal port of that exact pattern. */
   .admin-card {
-    @apply rounded-xl border border-slate-200 bg-white p-4 sm:p-5;
+    @apply rounded-lg border border-gray-200 bg-white p-4 shadow-theme-sm sm:p-5;
+  }
+
+  /* ---- stat cards (Overview page) ---- */
+  /* TailAdmin's dashboard metric-card pattern: an icon in a soft tinted
+     square, a label, a large number, and a small secondary indicator.
+     HeartCode's real Overview data doesn't include a period-over-period
+     trend percentage (no such comparison exists anywhere in the schema,
+     and this redesign adds no new data per its own build brief), so the
+     "indicator" slot below the number shows genuinely real context
+     already computed server-side today (a status badge, an inactive
+     count, a revenue/subscriber caption) rather than a fabricated trend
+     figure. */
+  .admin-stat-card {
+    @apply admin-card;
+  }
+  .admin-stat-icon {
+    @apply mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-500 [&>svg]:h-5 [&>svg]:w-5;
+  }
+  .admin-stat-label {
+    @apply text-sm text-gray-500;
+  }
+  .admin-stat-value {
+    @apply mt-1.5 text-title-sm font-bold text-gray-800;
+  }
+  .admin-stat-caption {
+    @apply mt-1.5 text-sm text-gray-500;
   }
 
   /* ---- form controls ---- */
 
   .admin-label {
-    @apply mb-1 mt-3.5 block text-sm font-medium text-slate-700 first:mt-0;
+    @apply mb-1.5 mt-3.5 block text-sm font-medium text-gray-700 first:mt-0;
   }
   .admin-input,
   .admin-select,
   .admin-textarea {
-    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-hc-ink placeholder:text-slate-400 focus:border-hc-blue focus:outline-none focus:ring-1 focus:ring-hc-blue;
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-none focus:ring focus:ring-brand-500/20;
   }
   .admin-textarea {
     @apply min-h-[6rem];
   }
   .admin-checkbox-label {
-    @apply mt-3.5 flex items-center gap-2 text-sm text-slate-700;
+    @apply mt-3.5 flex items-center gap-2 text-sm text-gray-700;
   }
 
   /* ---- badges / status ---- */
-
+  /* TailAdmin's "light" badge variant (tinted background, matching-tone
+     text, full pill) — the badge/pill pattern this version's build brief
+     asks to apply across the Paystack mode badge, active/inactive
+     toggles, and subscriber opt-out status. */
   .admin-badge {
-    @apply inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600;
+    @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700;
   }
   .admin-badge-active {
-    @apply bg-emerald-100 text-emerald-700;
+    @apply bg-success-50 text-success-600;
   }
   .admin-badge-warn {
-    @apply bg-amber-100 text-amber-700;
+    @apply bg-warning-50 text-warning-600;
   }
 
   /* ---- inline status messages ---- */
 
   .admin-msg {
-    @apply mt-3 rounded-md px-3 py-2 text-sm;
+    @apply mt-3 rounded-lg px-3.5 py-2.5 text-sm;
   }
   .admin-msg-success {
-    @apply bg-emerald-50 text-emerald-700;
+    @apply bg-success-50 text-success-700;
   }
   .admin-msg-error {
-    @apply bg-red-50 text-red-700;
+    @apply bg-error-50 text-error-700;
   }
   .admin-msg-warning {
-    @apply bg-amber-50 text-amber-800;
+    @apply bg-warning-50 text-warning-800;
   }
 
   /* ---- tabs (website type detail page) ---- */
@@ -146,10 +285,10 @@
     @apply -mx-1 mb-4 flex gap-1 overflow-x-auto pb-1;
   }
   .admin-tab-btn {
-    @apply shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-hc-ink;
+    @apply shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800;
   }
   .admin-tab-btn.active {
-    @apply bg-hc-blue/10 text-hc-blue;
+    @apply bg-brand-50 text-brand-500;
   }
 
   /* ---- responsive table -> card pattern ----
@@ -158,7 +297,9 @@
      row HTML) matching its column header. Below the `sm` breakpoint
      (640px), the table collapses into a stack of label/value rows per
      record — no separate mobile-only markup or a second render path in
-     JS, CSS does the whole transform. */
+     JS, CSS does the whole transform. Unchanged behavior from v1.0.8;
+     only the visual skin (header row background, border/text colors)
+     is new for this version. */
   .admin-table-wrap {
     @apply admin-card overflow-x-auto p-0;
   }
@@ -166,10 +307,10 @@
     @apply w-full min-w-[32rem] border-collapse text-left text-sm sm:min-w-0;
   }
   .admin-table th {
-    @apply border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500;
   }
   .admin-table td {
-    @apply border-b border-slate-100 px-3 py-2.5 align-top text-slate-700;
+    @apply border-b border-gray-100 px-4 py-3 align-top text-gray-700;
   }
   .admin-table tbody tr:last-child td {
     @apply border-b-0;
@@ -191,7 +332,7 @@
     width: 100%;
   }
   .admin-table.is-responsive-stack tr {
-    border-bottom: 8px solid theme('colors.slate.100');
+    border-bottom: 8px solid theme('colors.gray.100');
     padding: 0.75rem 0.25rem;
   }
   .admin-table.is-responsive-stack tr:last-child {
@@ -214,7 +355,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: theme('colors.slate.400');
+    color: theme('colors.gray.400');
   }
   /* An action-only cell (buttons, no label-worthy value) reads oddly with
      a label/value split — data-label="" on those cells (admin.js sets
@@ -248,7 +389,7 @@
   margin-top: 0.25rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--hc-blue);
+  color: #183fad;
   cursor: pointer;
   background: none;
   border: none;
