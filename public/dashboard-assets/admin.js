@@ -53,15 +53,15 @@
     let counter = textareaEl.parentElement.querySelector(`[data-char-counter-for="${textareaEl.id}"]`);
     if (!counter) {
       counter = document.createElement('p');
-      counter.className = 'mt-1 text-xs text-slate-400';
+      counter.className = 'mt-1 text-xs text-gray-400';
       counter.dataset.charCounterFor = textareaEl.id;
       textareaEl.insertAdjacentElement('afterend', counter);
     }
     function update() {
       const len = textareaEl.value.length;
       counter.textContent = `${len} / ${maxLen} characters`;
-      counter.classList.toggle('text-red-500', len > maxLen);
-      counter.classList.toggle('text-slate-400', len <= maxLen);
+      counter.classList.toggle('text-error-500', len > maxLen);
+      counter.classList.toggle('text-gray-400', len <= maxLen);
     }
     textareaEl.addEventListener('input', update);
     update();
@@ -95,6 +95,24 @@
     if (overlay) overlay.addEventListener('click', closeSidebar);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeSidebar();
+    });
+
+    // v1.1.7: collapsible nav groups (Content/Revenue/System). The group
+    // containing the current page is already rendered expanded
+    // server-side (see views/partials/nav.ejs) — this just wires up
+    // clicking any group's toggle button to open/close it. Each toggle
+    // works independently (accordion-style "only one open at a time" was
+    // considered and rejected: with the current page's group always
+    // expanded on load, forcing others shut would fight a user who
+    // opens a second group to jump to a different page without losing
+    // their place in the first).
+    document.querySelectorAll('[data-nav-toggle]').forEach(function (toggle) {
+      toggle.addEventListener('click', function () {
+        const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+        const isOpen = toggle.classList.toggle('is-open');
+        if (panel) panel.classList.toggle('is-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
     });
 
     const logoutBtn = document.getElementById('logoutBtn');
@@ -155,10 +173,13 @@
     document.getElementById('togglePassword').addEventListener('click', () => {
       const input = document.getElementById('passwordInput');
       const btn = document.getElementById('togglePassword');
+      const showIcon = document.getElementById('togglePasswordShowIcon');
+      const hideIcon = document.getElementById('togglePasswordHideIcon');
       const showing = input.type === 'text';
       input.type = showing ? 'password' : 'text';
       btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
-      btn.textContent = showing ? '👁' : '🙈';
+      showIcon.classList.toggle('hidden', !showing);
+      hideIcon.classList.toggle('hidden', showing);
     });
 
     // No CSRF token on this form, deliberately: CSRF protection exists to
@@ -299,7 +320,7 @@
       btn.disabled = true;
       btn.textContent = 'Running…';
       resultEl.style.display = 'block';
-      resultEl.innerHTML = '<p class="text-sm text-slate-500">Running a live lookup — this can take a few seconds if a provider is slow or unreachable…</p>';
+      resultEl.innerHTML = '<p class="text-sm text-gray-500">Running a live lookup. This can take a few seconds if a provider is slow or unreachable…</p>';
 
       try {
         const url = '/api/admin/settings/geo-diagnostic' + (ip ? '?ip=' + encodeURIComponent(ip) : '');
@@ -327,14 +348,14 @@
 
         const finalOk = data.finalResult.countryCode !== null || data.finalResult.currency !== 'USD';
         resultEl.innerHTML = `
-          <p class="text-sm text-hc-ink">Tested IP: <strong>${escapeHtml(data.ip)}</strong> — current Kenyan-visitor toggle: <strong>${escapeHtml(data.kenyanPaymentCurrency)}</strong></p>
+          <p class="text-sm text-hc-ink">Tested IP: <strong>${escapeHtml(data.ip)}</strong>, current Kenyan-visitor toggle: <strong>${escapeHtml(data.kenyanPaymentCurrency)}</strong></p>
           <table class="admin-table mt-3">
             <thead><tr><th>Provider</th><th>Result</th><th>Latency</th><th>Details</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
-          <p class="mt-3 text-sm ${finalOk ? 'text-emerald-700' : 'text-amber-700'}">
+          <p class="mt-3 text-sm ${finalOk ? 'text-success-700' : 'text-warning-700'}">
             Final result: currency=${escapeHtml(data.finalResult.currency)}, countryCode=${escapeHtml(data.finalResult.countryCode || 'null')}
-            ${finalOk ? '' : ' — every provider failed for this IP, so USD was used as the safe default.'}
+            ${finalOk ? '' : ', every provider failed for this IP, so USD was used as the safe default.'}
           </p>
         `;
       } catch (err) {
@@ -364,7 +385,7 @@
           <h2 class="text-base font-semibold text-hc-ink">${escapeHtml(p.label)}</h2>
           ${p.isActive ? '<span class="admin-badge admin-badge-active">active</span>' : ''}
         </div>
-        <p class="mt-0.5 text-sm text-slate-400">${escapeHtml(p.baseUrl)}</p>
+        <p class="mt-0.5 text-sm text-gray-400">${escapeHtml(p.baseUrl)}</p>
 
         <label class="admin-label" for="model-select-${p.id}">Model</label>
         <select class="admin-select model-select" id="model-select-${p.id}">
@@ -519,8 +540,8 @@
 
     function providerCard(p) {
       const configRows = p.providerType === 'resend'
-        ? `<p class="mt-1 text-sm text-slate-500">From: ${escapeHtml(p.config.fromAddress || '(not set)')} · API key: ${escapeHtml(p.config.apiKeyMasked || 'unreadable')}</p>`
-        : `<p class="mt-1 text-sm text-slate-500">${escapeHtml(p.config.host || '(no host)')}:${escapeHtml(p.config.port || '?')} (${escapeHtml(p.config.connectionSecurity)}) · From: ${escapeHtml(p.config.fromAddress || '(not set)')} · Password: ${escapeHtml(p.config.passwordMasked || 'unreadable')}</p>`;
+        ? `<p class="mt-1 text-sm text-gray-500">From: ${escapeHtml(p.config.fromAddress || '(not set)')} · API key: ${escapeHtml(p.config.apiKeyMasked || 'unreadable')}</p>`
+        : `<p class="mt-1 text-sm text-gray-500">${escapeHtml(p.config.host || '(no host)')}:${escapeHtml(p.config.port || '?')} (${escapeHtml(p.config.connectionSecurity)}) · From: ${escapeHtml(p.config.fromAddress || '(not set)')} · Password: ${escapeHtml(p.config.passwordMasked || 'unreadable')}</p>`;
 
       return `
       <div class="admin-card email-provider-card" data-provider-id="${p.id}">
@@ -557,7 +578,7 @@
     async function load() {
       const res = await window.adminFetch('/api/admin/email-providers');
       const providers = await res.json();
-      providersList.innerHTML = providers.map(providerCard).join('') || '<p class="admin-msg admin-msg-warning">No email providers configured yet — nothing will be able to send email until one is added and activated.</p>';
+      providersList.innerHTML = providers.map(providerCard).join('') || '<p class="admin-msg admin-msg-warning">No email providers configured yet. Nothing will be able to send email until one is added and activated.</p>';
       wireCards();
     }
 
@@ -683,7 +704,7 @@
           <span class="admin-badge">${escapeHtml(c.channelType)}</span>
           ${c.isActive ? '<span class="admin-badge admin-badge-active">enabled</span>' : '<span class="admin-badge">disabled</span>'}
         </div>
-        <p class="mt-1 text-sm text-slate-500">${channelConfigSummary(c)}</p>
+        <p class="mt-1 text-sm text-gray-500">${channelConfigSummary(c)}</p>
 
         <div class="mt-3 flex flex-wrap gap-2">
           <button type="button" class="admin-btn-outline admin-btn-sm send-test">Send test notification</button>
@@ -704,7 +725,7 @@
     async function load() {
       const res = await window.adminFetch('/api/admin/notifications');
       const channels = await res.json();
-      channelsList.innerHTML = channels.map(channelCard).join('') || '<p class="admin-msg admin-msg-warning">No notification channels configured yet — you won\'t be alerted when a sale completes.</p>';
+      channelsList.innerHTML = channels.map(channelCard).join('') || '<p class="admin-msg admin-msg-warning">No notification channels configured yet. You won\'t be alerted when a sale completes.</p>';
       wireCards();
     }
 
@@ -800,10 +821,10 @@
       const types = await res.json();
       document.getElementById('typesTableBody').innerHTML = types.map(t => `
         <tr>
-          <td data-label="Name"><a href="/${slug}/website-types/${t.id}" class="font-medium text-hc-blue">${escapeHtml(t.name)}</a></td>
+          <td data-label="Name"><a href="/${slug}/website-types/${t.id}" class="font-medium text-brand-500">${escapeHtml(t.name)}</a></td>
           <td data-label="Status"><span class="admin-badge ${t.isActive ? 'admin-badge-active' : ''}">${t.isActive ? 'active' : 'inactive'}</span></td>
           <td data-label="Fields">${t.fieldCount}</td>
-          <td data-label="Template">${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : '—'}</td>
+          <td data-label="Template">${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : 'n/a'}</td>
           <td data-label="Price">$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="admin-badge admin-badge-active">AI</span>' : ''}</td>
           <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm delete-type" data-id="${t.id}">Delete</button></td>
         </tr>`).join('') || '<tr><td colspan="6" data-label="">No website types yet.</td></tr>';
@@ -1115,7 +1136,7 @@
         const originalField = currentFields.find(f => f.id === editingFieldId);
         if (originalField && newFieldKey !== originalField.fieldKey) {
           const confirmed = confirm(
-            `Changing this field's key from "${originalField.fieldKey}" to "${newFieldKey}" will NOT update any Template, AI prompt, or Email content that already uses {{${originalField.fieldKey}}} — those will stop resolving. Continue?`
+            `Changing this field's key from "${originalField.fieldKey}" to "${newFieldKey}" will NOT update any Template, AI prompt, or Email content that already uses {{${originalField.fieldKey}}}. Those will stop resolving. Continue?`
           );
           if (!confirmed) return;
         }
@@ -1240,7 +1261,7 @@
       document.getElementById('aiSystemPrompt').value = data.aiSystemPrompt || '';
       document.getElementById('aiUserPromptTemplate').value = data.aiUserPromptTemplate || '';
       document.getElementById('aiAvailableFields').textContent =
-        currentFields.length ? currentFields.map(placeholderTokenForField).join(', ') : 'none defined yet — add raw fields first';
+        currentFields.length ? currentFields.map(placeholderTokenForField).join(', ') : 'none defined yet, add raw fields first';
 
       currentOutputFields = data.outputFields || [];
       renderOutputFieldsTable();
@@ -1329,7 +1350,7 @@
     async function loadEmailTemplate() {
       const res = await window.adminFetch(`/api/admin/website-types/${typeId}/email-template`);
       const data = await res.json();
-      document.getElementById('currentEmailVersion').textContent = data.active ? 'v' + data.active.version : 'none yet — generic fallback email is used';
+      document.getElementById('currentEmailVersion').textContent = data.active ? 'v' + data.active.version : 'none yet, generic fallback email is used';
       document.getElementById('emailSubject').value = data.active ? data.active.subject : '';
       document.getElementById('emailHtmlBody').value = data.active ? data.active.htmlBody : '';
       document.getElementById('emailHistoryTableBody').innerHTML = data.history.map(h => `
@@ -1337,7 +1358,7 @@
           <td data-label="Version">v${h.version}</td>
           <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
           <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-email" data-version="${h.version}">Rollback to this</button>`}</td>
-        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet — the generic fallback email is used.</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet. The generic fallback email is used.</td></tr>';
 
       document.querySelectorAll('.rollback-email').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -1380,14 +1401,14 @@
     async function loadPasswordPage() {
       const res = await window.adminFetch(`/api/admin/website-types/${typeId}/password-page`);
       const data = await res.json();
-      document.getElementById('currentPasswordPageVersion').textContent = data.active ? 'v' + data.active.version : 'none yet — generic fallback gate is used';
+      document.getElementById('currentPasswordPageVersion').textContent = data.active ? 'v' + data.active.version : 'none yet, generic fallback gate is used';
       document.getElementById('passwordPageHtmlContent').value = data.active ? data.active.htmlContent : '';
       document.getElementById('passwordPageHistoryTableBody').innerHTML = data.history.map(h => `
         <tr>
           <td data-label="Version">v${h.version}</td>
           <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
           <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-password-page" data-version="${h.version}">Rollback to this</button>`}</td>
-        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet — the generic fallback gate is used.</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet. The generic fallback gate is used.</td></tr>';
 
       document.querySelectorAll('.rollback-password-page').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -1410,7 +1431,7 @@
       if (res.ok) {
         const warnings = []
           .concat(data.undefinedPlaceholders.length ? [`unrecognized placeholder: ${data.undefinedPlaceholders.join(', ')}`] : [])
-          .concat(data.missingFunctionalToken ? ['missing {{password_input_and_button}} — visitors won\'t be able to enter a password on this design'] : []);
+          .concat(data.missingFunctionalToken ? ['missing {{password_input_and_button}}, visitors won\'t be able to enter a password on this design'] : []);
         statusEl.className = 'admin-msg ' + (warnings.length ? 'admin-msg-warning' : 'admin-msg-success');
         statusEl.textContent = warnings.length
           ? `Saved as v${data.version}, but: ${warnings.join(' | ')}`
@@ -1429,58 +1450,63 @@
   }
 
   // ---- overview page ----
+  // v1.1.7: the four stat-card shells (icon + label) are now rendered
+  // server-side in overview.ejs, since their icons come from
+  // getIconSvg(), a server-only helper. This function's job is just to
+  // fill each card's value/caption slots and the breakdown table body --
+  // no HTML structure is built here anymore, only text/badge content for
+  // elements that already exist in the DOM. There's no real trend
+  // percentage anywhere in this app's data model (no stored
+  // period-over-period comparison), so each card's "caption" slot below
+  // the big number shows real, already-computed context instead --
+  // never a fabricated figure.
   function initOverviewPage() {
-    const container = document.getElementById('statsContainer');
+    const paymentsValue = document.getElementById('statPaymentsValue');
+    const paymentsCaption = document.getElementById('statPaymentsCaption');
+    const aiProviderValue = document.getElementById('statAiProviderValue');
+    const aiProviderCaption = document.getElementById('statAiProviderCaption');
+    const websiteTypesValue = document.getElementById('statWebsiteTypesValue');
+    const websiteTypesCaption = document.getElementById('statWebsiteTypesCaption');
+    const deploymentsValue = document.getElementById('statDeploymentsValue');
+    const deploymentsCaption = document.getElementById('statDeploymentsCaption');
+    const breakdownBody = document.getElementById('statsBreakdownBody');
+    const errorEl = document.getElementById('statsError');
 
     window.adminFetch('/api/admin/dashboard/stats')
       .then(res => res.json())
       .then(stats => {
-        const breakdownRows = stats.breakdown.map(b => `
+        if (stats.paystackConfigured) {
+          paymentsValue.innerHTML = `<span class="admin-badge ${stats.paystackMode === 'live' ? 'admin-badge-active' : 'admin-badge-warn'}">${escapeHtml(stats.paystackMode)}</span>`;
+          paymentsCaption.textContent = stats.paystackMode === 'live' ? 'Accepting live payments' : 'Test mode';
+        } else {
+          paymentsValue.textContent = 'Not set up';
+          paymentsCaption.textContent = 'No Paystack keys configured yet';
+        }
+
+        if (stats.activeProvider) {
+          aiProviderValue.textContent = stats.activeProvider.label;
+          aiProviderCaption.textContent = stats.activeProvider.selectedModel || 'No model selected';
+        } else {
+          aiProviderValue.textContent = 'None active';
+          aiProviderCaption.textContent = 'Set one up on the AI Provider page';
+        }
+
+        websiteTypesValue.textContent = String(stats.activeTypeCount);
+        websiteTypesCaption.textContent = `${stats.inactiveTypeCount} inactive`;
+
+        deploymentsValue.textContent = String(stats.totalDeployments);
+        deploymentsCaption.textContent = `$${stats.totalRevenueUsd.toFixed(2)} revenue, ${stats.subscriberCount} subscriber(s)`;
+
+        breakdownBody.innerHTML = stats.breakdown.map(b => `
           <tr>
             <td data-label="Type">${escapeHtml(b.name)}</td>
             <td data-label="Deployments">${b.deploymentCount}</td>
             <td data-label="Revenue">$${b.revenueUsd.toFixed(2)}</td>
           </tr>`).join('') || '<tr><td colspan="3" data-label="">No website types yet.</td></tr>';
-
-        container.innerHTML = `
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="admin-card">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payments</p>
-              ${stats.paystackConfigured
-                ? `<p class="mt-2"><span class="admin-badge ${stats.paystackMode === 'live' ? 'admin-badge-active' : 'admin-badge-warn'}">${escapeHtml(stats.paystackMode)}</span></p>`
-                : '<p class="admin-msg admin-msg-warning">Not configured yet.</p>'}
-            </div>
-
-            <div class="admin-card">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">AI Provider</p>
-              ${stats.activeProvider
-                ? `<p class="mt-2 text-sm text-slate-700">${escapeHtml(stats.activeProvider.label)}<br><span class="text-slate-400">${escapeHtml(stats.activeProvider.selectedModel || 'no model selected')}</span></p>`
-                : '<p class="admin-msg admin-msg-warning">No active provider.</p>'}
-            </div>
-
-            <div class="admin-card">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Website Types</p>
-              <p class="mt-2 text-2xl font-semibold text-hc-ink">${stats.activeTypeCount}</p>
-              <p class="text-sm text-slate-400">${stats.inactiveTypeCount} inactive</p>
-            </div>
-
-            <div class="admin-card">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Deployments</p>
-              <p class="mt-2 text-2xl font-semibold text-hc-ink">${stats.totalDeployments}</p>
-              <p class="text-sm text-slate-400">$${stats.totalRevenueUsd.toFixed(2)} revenue &middot; ${stats.subscriberCount} subscriber(s)</p>
-            </div>
-          </div>
-
-          <div class="admin-table-wrap mt-6">
-            <table class="admin-table is-responsive-stack">
-              <thead><tr><th>Type</th><th>Deployments</th><th>Revenue</th></tr></thead>
-              <tbody>${breakdownRows}</tbody>
-            </table>
-          </div>
-        `;
       })
       .catch(() => {
-        container.innerHTML = '<p class="admin-msg admin-msg-error">Failed to load stats.</p>';
+        errorEl.style.display = 'block';
+        [paymentsValue, aiProviderValue, websiteTypesValue, deploymentsValue].forEach(el => { el.textContent = 'Unavailable'; });
       });
   }
 
@@ -1511,14 +1537,14 @@
         if (d.chargeCurrency && d.chargeAmount !== null) {
           return `${escapeHtml(d.chargeCurrency)} ${Number(d.chargeAmount).toFixed(2)}`;
         }
-        return d.amountUsd !== null ? `~$${Number(d.amountUsd).toFixed(2)} (est.)` : '—';
+        return d.amountUsd !== null ? `~$${Number(d.amountUsd).toFixed(2)} (est.)` : 'n/a';
       }
 
       document.getElementById('deploymentsTableBody').innerHTML = data.deployments.map(d => `
         <tr>
           <td data-label="Client">${escapeHtml(d.clientEmail)}</td>
-          <td data-label="Type">${escapeHtml(d.websiteTypeName || '—')}</td>
-          <td data-label="Site"><a href="${escapeHtml(d.siteUrl)}" target="_blank" rel="noopener" class="text-hc-blue underline">${escapeHtml(d.siteUrl)}</a></td>
+          <td data-label="Type">${escapeHtml(d.websiteTypeName || 'n/a')}</td>
+          <td data-label="Site"><a href="${escapeHtml(d.siteUrl)}" target="_blank" rel="noopener" class="text-brand-500 underline">${escapeHtml(d.siteUrl)}</a></td>
           <td data-label="Amount">${formatDeploymentAmount(d)}</td>
           <td data-label="Deployed">${formatDate(d.deployedAt)}</td>
         </tr>`).join('') || '<tr><td colspan="5" data-label="">No deployments yet.</td></tr>';
@@ -1606,7 +1632,7 @@
     function formatAmount(r) {
       return r.chargeCurrency && r.chargeAmount !== null
         ? `${escapeHtml(r.chargeCurrency)} ${Number(r.chargeAmount).toFixed(2)}`
-        : '—';
+        : 'n/a';
     }
 
     function statusBadge(status) {
@@ -1624,7 +1650,7 @@
         <tr data-reference="${escapeHtml(p.reference)}">
           <td data-label="Reference" class="font-mono text-xs">${escapeHtml(p.reference)}</td>
           <td data-label="Client">${escapeHtml(p.clientEmail)}</td>
-          <td data-label="Type">${escapeHtml(p.websiteTypeName || '—')}</td>
+          <td data-label="Type">${escapeHtml(p.websiteTypeName || 'n/a')}</td>
           <td data-label="Amount">${formatAmount(p)}</td>
           <td data-label="Created">${formatDate(p.createdAt)}</td>
           <td data-label="Status">${statusBadge(p.status)}</td>
@@ -1656,22 +1682,22 @@
 
           resultEl.style.display = 'block';
           if (data.outcome === 'deployed') {
-            resultEl.className = 'retry-result text-xs text-emerald-600';
+            resultEl.className = 'retry-result text-xs text-success-600';
             resultEl.innerHTML = `Deployed: <a href="${escapeHtml(data.siteUrl)}" target="_blank" rel="noopener" class="underline">${escapeHtml(data.siteUrl)}</a>`;
             setTimeout(load, 1500);
           } else if (data.outcome === 'not_paid') {
-            resultEl.className = 'retry-result text-xs text-amber-600';
-            resultEl.textContent = 'Payment not verified — nothing was changed.';
+            resultEl.className = 'retry-result text-xs text-warning-600';
+            resultEl.textContent = 'Payment not verified. Nothing was changed.';
             btn.disabled = false;
             btn.textContent = 'Check & Deploy';
           } else if (data.outcome === 'not_found') {
-            resultEl.className = 'retry-result text-xs text-amber-600';
+            resultEl.className = 'retry-result text-xs text-warning-600';
             resultEl.textContent = 'This reference no longer exists.';
             btn.disabled = false;
             btn.textContent = 'Check & Deploy';
           } else {
-            resultEl.className = 'retry-result text-xs text-red-600';
-            resultEl.textContent = data.error || 'Something went wrong — nothing was changed.';
+            resultEl.className = 'retry-result text-xs text-error-600';
+            resultEl.textContent = data.error || 'Something went wrong. Nothing was changed.';
             btn.disabled = false;
             btn.textContent = 'Check & Deploy';
           }
@@ -1750,18 +1776,18 @@
         const dropOffHtml = s.dropOffPct === null
           ? ''
           : s.dropOffPct > 0
-            ? `<span class="ml-2 text-xs font-medium text-red-500">↓ ${s.dropOffPct}% drop-off</span>`
+            ? `<span class="ml-2 text-xs font-medium text-error-500">↓ ${s.dropOffPct}% drop-off</span>`
             : s.dropOffPct < 0
-              ? `<span class="ml-2 text-xs font-medium text-hc-blue">↑ grew ${Math.abs(s.dropOffPct)}%</span>`
-              : `<span class="ml-2 text-xs font-medium text-emerald-600">no drop-off</span>`;
+              ? `<span class="ml-2 text-xs font-medium text-brand-500">↑ grew ${Math.abs(s.dropOffPct)}%</span>`
+              : `<span class="ml-2 text-xs font-medium text-success-600">no drop-off</span>`;
         return `
           <div class="mb-4 last:mb-0">
             <div class="mb-1 flex items-baseline justify-between">
               <span class="text-sm font-medium text-hc-ink">${escapeHtml(s.label)}</span>
-              <span class="text-sm text-slate-500">${s.count}${dropOffHtml}</span>
+              <span class="text-sm text-gray-500">${s.count}${dropOffHtml}</span>
             </div>
-            <div class="h-3 w-full overflow-hidden rounded-full bg-slate-100">
-              <div class="h-full rounded-full bg-hc-blue" style="width:${widthPct}%"></div>
+            <div class="h-3 w-full overflow-hidden rounded-full bg-gray-100">
+              <div class="h-full rounded-full bg-brand-500" style="width:${widthPct}%"></div>
             </div>
           </div>`;
       }).join('');
@@ -1867,12 +1893,12 @@
             <strong class="text-sm text-hc-ink">${escapeHtml(s.name)}</strong>
             ${s.isActive ? '<span class="admin-badge admin-badge-active">Active</span>' : '<span class="admin-badge">Inactive</span>'}
           </div>
-          <pre class="mt-2 whitespace-pre-wrap break-all rounded-md bg-slate-50 p-2 font-mono text-xs">${truncatedHtml(s.scriptContent)}</pre>
+          <pre class="mt-2 whitespace-pre-wrap break-all rounded-md bg-gray-50 p-2 font-mono text-xs">${truncatedHtml(s.scriptContent)}</pre>
           <div class="mt-3 flex flex-wrap gap-2">
             <button type="button" class="admin-btn-outline admin-btn-sm toggle-script" data-id="${s.id}" data-active="${s.isActive}">${s.isActive ? 'Deactivate' : 'Activate'}</button>
             <button type="button" class="admin-btn-danger admin-btn-sm remove-script" data-id="${s.id}">Remove</button>
           </div>
-        </div>`).join('') || '<p class="mt-2 text-sm text-slate-400">No scripts in this section yet.</p>';
+        </div>`).join('') || '<p class="mt-2 text-sm text-gray-400">No scripts in this section yet.</p>';
 
       container.querySelectorAll('.toggle-script').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -1958,17 +1984,17 @@
     function renderFooterLinks(links) {
       const list = document.getElementById('footerLinksList');
       list.innerHTML = links.map((l, i) => `
-        <div class="flex items-center gap-3 rounded-md border border-slate-200 p-2.5" data-id="${l.id}">
+        <div class="flex items-center gap-3 rounded-md border border-gray-200 p-2.5" data-id="${l.id}">
           <div class="flex shrink-0 flex-col gap-1">
             <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${l.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
             <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${l.id}" ${i === links.length - 1 ? 'disabled' : ''}>↓</button>
           </div>
           <div class="min-w-0 flex-1 text-sm">
             <span class="font-medium text-hc-ink">${escapeHtml(l.label)}</span>
-            <span class="ml-2 text-slate-400">${escapeHtml(l.url)}</span>
+            <span class="ml-2 text-gray-400">${escapeHtml(l.url)}</span>
           </div>
           <button type="button" class="admin-btn-danger admin-btn-sm shrink-0 remove-footer-link" data-id="${l.id}">Remove</button>
-        </div>`).join('') || '<p class="text-sm text-slate-400">No footer links yet.</p>';
+        </div>`).join('') || '<p class="text-sm text-gray-400">No footer links yet.</p>';
 
       list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => moveFooterLink(btn.dataset.id, 'up')));
       list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => moveFooterLink(btn.dataset.id, 'down')));
@@ -2068,11 +2094,11 @@
     function summaryFor(section) {
       const c = section.content || {};
       if (section.sectionType === 'hero') return c.headline || '';
-      if (section.sectionType === 'feature_cards') return `${c.heading || ''} — ${(c.cards || []).length} card(s)`;
+      if (section.sectionType === 'feature_cards') return `${c.heading || ''} (${(c.cards || []).length} card(s))`;
       if (section.sectionType === 'split_image_text') return c.heading || '';
-      if (section.sectionType === 'cta_image_cards') return `${c.heading || ''} — ${(c.cards || []).length} card(s)`;
-      if (section.sectionType === 'bullet_list') return `${c.heading || ''} — ${(c.items || []).length} item(s)`;
-      if (section.sectionType === 'testimonials') return `${c.heading || ''} — ${(c.items || []).length} testimonial(s)`;
+      if (section.sectionType === 'cta_image_cards') return `${c.heading || ''} (${(c.cards || []).length} card(s))`;
+      if (section.sectionType === 'bullet_list') return `${c.heading || ''} (${(c.items || []).length} item(s))`;
+      if (section.sectionType === 'testimonials') return `${c.heading || ''} (${(c.items || []).length} testimonial(s))`;
       if (section.sectionType === 'footer') return `${(c.link_columns || []).length} link column(s)`;
       if (section.sectionType === 'category_teaser') return c.heading || '';
       if (section.sectionType === 'faq') return c.heading || '';
@@ -2113,8 +2139,8 @@
         ${textField('Eyebrow text (optional)', 'eyebrow_text', c.eyebrow_text)}
         ${textField('Heading', 'heading', c.heading)}
         ${textField('Highlighted word (must match a word/phrase in the heading exactly)', 'highlighted_word', c.highlighted_word)}
-        <p class="mt-2 text-xs text-slate-500">
-          The cards below this heading show your first 2 active Website Categories automatically (or, if you haven't set any up yet, your first 2 active website types instead) — manage which ones from the Categories page, not here.
+        <p class="mt-2 text-xs text-gray-500">
+          The cards below this heading show your first 2 active Website Categories automatically (or, if you haven't set any up yet, your first 2 active website types instead). Manage which ones from the Categories page, not here.
         </p>`;
     }
     function collectCategoryTeaserForm(panel) {
@@ -2135,8 +2161,8 @@
         ${textField('Eyebrow text (optional)', 'eyebrow_text', c.eyebrow_text)}
         ${textField('Heading', 'heading', c.heading)}
         ${textField('Highlighted word (must match a word/phrase in the heading exactly)', 'highlighted_word', c.highlighted_word)}
-        <p class="mt-2 text-xs text-slate-500">
-          The questions themselves are managed on the <a href="/${config.adminSlug || ''}/faq" class="text-hc-blue">FAQ page</a>, not here.
+        <p class="mt-2 text-xs text-gray-500">
+          The questions themselves are managed on the <a href="/${config.adminSlug || ''}/faq" class="text-brand-500">FAQ page</a>, not here.
         </p>`;
     }
     function collectFaqForm(panel) {
@@ -2150,7 +2176,7 @@
     // ---- feature_cards ----
     function featureCardRowHtml(card) {
       card = card || {};
-      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+      return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row>
         <label class="admin-label">Icon</label>
         <select class="admin-select" data-field="icon_name">${iconOptionsHtml(card.icon_name)}</select>
         <label class="admin-label">Icon color</label>
@@ -2187,7 +2213,7 @@
         <select class="admin-select" data-field="decorative_accent_color">${colorOptionsHtml(c.decorative_accent_color)}</select>
         ${textField('Button text (optional)', 'cta_text', c.cta_text)}
         ${textField('Button link', 'cta_url', c.cta_url)}
-        <p class="mt-2 text-xs text-slate-400">Image: ${escapeHtml(c.image_asset_key || 'none — fixed, not editable here')}</p>`;
+        <p class="mt-2 text-xs text-gray-400">Image: ${escapeHtml(c.image_asset_key || 'none, fixed, not editable here')}</p>`;
     }
     function collectSplitImageTextForm(panel) {
       return {
@@ -2204,11 +2230,11 @@
     // ---- cta_image_cards ----
     function ctaCardRowHtml(card) {
       card = card || {};
-      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+      return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row>
         ${textField('Overlay label', 'overlay_label', card.overlay_label)}
         ${textField('Button text', 'button_text', card.button_text)}
         ${textField('Button link', 'button_url', card.button_url)}
-        <p class="mt-1 text-xs text-slate-400">Image: ${escapeHtml(card.image_asset_key || 'none — fixed, not editable here')}</p>
+        <p class="mt-1 text-xs text-gray-400">Image: ${escapeHtml(card.image_asset_key || 'none, fixed, not editable here')}</p>
         <button type="button" class="admin-btn-danger admin-btn-sm mt-2" data-remove-row>Remove card</button>
       </div>`;
     }
@@ -2226,7 +2252,7 @@
     // ---- bullet_list ----
     function bulletItemRowHtml(item) {
       item = item || {};
-      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+      return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row>
         <label class="admin-label">Icon color</label>
         <select class="admin-select" data-field="icon_color">${colorOptionsHtml(item.icon_color)}</select>
         ${textField('Text', 'text', item.text)}
@@ -2241,7 +2267,7 @@
         <p class="admin-label">Checklist items</p>
         <div data-array="items">${(c.items || []).map(bulletItemRowHtml).join('')}</div>
         <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-items>Add item</button>
-        <p class="mt-2 text-xs text-slate-400">Image: ${escapeHtml(c.image_asset_key || 'none — fixed, not editable here')}</p>`;
+        <p class="mt-2 text-xs text-gray-400">Image: ${escapeHtml(c.image_asset_key || 'none, fixed, not editable here')}</p>`;
     }
     function collectBulletListForm(panel) {
       return {
@@ -2255,7 +2281,7 @@
     // ---- testimonials ----
     function testimonialRowHtml(item) {
       item = item || {};
-      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+      return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row>
         ${textareaField('Quote', 'quote', item.quote)}
         ${textField('Author name', 'author_name', item.author_name)}
         ${textField('Author role (optional)', 'author_role', item.author_role)}
@@ -2286,7 +2312,7 @@
     function footerColumnRowHtml(column) {
       column = column || {};
       const links = column.links || [];
-      return `<div class="admin-subitem mt-3 border-t border-slate-100 pt-3" data-row>
+      return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row>
         ${textField('Column heading', 'heading', column.heading)}
         <p class="admin-label">Links</p>
         <div data-array="links">${links.map(footerLinkRowHtml).join('')}</div>
@@ -2296,7 +2322,7 @@
     }
     function renderFooterForm(c) {
       return `
-        ${textareaField('Bottom copyright line (shown at the very bottom of the footer — leave blank to fall back to a computed © line)', 'tagline', c.tagline)}
+        ${textareaField('Bottom copyright line (shown at the very bottom of the footer, leave blank to fall back to a computed © line)', 'tagline', c.tagline)}
         <p class="admin-label">Link columns</p>
         <div data-array="link_columns">${(c.link_columns || []).map(footerColumnRowHtml).join('')}</div>
         <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-link_columns>Add column</button>`;
@@ -2430,9 +2456,9 @@
             <button type="button" class="admin-btn-danger admin-btn-sm delete-section">Delete</button>
           </div>
         </div>
-        <p class="mt-2 text-sm text-slate-500">${escapeHtml(summaryFor(section))}</p>
+        <p class="mt-2 text-sm text-gray-500">${escapeHtml(summaryFor(section))}</p>
         <form class="edit-panel mt-4" style="display:none;">
-          ${handlers ? handlers.render(section.content || {}) : '<p class="text-sm text-red-600">Unknown section type.</p>'}
+          ${handlers ? handlers.render(section.content || {}) : '<p class="text-sm text-error-600">Unknown section type.</p>'}
           <p class="save-status admin-msg" style="display:none;"></p>
           <button type="submit" class="admin-btn mt-3">Save</button>
         </form>`;
@@ -2477,7 +2503,7 @@
       sections = data.sections;
       listEl.innerHTML = '';
       if (sections.length === 0) {
-        listEl.innerHTML = '<p class="text-sm text-slate-500">No sections yet — add one above.</p>';
+        listEl.innerHTML = '<p class="text-sm text-gray-500">No sections yet. Add one above.</p>';
         return;
       }
       sections.forEach(section => listEl.appendChild(renderCard(section)));
@@ -2537,9 +2563,9 @@
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <strong class="text-sm text-hc-ink">${escapeHtml(c.name)}</strong>
-                <span class="text-xs text-slate-400">/${escapeHtml(c.slug)}</span>
+                <span class="text-xs text-gray-400">/${escapeHtml(c.slug)}</span>
                 <span class="admin-badge ${c.isActive ? 'admin-badge-active' : ''}">${c.isActive ? 'active' : 'inactive'}</span>
-                <span class="text-xs text-slate-400">${c.typeCount} type${c.typeCount === 1 ? '' : 's'}</span>
+                <span class="text-xs text-gray-400">${c.typeCount} type${c.typeCount === 1 ? '' : 's'}</span>
               </div>
               ${c.description ? `<p class="mt-1 text-sm text-hc-ink/60">${escapeHtml(c.description)}</p>` : ''}
               <div id="editRow-${c.id}" style="display:none;" class="mt-3"></div>
@@ -2550,7 +2576,7 @@
               <button type="button" class="admin-btn-danger admin-btn-sm remove-category" data-id="${c.id}">Remove</button>
             </div>
           </div>
-        </div>`).join('') || '<p class="text-sm text-slate-400">No categories yet — every website type shows in one flat list on /explore until you add one.</p>';
+        </div>`).join('') || '<p class="text-sm text-gray-400">No categories yet. Every website type shows in one flat list on /explore until you add one.</p>';
 
       list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'up')));
       list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'down')));
@@ -2566,7 +2592,7 @@
       });
       list.querySelectorAll('.remove-category').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('Delete this category? Website types inside it are NOT deleted — they just become uncategorized.')) return;
+          if (!confirm('Delete this category? Website types inside it are NOT deleted. They just become uncategorized.')) return;
           const res = await window.adminFetch(`/api/admin/categories/${btn.dataset.id}`, { method: 'DELETE' });
           if (res.ok) load();
         });
@@ -2709,7 +2735,7 @@
               <button type="button" class="admin-btn-danger admin-btn-sm remove-faq" data-id="${f.id}">Remove</button>
             </div>
           </div>
-        </div>`).join('') || '<p class="text-sm text-slate-400">No FAQ entries yet.</p>';
+        </div>`).join('') || '<p class="text-sm text-gray-400">No FAQ entries yet.</p>';
 
       list.querySelectorAll('.move-up').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'up')));
       list.querySelectorAll('.move-down').forEach(btn => btn.addEventListener('click', () => move(btn.dataset.id, 'down')));
