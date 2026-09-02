@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Hosting | HeartCode Admin</title>
+</head>
+<body data-page="hosting">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'hosting' }) %>
+  <main class="admin-main">
+    <div class="mb-6 flex items-center gap-3">
+      <h1 class="font-display text-2xl uppercase tracking-wide text-hc-ink">Hosting</h1>
+      <span id="configuredBadge" class="admin-badge admin-badge-brand">…</span>
+    </div>
+
+    <p class="mb-6 max-w-xl text-sm text-gray-500">
+      Every paid deployment is stored and served by ClarityHeart. Set the connection here before accepting real payments — checkout and payment still work with no Hosting config, but the deployment step will fail right after a client pays.
+    </p>
+
+    <div class="admin-card max-w-xl">
+      <form id="hostingForm">
+        <label class="admin-label" for="baseUrl">Base URL</label>
+        <input class="admin-input" type="text" id="baseUrl" placeholder="https://manage.heartcode.uk">
+
+        <label class="admin-label" for="apiToken">API token</label>
+        <input class="admin-input" type="password" id="apiToken" placeholder="Leave blank to keep current token">
+        <p id="tokenMasked" class="admin-msg" style="display:none;"></p>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button type="submit" class="admin-btn">Save</button>
+          <button type="button" id="testDeployBtn" class="admin-btn-outline">Send test deploy</button>
+        </div>
+      </form>
+      <p id="statusMsg" class="admin-msg" style="display:none;"></p>
+      <div id="testResult" class="mt-4" style="display:none;"></div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
