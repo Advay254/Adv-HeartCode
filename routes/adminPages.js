@@ -45,6 +45,10 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/payments`, (req, res) => {
   res.render('admin/paystack');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/hosting`, (req, res) => {
+  res.render('admin/hosting');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/ai-provider`, (req, res) => {
   res.render('admin/ai-providers');
 });

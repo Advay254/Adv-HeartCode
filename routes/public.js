@@ -717,9 +717,9 @@ router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), asyncHandle
     return res.status(503).json({ error: 'Payments are not configured yet' });
   }
 
-  // Reference doubles as the seed for the Cloudflare Pages project name
-  // later (see lib/cloudflarePages.js) — generated safe for both uses
-  // from the start rather than reformatted downstream.
+  // Reference doubles as the seed for the ClarityHeart deploy slug later
+  // (see lib/clarityheart.js) — generated safe for both uses from the
+  // start rather than reformatted downstream.
   const reference = `hc-${crypto.randomBytes(8).toString('hex')}`;
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
