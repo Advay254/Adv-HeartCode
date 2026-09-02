@@ -74,13 +74,19 @@ module.exports = {
     ...baseTheme,
     extend: {
       ...baseTheme.extend,
-      // v1.1.7: title-* sizes ported from TailAdmin's own fontSize scale
-      // (used for the Overview page's stat-card big numbers) — a real
-      // TailAdmin design token, not an invented one.
+      // v1.1.7: title-* and theme-* sizes ported from TailAdmin's own
+      // fontSize scale (title-sm for stat-card numbers, theme-xs/theme-sm
+      // for badge and table text) — real TailAdmin design tokens, not
+      // invented ones. v1.1.8 adds theme-xs/theme-sm/theme-xl (the v1.1.7
+      // pass only added the title-* sizes it used at the time; this
+      // redo's exact badge/table structures need theme-xs/theme-sm too).
       fontSize: {
         ...baseTheme.extend.fontSize,
         'title-sm': ['30px', '38px'],
-        'title-md': ['36px', '44px']
+        'title-md': ['36px', '44px'],
+        'theme-xs': ['12px', '18px'],
+        'theme-sm': ['14px', '20px'],
+        'theme-xl': ['20px', '30px']
       },
       colors: {
         ...baseTheme.extend.colors,
