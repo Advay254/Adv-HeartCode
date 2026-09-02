@@ -14,32 +14,60 @@
          server-side, from lib/icons.js) rather than built entirely in
          admin.js's template-literal HTML, since admin.js has no access
          to getIconSvg() (server-only). initOverviewPage() now just fills
-         in the value/caption slots below by id instead of rebuilding
-         the whole grid's markup on every load. -->
+         in the value/badge/caption slots below by id instead of
+         rebuilding the whole grid's markup on every load.
+
+         v1.1.8 (redo, exact structures): restructured to TailAdmin's
+         literal EcommerceMetrics.tsx shape — icon square, then a row
+         with the label+value stacked on the left (admin-stat-row) and
+         an optional badge on the right, bottom-aligned. There's no
+         period-over-period trend anywhere in this app's data (nothing
+         fabricated here), so the badge slot is used only where a real,
+         already-computed short indicator exists (Payments' live/test
+         mode, Website Types' inactive count) and is left empty
+         otherwise; a longer caption that wouldn't fit in a badge (AI
+         Provider's model name, Deployments' revenue/subscriber count)
+         renders below the row instead. -->
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div class="admin-stat-card">
         <div class="admin-stat-icon"><%- getIconSvg('credit-card') %></div>
-        <p class="admin-stat-label">Payments</p>
-        <div id="statPaymentsValue" class="admin-stat-value">&hellip;</div>
-        <div id="statPaymentsCaption" class="admin-stat-caption"></div>
+        <div class="admin-stat-row">
+          <div>
+            <p class="admin-stat-label">Payments</p>
+            <h4 id="statPaymentsValue" class="admin-stat-value">&hellip;</h4>
+          </div>
+          <span id="statPaymentsBadge"></span>
+        </div>
       </div>
       <div class="admin-stat-card">
         <div class="admin-stat-icon"><%- getIconSvg('zap') %></div>
-        <p class="admin-stat-label">AI Provider</p>
-        <div id="statAiProviderValue" class="admin-stat-value">&hellip;</div>
-        <div id="statAiProviderCaption" class="admin-stat-caption"></div>
+        <div class="admin-stat-row">
+          <div>
+            <p class="admin-stat-label">AI Provider</p>
+            <h4 id="statAiProviderValue" class="admin-stat-value">&hellip;</h4>
+          </div>
+        </div>
+        <p id="statAiProviderCaption" class="admin-stat-caption mt-2"></p>
       </div>
       <div class="admin-stat-card">
         <div class="admin-stat-icon"><%- getIconSvg('layout-template') %></div>
-        <p class="admin-stat-label">Website Types</p>
-        <div id="statWebsiteTypesValue" class="admin-stat-value">&hellip;</div>
-        <div id="statWebsiteTypesCaption" class="admin-stat-caption"></div>
+        <div class="admin-stat-row">
+          <div>
+            <p class="admin-stat-label">Website Types</p>
+            <h4 id="statWebsiteTypesValue" class="admin-stat-value">&hellip;</h4>
+          </div>
+          <span id="statWebsiteTypesBadge"></span>
+        </div>
       </div>
       <div class="admin-stat-card">
         <div class="admin-stat-icon"><%- getIconSvg('rocket') %></div>
-        <p class="admin-stat-label">Deployments</p>
-        <div id="statDeploymentsValue" class="admin-stat-value">&hellip;</div>
-        <div id="statDeploymentsCaption" class="admin-stat-caption"></div>
+        <div class="admin-stat-row">
+          <div>
+            <p class="admin-stat-label">Deployments</p>
+            <h4 id="statDeploymentsValue" class="admin-stat-value">&hellip;</h4>
+          </div>
+        </div>
+        <p id="statDeploymentsCaption" class="admin-stat-caption mt-2"></p>
       </div>
     </div>
 
