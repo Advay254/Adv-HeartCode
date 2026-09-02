@@ -367,6 +367,90 @@
     });
   }
 
+  // ---- Hosting page (v1.1.9 Part A: ClarityHeart config) ----
+  function initHostingPage() {
+    const form = document.getElementById('hostingForm');
+    const configuredBadge = document.getElementById('configuredBadge');
+    const statusMsg = document.getElementById('statusMsg');
+
+    function showStatus(text, type) {
+      statusMsg.textContent = text;
+      statusMsg.className = 'admin-msg admin-msg-' + type;
+      statusMsg.style.display = 'block';
+    }
+
+    function applyConfig(cfg) {
+      document.getElementById('baseUrl').value = cfg.baseUrl || '';
+      const maskedEl = document.getElementById('tokenMasked');
+      if (cfg.apiTokenMasked) {
+        maskedEl.textContent = 'Current token: ' + cfg.apiTokenMasked;
+        maskedEl.style.display = 'block';
+      } else {
+        maskedEl.style.display = 'none';
+      }
+      configuredBadge.textContent = cfg.configured ? 'Configured' : 'Not set up';
+      configuredBadge.className = 'admin-badge ' + (cfg.configured ? 'admin-badge-brand' : 'admin-badge-error');
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/hosting');
+      const cfg = await res.json();
+      applyConfig(cfg);
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        baseUrl: document.getElementById('baseUrl').value,
+        apiToken: document.getElementById('apiToken').value || null
+      };
+      const res = await window.adminFetch('/api/admin/hosting', {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        applyConfig(data);
+        document.getElementById('apiToken').value = '';
+        showStatus('Saved.', 'success');
+      } else {
+        showStatus(data.error || 'Failed to save.', 'error');
+      }
+    });
+
+    // Exercises the real ClarityHeart API end to end (see
+    // routes/adminHosting.js's POST /test) — deploys a genuine throwaway
+    // test page through the config saved above, not a mocked/simulated
+    // check, so a green result here means the connection actually works.
+    document.getElementById('testDeployBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('testDeployBtn');
+      const resultEl = document.getElementById('testResult');
+
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<p class="text-sm text-gray-500">Deploying a real throwaway test page through your saved Hosting config…</p>';
+
+      try {
+        const res = await window.adminFetch('/api/admin/hosting/test', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const safeUrl = escapeHtml(data.url);
+          resultEl.innerHTML = `<p class="admin-msg admin-msg-success">Success — deployed to <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></p>`;
+        } else {
+          resultEl.innerHTML = `<p class="admin-msg admin-msg-error">${escapeHtml(data.error || 'Test deploy failed.')}</p>`;
+        }
+      } catch (err) {
+        resultEl.innerHTML = '<p class="admin-msg admin-msg-error">Network error while running the test deploy.</p>';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send test deploy';
+      }
+    });
+
+    load();
+  }
+
   // ---- AI provider page ----
   function initAiProviderPage() {
     const providersList = document.getElementById('providersList');
@@ -2847,6 +2931,7 @@
     const page = document.body.dataset.page;
     if (page === 'login') initLoginPage();
     if (page === 'payments') initPaymentsPage();
+    if (page === 'hosting') initHostingPage();
     if (page === 'ai-provider') initAiProviderPage();
     if (page === 'email-providers') initEmailProvidersPage();
     if (page === 'notifications') initNotificationsPage();
