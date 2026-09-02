@@ -16,6 +16,48 @@
    `dark:` variant TailAdmin itself ships is simply absent here, not
    hidden or disabled).
 
+   v1.1.8 (redo, exact structures): v1.1.7 reskinned this file's existing
+   component classes with TailAdmin's colors but kept several of its own
+   approximate structural choices (rounded-lg + a shadow on cards, gray-
+   tinted default badges, custom admin-nav-* class names for the sidebar,
+   a bg-gray-50 table header fill) rather than the literal DOM/class
+   structures TailAdmin's own source actually uses. This version replaces
+   those specific choices with the literal structures, checked directly
+   against the reference source rather than approximated:
+   - .admin-card: rounded-2xl (not rounded-lg), no shadow (TailAdmin's
+     own ComponentCard/EcommerceMetrics cards are border-only, no
+     shadow-theme-sm — that was v1.1.7's own addition, not a TailAdmin
+     pattern), p-5 md:p-6 (not p-4 sm:p-5).
+   - .admin-badge: the exact TailAdmin Badge.tsx "light" variant markup
+     (px-2.5 py-0.5 justify-center gap-1 rounded-full text-theme-xs), with
+     FOUR explicit color modifiers (brand/success/error/warning) instead
+     of a gray default — every call site across the app now picks one
+     explicitly based on what it means (see the v1.1.8 README entry for
+     the full per-badge audit), rather than falling back to an
+     undifferentiated gray "neutral" look.
+   - .admin-table: header row has NO background fill in TailAdmin's own
+     BasicTableOne.tsx (verified directly against that file) — the
+     "light" look v1.1.7's own prose (and the build brief's) described
+     comes from the border + the muted gray-500 header text, not an
+     actual bg-gray-50 fill. That fill is removed here to match the real
+     source. Divider styling also switched from a per-cell border-b to
+     `divide-y divide-gray-100` on tbody, matching TailAdmin's own
+     TableBody className literally.
+   - sidebar nav: replaced this project's own admin-nav-* class names
+     with TailAdmin's actual .menu-item / .menu-item-active / etc. class
+     names verbatim (see the block below) — same visual result as
+     v1.1.7's admin-nav-link/admin-nav-group-toggle, but using the
+     literal reference names as this redo's build brief specifically
+     requires.
+   TailAdmin's own table wrapper also forces a fixed `min-w-[1102px]`
+   inner container, meaning ALL of TailAdmin's own tables scroll
+   sideways on mobile rather than reflowing — that part is deliberately
+   NOT ported. HeartCode's own v1.0.8 table-to-stacked-card behavior
+   below 640px is real, already-shipped, tested behavior and stays
+   exactly as it works today; only the visual skin (colors, spacing,
+   divider style) of both the wide-table view and the narrow-card view
+   changed to match TailAdmin's actual look.
+
    Font pairing (Anton display + Inter sans) is unchanged from v1.0.8 —
    this redesign is a color/layout/component pass, not a typography
    change. */
@@ -116,50 +158,60 @@
     @apply min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8;
   }
 
-  /* ---- nav ---- */
-
+  /* ---- nav ----
+     v1.1.8: literal TailAdmin class names, verified against
+     src/index.css in the reference source and ported verbatim (minus
+     every dark: variant, per this project's no-dark-mode rule). Applied
+     to: the ungrouped Overview link, every group's sub-items, and the
+     group toggle buttons themselves — TailAdmin's own .menu-item is used
+     for both real nav links AND its own group-parent buttons, so one set
+     of classes covers all three cases here too. */
   .admin-nav-group-label {
     @apply mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400 first:mt-0;
   }
 
-  /* Leaf nav item (used both for the ungrouped Overview link at the top,
-     and for the sub-items inside each collapsible group below) —
-     TailAdmin's .menu-item pattern, ported to this project's existing
-     admin-nav-link name rather than adopting TailAdmin's own class
-     names, since every nav entry already carries this class. */
-  .admin-nav-link {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 [&>svg]:h-[18px] [&>svg]:w-[18px] [&>svg]:shrink-0 [&>svg]:text-gray-500;
+  .menu-item {
+    @apply relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-theme-sm font-medium;
   }
-  .admin-nav-link.active {
-    @apply bg-brand-50 text-brand-500 [&>svg]:text-brand-500;
+  .menu-item-active {
+    @apply bg-brand-50 text-brand-500;
+  }
+  .menu-item-inactive {
+    @apply text-gray-700 hover:bg-gray-100;
+  }
+  .menu-item-icon-active {
+    @apply text-brand-500;
+  }
+  .menu-item-icon-inactive {
+    @apply text-gray-500;
+  }
+  .menu-item [data-menu-icon] {
+    @apply h-[18px] w-[18px] shrink-0;
+  }
+  .menu-item-arrow {
+    @apply relative ml-auto h-4 w-4 shrink-0 transition-transform duration-200;
+  }
+  .menu-item-arrow-active {
+    @apply rotate-180 text-brand-500;
+  }
+  .menu-item-arrow-inactive {
+    @apply text-gray-500;
   }
 
   /* Sub-items (inside an expanded group) sit one level in — matches
      TailAdmin's own menu-dropdown-item treatment (no repeated icon per
      sub-item, just indentation + text) more closely than repeating a
-     full icon per row would. */
-  .admin-nav-sublink {
-    @apply block rounded-lg py-2.5 pl-11 pr-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100;
+     full icon per row would. Named separately from .menu-item since
+     TailAdmin's own reference keeps these as two distinct class families
+     (menu-item vs menu-dropdown-item) rather than one shared class. */
+  .menu-dropdown-item {
+    @apply relative block rounded-lg py-2.5 pl-11 pr-3 text-theme-sm font-medium;
   }
-  .admin-nav-sublink.active {
+  .menu-dropdown-item-active {
     @apply bg-brand-50 text-brand-500;
   }
-
-  /* Group parent — a button, not a link (it toggles, it doesn't
-     navigate). Same visual weight as a leaf .admin-nav-link, plus a
-     trailing chevron that rotates on expand and adopts the brand color
-     while open, exactly mirroring TailAdmin's menu-item-arrow-active. */
-  .admin-nav-group-toggle {
-    @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 [&>svg:first-child]:h-[18px] [&>svg:first-child]:w-[18px] [&>svg:first-child]:shrink-0 [&>svg:first-child]:text-gray-500;
-  }
-  .admin-nav-group-toggle.is-open {
-    @apply bg-brand-50 text-brand-500 [&>svg:first-child]:text-brand-500;
-  }
-  .admin-nav-group-chevron {
-    @apply ml-auto h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200;
-  }
-  .admin-nav-group-toggle.is-open .admin-nav-group-chevron {
-    @apply rotate-180 text-brand-500;
+  .menu-dropdown-item-inactive {
+    @apply text-gray-700 hover:bg-gray-100;
   }
 
   /* The collapsible wrapper itself. A CSS transition can't animate
@@ -199,37 +251,44 @@
 
   /* ---- cards / surfaces ---- */
 
-  /* TailAdmin's own signature container: rounded-lg border border-gray-200
-     shadow-theme-sm — called out by name in this version's build brief,
-     so this is a direct, literal port of that exact pattern. */
+  /* TailAdmin's own literal card pattern (ComponentCard.tsx /
+     EcommerceMetrics.tsx, verified directly against both): rounded-2xl,
+     border-only, no shadow. v1.1.7 added shadow-theme-sm and rounded-lg
+     here, which isn't what TailAdmin's own cards actually use — fixed in
+     v1.1.8 to match the real reference. */
   .admin-card {
-    @apply rounded-lg border border-gray-200 bg-white p-4 shadow-theme-sm sm:p-5;
+    @apply rounded-2xl border border-gray-200 bg-white p-5 md:p-6;
   }
 
   /* ---- stat cards (Overview page) ---- */
-  /* TailAdmin's dashboard metric-card pattern: an icon in a soft tinted
-     square, a label, a large number, and a small secondary indicator.
-     HeartCode's real Overview data doesn't include a period-over-period
-     trend percentage (no such comparison exists anywhere in the schema,
-     and this redesign adds no new data per its own build brief), so the
-     "indicator" slot below the number shows genuinely real context
-     already computed server-side today (a status badge, an inactive
-     count, a revenue/subscriber caption) rather than a fabricated trend
-     figure. */
+  /* TailAdmin's literal EcommerceMetrics.tsx structure: an icon in a
+     gray-100 square (gray, not brand-tinted — v1.1.7 used a brand-tinted
+     icon square, which was an embellishment, not what the reference
+     actually does), then a flex row with the label+value stacked on the
+     left and an optional badge on the right, bottom-aligned. HeartCode's
+     real Overview data doesn't include a period-over-period trend
+     percentage (no such comparison exists anywhere in the schema, and
+     this redesign adds no new data), so the badge/caption slot shows
+     genuinely real, already-computed context instead of a fabricated
+     trend figure — see overview.ejs and initOverviewPage() for exactly
+     what each card's slot shows. */
   .admin-stat-card {
     @apply admin-card;
   }
   .admin-stat-icon {
-    @apply mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-500 [&>svg]:h-5 [&>svg]:w-5;
+    @apply flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-800 [&>svg]:h-6 [&>svg]:w-6;
+  }
+  .admin-stat-row {
+    @apply mt-5 flex items-end justify-between gap-3;
   }
   .admin-stat-label {
     @apply text-sm text-gray-500;
   }
   .admin-stat-value {
-    @apply mt-1.5 text-title-sm font-bold text-gray-800;
+    @apply mt-2 text-title-sm font-bold text-gray-800;
   }
   .admin-stat-caption {
-    @apply mt-1.5 text-sm text-gray-500;
+    @apply text-sm text-gray-500;
   }
 
   /* ---- form controls ---- */
@@ -250,15 +309,30 @@
   }
 
   /* ---- badges / status ---- */
-  /* TailAdmin's "light" badge variant (tinted background, matching-tone
-     text, full pill) — the badge/pill pattern this version's build brief
-     asks to apply across the Paystack mode badge, active/inactive
-     toggles, and subscriber opt-out status. */
+  /* The exact TailAdmin Badge.tsx "light" variant markup, verified
+     directly against that file. v1.1.7 left an undifferentiated gray
+     "neutral" look as the default and only had two color modifiers
+     (success-ish/warning-ish); v1.1.8 adds all four semantic colors as
+     explicit modifiers and every call site across the app now picks one
+     on purpose: success (green) for active/paid/deployed, error (red)
+     for failed/inactive/cancelled/disabled/opted-out, warning (amber)
+     for pending/needs-attention, brand (blue) for neutral/informational
+     labels (provider type, channel type, section type, count badges,
+     and the Paystack mode indicator specifically, per this version's own
+     build brief). There's no bare/uncolored .admin-badge left anywhere
+     in the app on purpose — seeing one during review is a sign a call
+     site was missed. */
   .admin-badge {
-    @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700;
+    @apply inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-0.5 text-theme-xs font-medium;
+  }
+  .admin-badge-brand {
+    @apply bg-brand-50 text-brand-500;
   }
   .admin-badge-active {
     @apply bg-success-50 text-success-600;
+  }
+  .admin-badge-error {
+    @apply bg-error-50 text-error-600;
   }
   .admin-badge-warn {
     @apply bg-warning-50 text-warning-600;
@@ -297,23 +371,34 @@
      row HTML) matching its column header. Below the `sm` breakpoint
      (640px), the table collapses into a stack of label/value rows per
      record — no separate mobile-only markup or a second render path in
-     JS, CSS does the whole transform. Unchanged behavior from v1.0.8;
-     only the visual skin (header row background, border/text colors)
-     is new for this version. */
+     JS, CSS does the whole transform. This responsive behavior is real,
+     already-shipped v1.0.8 behavior and is UNCHANGED here — TailAdmin's
+     own tables instead force a fixed min-w-[1102px] and scroll
+     sideways on mobile, which this version deliberately does NOT adopt,
+     per its own build brief. Only the visual skin changed: v1.1.8 drops
+     the bg-gray-50 header fill v1.1.7 added (TailAdmin's own
+     BasicTableOne.tsx header has no background fill at all, verified
+     directly against that file — the "light" look comes from the border
+     plus muted gray-500 text, not an actual fill) and switches from a
+     per-cell border-b to `divide-y divide-gray-100` on tbody, matching
+     TailAdmin's own TableBody className literally. */
   .admin-table-wrap {
     @apply admin-card overflow-x-auto p-0;
   }
   .admin-table {
-    @apply w-full min-w-[32rem] border-collapse text-left text-sm sm:min-w-0;
+    @apply w-full min-w-[32rem] border-collapse text-left text-theme-sm sm:min-w-0;
+  }
+  .admin-table thead {
+    @apply border-b border-gray-100;
   }
   .admin-table th {
-    @apply border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500;
+    @apply px-4 py-3 text-start text-theme-xs font-medium text-gray-500;
+  }
+  .admin-table tbody {
+    @apply divide-y divide-gray-100;
   }
   .admin-table td {
-    @apply border-b border-gray-100 px-4 py-3 align-top text-gray-700;
-  }
-  .admin-table tbody tr:last-child td {
-    @apply border-b-0;
+    @apply px-4 py-3 align-top text-theme-sm text-gray-800;
   }
 }
 
@@ -338,6 +423,22 @@
   .admin-table.is-responsive-stack tr:last-child {
     border-bottom: none;
   }
+  /* v1.1.8 bug fix (text-overflow audit): this cell becomes a flex
+     container in the stacked view, with the ::before label as one flex
+     item and the cell's own text content as an anonymous flex item next
+     to it. Anonymous flex items get the same automatic-minimum-size
+     behavior as real ones — by default that resolves to roughly the
+     width of the item's single longest word, which is fine for a short
+     value but collapses a longer one (a FAQ answer, a field description,
+     any admin-entered free text) into a column only as wide as that one
+     word, wrapping the rest one word per line in a narrow sliver. You
+     can't attach `min-width: 0` to an anonymous flex item directly (it
+     isn't a selectable element), but `overflow-wrap: anywhere` is
+     inherited and is specifically defined (CSS Sizing) to also reduce
+     that automatic minimum size, not just affect overflow rendering the
+     way `break-word` alone does — this is the actual fix, not just a
+     defensive extra. min-width: 0 is added too for any case where a
+     cell's value IS wrapped in a real child element. */
   .admin-table.is-responsive-stack td {
     display: flex;
     justify-content: space-between;
@@ -346,6 +447,8 @@
     border-bottom: none;
     padding: 0.35rem 0.25rem;
     text-align: right;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .admin-table.is-responsive-stack td::before {
     content: attr(data-label);
@@ -380,6 +483,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .truncate-text.is-expanded {
   -webkit-line-clamp: unset;
