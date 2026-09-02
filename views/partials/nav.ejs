@@ -16,7 +16,18 @@
      entry at all until now; it's filed under Content next to the two
      pages that link to it. The group containing the current page starts
      expanded (rendered server-side below, not computed by JS) so there's
-     no flash of a collapsed-then-expanding menu on load. -->
+     no flash of a collapsed-then-expanding menu on load.
+
+     v1.1.8 (redo, exact structures): every nav link/toggle below now uses
+     TailAdmin's own literal .menu-item / .menu-item-active / .menu-item-
+     inactive / .menu-item-icon-active / .menu-item-icon-inactive /
+     .menu-item-arrow-active / .menu-item-arrow-inactive class names
+     (defined in src/styles/admin.css, ported verbatim from TailAdmin's
+     src/index.css) in place of v1.1.7's own admin-nav-link / admin-nav-
+     group-toggle / admin-nav-group-chevron names — same behavior, the
+     literal reference class names this redo's build brief specifically
+     asks for. Sub-items use TailAdmin's separate .menu-dropdown-item
+     family, also verbatim. -->
 <%
   const navGroups = [
     {
@@ -75,8 +86,10 @@
   </div>
 
   <nav class="admin-sidebar-nav">
-    <a href="/<%= slug %>/" class="admin-nav-link <%= activePage === 'overview' ? 'active' : '' %>">
-      <%- getIconSvg('house') %> Overview
+    <% const overviewActive = activePage === 'overview'; %>
+    <a href="/<%= slug %>/" class="menu-item <%= overviewActive ? 'menu-item-active' : 'menu-item-inactive' %>">
+      <span data-menu-icon class="<%= overviewActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' %>"><%- getIconSvg('house') %></span>
+      Overview
     </a>
 
     <% navGroups.forEach(function (group, groupIndex) { %>
@@ -84,18 +97,19 @@
       <p class="admin-nav-group-label"><%= group.label %></p>
       <button
         type="button"
-        class="admin-nav-group-toggle <%= isGroupActive ? 'is-open' : '' %>"
+        class="menu-item <%= isGroupActive ? 'menu-item-active' : 'menu-item-inactive' %>"
         data-nav-toggle
         aria-expanded="<%= isGroupActive ? 'true' : 'false' %>"
         aria-controls="navGroup<%= groupIndex %>"
       >
-        <%- getIconSvg(group.items[0].icon) %>
+        <span data-menu-icon class="<%= isGroupActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' %>"><%- getIconSvg(group.items[0].icon) %></span>
         <%= group.label %>
-        <span class="admin-nav-group-chevron"><%- getIconSvg('chevron-down') %></span>
+        <span class="menu-item-arrow <%= isGroupActive ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive' %>"><%- getIconSvg('chevron-down') %></span>
       </button>
       <div class="admin-nav-group-children <%= isGroupActive ? 'is-open' : '' %>" id="navGroup<%= groupIndex %>">
         <% group.items.forEach(function (item) { %>
-          <a href="<%= item.href %>" class="admin-nav-sublink <%= activePage === item.page ? 'active' : '' %>">
+          <% const itemActive = activePage === item.page; %>
+          <a href="<%= item.href %>" class="menu-dropdown-item <%= itemActive ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive' %>">
             <%= item.label %>
           </a>
         <% }); %>
