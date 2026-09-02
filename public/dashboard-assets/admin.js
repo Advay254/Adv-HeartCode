@@ -234,7 +234,7 @@
     function applyConfig(cfg) {
       document.getElementById('modeSelect').value = cfg.mode;
       modeBadge.textContent = cfg.mode;
-      modeBadge.className = 'admin-badge ' + (cfg.mode === 'live' ? 'admin-badge-active' : 'admin-badge-warn');
+      modeBadge.className = 'admin-badge admin-badge-brand';
       document.getElementById('publicKeyTest').value = cfg.publicKeyTest || '';
       document.getElementById('publicKeyLive').value = cfg.publicKeyLive || '';
       renderMasked(document.getElementById('secretTestMasked'), cfg.secretKeyTestMasked);
@@ -340,7 +340,7 @@
         const rows = data.attempts.map(a => `
           <tr>
             <td data-label="Provider">${escapeHtml(a.provider)}</td>
-            <td data-label="Result">${a.success ? '<span class="admin-badge admin-badge-active">ok</span>' : '<span class="admin-badge admin-badge-warn">failed</span>'}</td>
+            <td data-label="Result">${a.success ? '<span class="admin-badge admin-badge-active">ok</span>' : '<span class="admin-badge admin-badge-error">failed</span>'}</td>
             <td data-label="Latency">${escapeHtml(a.latencyMs)}ms</td>
             <td data-label="Details">${escapeHtml(a.error || (a.success ? `country=${a.countryCode || 'n/a'} currency=${a.currency || 'n/a'}` : ''))}</td>
           </tr>
@@ -547,7 +547,7 @@
       <div class="admin-card email-provider-card" data-provider-id="${p.id}">
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-base font-semibold text-hc-ink">${escapeHtml(p.label)}</h2>
-          <span class="admin-badge">${escapeHtml(p.providerType)}</span>
+          <span class="admin-badge admin-badge-brand">${escapeHtml(p.providerType)}</span>
           ${p.isActive ? '<span class="admin-badge admin-badge-active">active</span>' : ''}
         </div>
         ${configRows}
@@ -701,8 +701,8 @@
       <div class="admin-card notification-channel-card" data-channel-id="${c.id}">
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-base font-semibold text-hc-ink">${escapeHtml(c.label)}</h2>
-          <span class="admin-badge">${escapeHtml(c.channelType)}</span>
-          ${c.isActive ? '<span class="admin-badge admin-badge-active">enabled</span>' : '<span class="admin-badge">disabled</span>'}
+          <span class="admin-badge admin-badge-brand">${escapeHtml(c.channelType)}</span>
+          ${c.isActive ? '<span class="admin-badge admin-badge-active">enabled</span>' : '<span class="admin-badge admin-badge-error">disabled</span>'}
         </div>
         <p class="mt-1 text-sm text-gray-500">${channelConfigSummary(c)}</p>
 
@@ -822,7 +822,7 @@
       document.getElementById('typesTableBody').innerHTML = types.map(t => `
         <tr>
           <td data-label="Name"><a href="/${slug}/website-types/${t.id}" class="font-medium text-brand-500">${escapeHtml(t.name)}</a></td>
-          <td data-label="Status"><span class="admin-badge ${t.isActive ? 'admin-badge-active' : ''}">${t.isActive ? 'active' : 'inactive'}</span></td>
+          <td data-label="Status"><span class="admin-badge ${t.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${t.isActive ? 'active' : 'inactive'}</span></td>
           <td data-label="Fields">${t.fieldCount}</td>
           <td data-label="Template">${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : 'n/a'}</td>
           <td data-label="Price">$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="admin-badge admin-badge-active">AI</span>' : ''}</td>
@@ -1453,20 +1453,25 @@
   // v1.1.7: the four stat-card shells (icon + label) are now rendered
   // server-side in overview.ejs, since their icons come from
   // getIconSvg(), a server-only helper. This function's job is just to
-  // fill each card's value/caption slots and the breakdown table body --
-  // no HTML structure is built here anymore, only text/badge content for
-  // elements that already exist in the DOM. There's no real trend
-  // percentage anywhere in this app's data model (no stored
-  // period-over-period comparison), so each card's "caption" slot below
-  // the big number shows real, already-computed context instead --
-  // never a fabricated figure.
+  // fill each card's value/badge/caption slots and the breakdown table
+  // body -- no HTML structure is built here anymore. There's no real
+  // trend percentage anywhere in this app's data model (no stored
+  // period-over-period comparison), so nothing here fabricates one --
+  // the badge/caption slots only ever show real, already-computed data.
+  //
+  // v1.1.8 (redo, exact structures): badges now use the four explicit
+  // color modifiers (see src/styles/admin.css's badge comment) instead
+  // of the old gray-default look, and the Payments card's mode indicator
+  // specifically always uses admin-badge-brand (neutral/informational),
+  // per this version's own build brief naming that exact badge as the
+  // brand-color example -- it no longer changes color between live/test.
   function initOverviewPage() {
     const paymentsValue = document.getElementById('statPaymentsValue');
-    const paymentsCaption = document.getElementById('statPaymentsCaption');
+    const paymentsBadge = document.getElementById('statPaymentsBadge');
     const aiProviderValue = document.getElementById('statAiProviderValue');
     const aiProviderCaption = document.getElementById('statAiProviderCaption');
     const websiteTypesValue = document.getElementById('statWebsiteTypesValue');
-    const websiteTypesCaption = document.getElementById('statWebsiteTypesCaption');
+    const websiteTypesBadge = document.getElementById('statWebsiteTypesBadge');
     const deploymentsValue = document.getElementById('statDeploymentsValue');
     const deploymentsCaption = document.getElementById('statDeploymentsCaption');
     const breakdownBody = document.getElementById('statsBreakdownBody');
@@ -1476,11 +1481,11 @@
       .then(res => res.json())
       .then(stats => {
         if (stats.paystackConfigured) {
-          paymentsValue.innerHTML = `<span class="admin-badge ${stats.paystackMode === 'live' ? 'admin-badge-active' : 'admin-badge-warn'}">${escapeHtml(stats.paystackMode)}</span>`;
-          paymentsCaption.textContent = stats.paystackMode === 'live' ? 'Accepting live payments' : 'Test mode';
+          paymentsValue.textContent = 'Configured';
+          paymentsBadge.innerHTML = `<span class="admin-badge admin-badge-brand">${escapeHtml(stats.paystackMode)}</span>`;
         } else {
           paymentsValue.textContent = 'Not set up';
-          paymentsCaption.textContent = 'No Paystack keys configured yet';
+          paymentsBadge.innerHTML = '';
         }
 
         if (stats.activeProvider) {
@@ -1492,7 +1497,7 @@
         }
 
         websiteTypesValue.textContent = String(stats.activeTypeCount);
-        websiteTypesCaption.textContent = `${stats.inactiveTypeCount} inactive`;
+        websiteTypesBadge.innerHTML = `<span class="admin-badge admin-badge-brand">${stats.inactiveTypeCount} inactive</span>`;
 
         deploymentsValue.textContent = String(stats.totalDeployments);
         deploymentsCaption.textContent = `$${stats.totalRevenueUsd.toFixed(2)} revenue, ${stats.subscriberCount} subscriber(s)`;
@@ -1563,7 +1568,7 @@
         <tr>
           <td data-label="Email">${escapeHtml(s.email)}</td>
           <td data-label="First seen">${formatDate(s.firstSeenAt)}</td>
-          <td data-label="Status"><span class="admin-badge ${s.optedOut ? '' : 'admin-badge-active'}">${s.optedOut ? 'opted out' : 'subscribed'}</span></td>
+          <td data-label="Status"><span class="admin-badge ${s.optedOut ? 'admin-badge-error' : 'admin-badge-active'}">${s.optedOut ? 'opted out' : 'subscribed'}</span></td>
           <td data-label=""><button type="button" class="admin-btn-outline admin-btn-sm toggle-opt-out" data-email="${escapeHtml(s.email)}" data-opted-out="${s.optedOut}">${s.optedOut ? 'Re-subscribe' : 'Opt out'}</button></td>
         </tr>`).join('') || '<tr><td colspan="4" data-label="">No subscribers yet.</td></tr>';
 
@@ -1891,7 +1896,7 @@
         <div class="admin-card mt-3">
           <div class="flex flex-wrap items-center gap-2">
             <strong class="text-sm text-hc-ink">${escapeHtml(s.name)}</strong>
-            ${s.isActive ? '<span class="admin-badge admin-badge-active">Active</span>' : '<span class="admin-badge">Inactive</span>'}
+            ${s.isActive ? '<span class="admin-badge admin-badge-active">Active</span>' : '<span class="admin-badge admin-badge-error">Inactive</span>'}
           </div>
           <pre class="mt-2 whitespace-pre-wrap break-all rounded-md bg-gray-50 p-2 font-mono text-xs">${truncatedHtml(s.scriptContent)}</pre>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -1984,8 +1989,8 @@
     function renderFooterLinks(links) {
       const list = document.getElementById('footerLinksList');
       list.innerHTML = links.map((l, i) => `
-        <div class="flex items-center gap-3 rounded-md border border-gray-200 p-2.5" data-id="${l.id}">
-          <div class="flex shrink-0 flex-col gap-1">
+        <div class="flex flex-col gap-2 rounded-md border border-gray-200 p-2.5 sm:flex-row sm:items-center sm:gap-3" data-id="${l.id}">
+          <div class="flex shrink-0 flex-row gap-1 sm:flex-col">
             <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${l.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
             <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${l.id}" ${i === links.length - 1 ? 'disabled' : ''}>↓</button>
           </div>
@@ -2445,8 +2450,8 @@
       wrap.innerHTML = `
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="admin-badge">${escapeHtml(section.sectionType)}</span>
-            <span class="admin-badge ${section.isActive ? 'admin-badge-active' : 'admin-badge-warn'}">${section.isActive ? 'Active' : 'Inactive'}</span>
+            <span class="admin-badge admin-badge-brand">${escapeHtml(section.sectionType)}</span>
+            <span class="admin-badge ${section.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${section.isActive ? 'Active' : 'Inactive'}</span>
           </div>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="admin-btn-outline admin-btn-sm move-up">↑</button>
@@ -2456,7 +2461,7 @@
             <button type="button" class="admin-btn-danger admin-btn-sm delete-section">Delete</button>
           </div>
         </div>
-        <p class="mt-2 text-sm text-gray-500">${escapeHtml(summaryFor(section))}</p>
+        <p class="mt-2 text-sm text-gray-500 break-words">${escapeHtml(summaryFor(section))}</p>
         <form class="edit-panel mt-4" style="display:none;">
           ${handlers ? handlers.render(section.content || {}) : '<p class="text-sm text-error-600">Unknown section type.</p>'}
           <p class="save-status admin-msg" style="display:none;"></p>
@@ -2555,8 +2560,8 @@
       const list = document.getElementById('categoriesList');
       list.innerHTML = categories.map((c, i) => `
         <div class="admin-card" data-id="${c.id}">
-          <div class="flex flex-wrap items-start gap-3">
-            <div class="flex shrink-0 flex-col gap-1">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start">
+            <div class="flex shrink-0 flex-row gap-1 sm:flex-col">
               <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${c.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
               <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${c.id}" ${i === categories.length - 1 ? 'disabled' : ''}>↓</button>
             </div>
@@ -2564,10 +2569,10 @@
               <div class="flex flex-wrap items-center gap-2">
                 <strong class="text-sm text-hc-ink">${escapeHtml(c.name)}</strong>
                 <span class="text-xs text-gray-400">/${escapeHtml(c.slug)}</span>
-                <span class="admin-badge ${c.isActive ? 'admin-badge-active' : ''}">${c.isActive ? 'active' : 'inactive'}</span>
+                <span class="admin-badge ${c.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${c.isActive ? 'active' : 'inactive'}</span>
                 <span class="text-xs text-gray-400">${c.typeCount} type${c.typeCount === 1 ? '' : 's'}</span>
               </div>
-              ${c.description ? `<p class="mt-1 text-sm text-hc-ink/60">${escapeHtml(c.description)}</p>` : ''}
+              ${c.description ? `<p class="mt-1 text-sm text-hc-ink/60 break-words">${escapeHtml(c.description)}</p>` : ''}
               <div id="editRow-${c.id}" style="display:none;" class="mt-3"></div>
             </div>
             <div class="flex shrink-0 flex-wrap gap-2">
@@ -2716,17 +2721,17 @@
       const list = document.getElementById('faqList');
       list.innerHTML = entries.map((f, i) => `
         <div class="admin-card" data-id="${f.id}">
-          <div class="flex flex-wrap items-start gap-3">
-            <div class="flex shrink-0 flex-col gap-1">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start">
+            <div class="flex shrink-0 flex-row gap-1 sm:flex-col">
               <button type="button" class="admin-btn-outline admin-btn-sm move-up" data-id="${f.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
               <button type="button" class="admin-btn-outline admin-btn-sm move-down" data-id="${f.id}" ${i === entries.length - 1 ? 'disabled' : ''}>↓</button>
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <strong class="text-sm text-hc-ink">${escapeHtml(f.question)}</strong>
-                <span class="admin-badge ${f.isActive ? 'admin-badge-active' : ''}">${f.isActive ? 'active' : 'inactive'}</span>
+                <span class="admin-badge ${f.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${f.isActive ? 'active' : 'inactive'}</span>
               </div>
-              <p class="mt-1 text-sm text-hc-ink/60">${escapeHtml(f.answer)}</p>
+              <p class="mt-1 text-sm text-hc-ink/60 break-words">${escapeHtml(f.answer)}</p>
               <div id="editRow-${f.id}" style="display:none;" class="mt-3"></div>
             </div>
             <div class="flex shrink-0 flex-wrap gap-2">
