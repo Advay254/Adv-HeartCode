@@ -17,6 +17,7 @@ const { adminSlugMiddleware } = require('./middleware/adminSlug');
 const { pageRouter: adminLoginPageRouter, apiRouter: adminAuthApiRouter } = require('./routes/adminAuth');
 const adminPagesRouter = require('./routes/adminPages');
 const adminPaystackRouter = require('./routes/adminPaystack');
+const adminHostingRouter = require('./routes/adminHosting');
 const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
@@ -297,6 +298,7 @@ function adminJsonBodyParser(req, res, next) {
 app.use('/api/admin', adminJsonBodyParser);
 app.use('/api/admin', adminAuthApiRouter);
 app.use('/api/admin/paystack', adminPaystackRouter);
+app.use('/api/admin/hosting', adminHostingRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);

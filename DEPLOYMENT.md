@@ -22,8 +22,8 @@ In Render's dashboard, under the service's **Environment** tab, add the followin
 | `SESSION_SECRET` | Required |
 | `ADMIN_PATH_SLUG` | Required |
 | `ENCRYPTION_KEY` | Required |
-| `CLOUDFLARE_API_TOKEN` | Required |
-| `CLOUDFLARE_ACCOUNT_ID` | Required |
+| `CLOUDFLARE_API_TOKEN` | Deprecated (v1.1.9) — no longer read by any code, see below |
+| `CLOUDFLARE_ACCOUNT_ID` | Deprecated (v1.1.9) — no longer read by any code, see below |
 | `RESEND_API_KEY` | Optional (v1.1.1+) — one-time migration only, see below |
 | `EMAIL_FROM_ADDRESS` | Optional (v1.1.1+) — one-time migration only, see below |
 | `NODE_ENV` | Optional — not read by any of HeartCode's own code, but set it to `production` anyway as standard practice |
@@ -45,13 +45,13 @@ See the README's environment variables section for what each one does, its failu
 3. It looks like: `postgres://avnadmin:[password]@[host]:[port]/defaultdb?sslmode=require`
 4. Paste it into Render's `DATABASE_URL` as-is. Aiven's URI already specifies `?sslmode=require`, and it's compatible with the `rejectUnauthorized: false` setting already hardcoded in `db/init.js`.
 
-## 4. Set up Cloudflare and Resend
+## 4. Set up Hosting and Resend
 
-**Cloudflare (deploys client sites):**
-1. Cloudflare dashboard → **My Profile → API Tokens → Create Token**. Use a Custom Token with **Cloudflare Pages — Edit** permission for your account.
-2. Paste the token into Render's `CLOUDFLARE_API_TOKEN`.
-3. On any domain's **Overview** page in the Cloudflare dashboard, find your Account ID in the right-hand sidebar under "API". Paste it into `CLOUDFLARE_ACCOUNT_ID`.
-4. Nothing else to set up — HeartCode creates a new Cloudflare Pages project per paid deployment automatically.
+**Hosting — ClarityHeart (deploys client sites, as of v1.1.9 — configured in the dashboard, not env vars):**
+1. Log into the admin dashboard once your first deploy is live, and go to **Hosting** (System section of the sidebar, next to AI Provider).
+2. Enter ClarityHeart's Base URL (e.g. `https://manage.heartcode.uk`) and the API token it issued for HeartCode.
+3. Tap **Send test deploy** — this deploys a real, tiny throwaway page through the exact same code path a paying client's site goes through, so a wrong URL or bad token shows up immediately instead of during a real client's checkout.
+4. `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` are deprecated as of this version — no code reads them anymore. There's no automatic migration into Hosting's config the way `RESEND_API_KEY` migrates into Email Providers (see below): a Cloudflare API token and a ClarityHeart API token are credentials for two unrelated services, so there's nothing valid to carry over automatically. Remove those two env vars from Render once Hosting is set up above.
 
 **Email (as of v1.1.1 — configured in the dashboard, not env vars):**
 1. Log into the admin dashboard once your first deploy is live, and go to **Email Providers** (System section of the sidebar).
@@ -124,5 +124,8 @@ The relevant compiled CSS bundle either doesn't exist or is stale — `public/st
 **`/health` returns `db: "disconnected"` even though the app didn't crash on boot**
 The database was reachable at boot but became unreachable afterward — commonly a connection pool limit on Supabase/Aiven, or the database pausing itself after inactivity on a free tier. Check your Postgres provider's own dashboard/logs for its current status.
 
-**Deployed Cloudflare Pages project names look like `hc-hc-...` (double prefix), or a custom deploy slug pattern comes out unexpectedly short**
-Both were real, pre-existing bugs in `lib/cloudflarePages.js`, fixed in v1.0.8. The double-prefix bug had been there since v1.0.4 — every deploy before this fix produced a redundantly-prefixed project name, harmless but ugly (the site still worked and deployed fine, just under an odd-looking name). If you're on v1.0.8 or later and still seeing this, you're looking at an old deployment made before the fix; new deployments won't have it. The truncation issue only affects custom deploy slug patterns (v1.0.8's own new feature) and is fixed in the same version.
+**Deployed Cloudflare Pages project names look like `hc-hc-...` (double prefix), or an old custom deploy slug pattern came out unexpectedly short**
+Both were real, pre-existing bugs in the old `lib/cloudflarePages.js` (removed in v1.1.9 — see below), fixed in v1.0.8. This only matters for rows deployed before that fix; anything deployed since v1.0.8, or under v1.1.9+'s ClarityHeart path, doesn't have this issue.
+
+**Checkout succeeds but the site never deploys, and the logs show "Hosting is not configured"**
+As of v1.1.9, deployment goes through ClarityHeart, configured entirely on the **Hosting** admin page (System section) — there's no env var fallback for this one. Go to Hosting, enter a base URL and API token, and use **Send test deploy** to confirm the connection actually works before assuming it's fixed. If you're upgrading from before v1.1.9 and had `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` set, those are now unused — this is a fresh, one-time manual setup, not something that migrates automatically (see README's "Configuring hosting" section for why).
