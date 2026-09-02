@@ -949,9 +949,50 @@ INSERT INTO site_settings (key, value) VALUES
   ('social_instagram_url', ''),
   ('social_linkedin_url', '')
 ON CONFLICT (key) DO NOTHING;
+
+-- v1.1.9 Part A: migrating site deployment from Cloudflare Pages to
+-- ClarityHeart (see lib/clarityheart.js). hosting_config is a single-row
+-- admin config table, same upsert-id-1 shape as paystack_config: a base
+-- URL (e.g. "https://manage.heartcode.uk", no trailing slash) and an
+-- encrypted API token, both required together for lib/clarityheart.js's
+-- deployToClarityHeart() to have anything to call.
+CREATE TABLE IF NOT EXISTS hosting_config (
+  id SERIAL PRIMARY KEY,
+  base_url TEXT NOT NULL,
+  api_token_encrypted TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- deployed_sites.cloudflare_project_name -> deployed_slug. A pure rename,
+-- NOT a data migration — every existing row keeps whatever value it
+-- already has (its real historical Cloudflare Pages project name); this
+-- only gives the column a hosting-backend-neutral name going forward,
+-- since a NEW row from this version on holds a ClarityHeart slug instead,
+-- which is no longer necessarily a Cloudflare Pages project name.
+--
+-- Guarded with an information_schema check rather than a bare RENAME
+-- COLUMN: unlike ADD COLUMN IF NOT EXISTS, Postgres's RENAME COLUMN
+-- syntax has no IF EXISTS form for the column itself — an unguarded
+-- RENAME would succeed once and then fail on every boot after (there's no
+-- "cloudflare_project_name" left to rename the second time this runs).
+-- This same guard also correctly handles a genuinely fresh install: the
+-- SCHEMA block above still creates deployed_sites with the ORIGINAL
+-- column name (deliberately left untouched, per this file's own
+-- convention of never editing SCHEMA after the fact — new tables/columns
+-- always land in MIGRATIONS instead), so this guarded rename fires once,
+-- harmlessly, on a brand new database too.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'deployed_sites' AND column_name = 'cloudflare_project_name'
+  ) THEN
+    ALTER TABLE deployed_sites RENAME COLUMN cloudflare_project_name TO deployed_slug;
+  END IF;
+END $$;
 `;
 
-const CURRENT_VERSION = '1.1.6';
+const CURRENT_VERSION = '1.1.9';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
