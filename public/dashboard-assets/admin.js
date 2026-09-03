@@ -336,6 +336,8 @@
           resultEl.innerHTML = `
             <p class="admin-msg admin-msg-warning">${escapeHtml(data.note)}</p>
             <p class="mt-3 text-xs text-gray-400">
+              Admin's own resolved IP: ${escapeHtml(data.adminOwnIp || 'n/a')} (source: ${escapeHtml(data.ipSource || 'n/a')})<br>
+              CF-Connecting-IP header: ${escapeHtml(data.cfConnectingIpHeader || '(not sent — Cloudflare is not fronting this request)')}<br>
               Raw X-Forwarded-For: ${escapeHtml(data.rawForwardedFor || '(none sent)')}<br>
               Trusted hop chain (req.ips): ${escapeHtml(JSON.stringify(data.trustedHopChain || []))}
             </p>
@@ -364,6 +366,8 @@
             ${finalOk ? '' : ', the local database lookup failed for this IP, so USD was used as the safe default.'}
           </p>
           <p class="mt-3 text-xs text-gray-400">
+            Admin's own resolved IP: ${escapeHtml(data.adminOwnIp || 'n/a')} (source: ${escapeHtml(data.ipSource || 'n/a')})<br>
+            CF-Connecting-IP header: ${escapeHtml(data.cfConnectingIpHeader || '(not sent — Cloudflare is not fronting this request)')}<br>
             Raw X-Forwarded-For: ${escapeHtml(data.rawForwardedFor || '(none sent)')}<br>
             Trusted hop chain (req.ips): ${escapeHtml(JSON.stringify(data.trustedHopChain || []))}
           </p>
