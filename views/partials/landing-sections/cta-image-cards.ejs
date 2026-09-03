@@ -21,6 +21,11 @@
           <% var imagePath = getLandingImageAsset(card.image_asset_key); %>
           <div class="group relative isolate flex h-80 flex-col justify-end overflow-hidden rounded-2xl p-8 shadow-lg sm:h-96" data-reveal>
             <% if (imagePath) { %>
+              <!-- v1.1.9 Part B alt-text audit: decorative (alt=""). This
+                   is a full-bleed background image behind an ink overlay
+                   and text (overlay_label + button_text below) that
+                   already states what the card is about -- the photo
+                   itself adds atmosphere, not information. -->
               <img src="<%= imagePath %>" alt="" class="absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" loading="lazy">
             <% } else { %>
               <div class="absolute inset-0 -z-10 bg-gradient-to-br from-sk-blue to-sk-blue-deep"></div>

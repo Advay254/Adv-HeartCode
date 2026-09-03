@@ -14,6 +14,11 @@
   <div class="mx-auto flex max-w-6xl flex-col items-center gap-10 <%= rowClass %>">
     <div class="w-full md:w-1/2" data-reveal="<%= imageRevealDir %>">
       <% if (imagePath) { %>
+        <!-- v1.1.9 Part B alt-text audit: decorative (alt=""), same
+             reasoning as bullet-list.ejs's identical pattern -- the
+             adjacent heading/body_text/CTA already state this section's
+             point in full; the image is illustrative support, not a
+             distinct source of information. -->
         <img src="<%= imagePath %>" alt="" class="mx-auto w-full max-w-md rounded-2xl shadow-xl sm:max-w-lg md:max-w-none" loading="lazy">
       <% } else { %>
         <!-- No image_asset_key resolves for this instance (an

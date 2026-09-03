@@ -27,6 +27,11 @@
     </div>
     <div class="w-full md:w-1/2" data-reveal="right">
       <% if (imagePath) { %>
+        <!-- v1.1.9 Part B alt-text audit: decorative (alt=""). This
+             illustration sits beside a heading, body text, and a bulleted
+             list that already fully state this section's point -- the
+             image is a supporting visual, not a source of information a
+             screen-reader user would otherwise miss. -->
         <img src="<%= imagePath %>" alt="" class="mx-auto w-full max-w-md rounded-2xl shadow-xl md:max-w-none" loading="lazy">
       <% } else { %>
         <div class="mx-auto aspect-[4/3] w-full max-w-md rounded-2xl bg-gradient-to-br from-sk-blue-pale via-white to-sk-yellow-pale shadow-inner md:max-w-none" role="img" aria-label=""></div>
