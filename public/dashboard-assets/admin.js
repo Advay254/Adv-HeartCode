@@ -333,7 +333,13 @@
         }
 
         if (data.note) {
-          resultEl.innerHTML = `<p class="admin-msg admin-msg-warning">${escapeHtml(data.note)}</p>`;
+          resultEl.innerHTML = `
+            <p class="admin-msg admin-msg-warning">${escapeHtml(data.note)}</p>
+            <p class="mt-3 text-xs text-gray-400">
+              Raw X-Forwarded-For: ${escapeHtml(data.rawForwardedFor || '(none sent)')}<br>
+              Trusted hop chain (req.ips): ${escapeHtml(JSON.stringify(data.trustedHopChain || []))}
+            </p>
+          `;
           return;
         }
 
@@ -356,6 +362,10 @@
           <p class="mt-3 text-sm ${finalOk ? 'text-success-700' : 'text-warning-700'}">
             Final result: currency=${escapeHtml(data.finalResult.currency)}, countryCode=${escapeHtml(data.finalResult.countryCode || 'null')}
             ${finalOk ? '' : ', the local database lookup failed for this IP, so USD was used as the safe default.'}
+          </p>
+          <p class="mt-3 text-xs text-gray-400">
+            Raw X-Forwarded-For: ${escapeHtml(data.rawForwardedFor || '(none sent)')}<br>
+            Trusted hop chain (req.ips): ${escapeHtml(JSON.stringify(data.trustedHopChain || []))}
           </p>
         `;
       } catch (err) {
