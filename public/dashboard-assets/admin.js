@@ -320,7 +320,7 @@
       btn.disabled = true;
       btn.textContent = 'Running…';
       resultEl.style.display = 'block';
-      resultEl.innerHTML = '<p class="text-sm text-gray-500">Running a live lookup. This can take a few seconds if a provider is slow or unreachable…</p>';
+      resultEl.innerHTML = '<p class="text-sm text-gray-500">Looking up this IP in the local database…</p>';
 
       try {
         const url = '/api/admin/settings/geo-diagnostic' + (ip ? '?ip=' + encodeURIComponent(ip) : '');
@@ -355,7 +355,7 @@
           </table>
           <p class="mt-3 text-sm ${finalOk ? 'text-success-700' : 'text-warning-700'}">
             Final result: currency=${escapeHtml(data.finalResult.currency)}, countryCode=${escapeHtml(data.finalResult.countryCode || 'null')}
-            ${finalOk ? '' : ', every provider failed for this IP, so USD was used as the safe default.'}
+            ${finalOk ? '' : ', the local database lookup failed for this IP, so USD was used as the safe default.'}
           </p>
         `;
       } catch (err) {
