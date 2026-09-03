@@ -48,11 +48,36 @@ const { renderErrorPageHtml } = require('./lib/errorPage');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Render terminates TLS upstream and proxies requests, so trust the first
-// hop's X-Forwarded-* headers. Needed for req.ip (rate limiters) and for
-// req.protocol to correctly read "https" (used to build the Paystack
-// callback_url in routes/public.js) rather than the raw internal "http".
-app.set('trust proxy', 1);
+// v1.1.9 hotfix: real-world evidence (the admin Geolocation health check
+// resolving every test to "private/local", and every visitor's currency
+// silently defaulting to USD) showed `trust proxy: 1` was NOT enough hops
+// for this deployment's actual topology — peeling back only one hop still
+// landed on an internal, private-range address, so
+// lib/geolocation.js's isPrivateOrLocalIp() short-circuited to the USD
+// fallback for every single request, not just genuinely private/local
+// ones. This is the SAME root cause behind both symptoms; there was
+// never a separate geolocation bug once this is fixed.
+//
+// Rather than guess a specific hop COUNT (which breaks again the moment
+// the real number changes — e.g. if a custom domain gets proxied through
+// Cloudflare in front of Render, adding a hop this app has no visibility
+// into), this trusts any number of hops whose reported address falls in
+// a private/reserved range (loopback, link-local, RFC1918/unique-local)
+// and stops at the first address that ISN'T one of those — which, under
+// normal operation, is the genuine public client IP, regardless of how
+// many purely-internal proxy layers sit between it and this app. This is
+// one of Express's own built-in presets, not a custom regex.
+//
+// This does NOT reopen the door to X-Forwarded-For spoofing for the
+// rate-limit keys below that key off req.ip (routes/adminAuth.js's login
+// lockout, routes/apiBuild.js/events.js/public.js's per-IP limiters):
+// unlike `trust proxy: true` (trust everything, including a
+// client-supplied leftmost address), this only ever treats an address as
+// "a proxy to see through" when it's in a private/reserved range — a
+// real external attacker's actual TCP connection can never itself appear
+// to originate from a private range, so the walk always still stops at
+// a genuine public address, not one an attacker can forge their way past.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
