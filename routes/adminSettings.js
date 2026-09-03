@@ -113,7 +113,23 @@ router.get('/geo-diagnostic', asyncHandler(async (req, res) => {
 
   try {
     const diagnostic = await runGeoDiagnostic(testIp);
-    res.json({ ...diagnostic, kenyanPaymentCurrency, adminOwnIp: req.ip });
+    res.json({
+      ...diagnostic,
+      kenyanPaymentCurrency,
+      adminOwnIp: req.ip,
+      // v1.1.9 hotfix: raw proxy-chain visibility, added after a real
+      // trust-proxy misconfiguration (see server.js's trust proxy
+      // comment) made req.ip resolve to a private/internal address for
+      // every visitor. If this ever regresses again, these two fields
+      // show exactly what's arriving without needing to guess blindly a
+      // second time: rawForwardedFor is the literal X-Forwarded-For
+      // header text, and trustedHopChain is what Express's own trust
+      // proxy resolution considered along the way (req.ips) — an empty
+      // array here with a non-empty rawForwardedFor would itself be a
+      // clear signal that trust proxy isn't trusting enough of the chain.
+      rawForwardedFor: req.headers['x-forwarded-for'] || null,
+      trustedHopChain: req.ips
+    });
   } catch (err) {
     console.error('[ADMIN-SETTINGS] Geo diagnostic failed unexpectedly:', err.message);
     res.status(500).json({ error: 'Diagnostic failed to run', details: err.message });
