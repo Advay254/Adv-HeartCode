@@ -244,16 +244,108 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
 router.get('/robots.txt', (req, res) => {
   const rootUrl = `${req.protocol}://${req.get('host')}`;
 
-  const lines = [
-    'User-agent: *',
+  const publicPathRules = [
     'Allow: /',
     'Disallow: /api/*',
     'Disallow: /admin',
     'Disallow: /build/*/preview',
     'Disallow: /build/*/checkout',
-    'Disallow: /build/*/checkout/callback',
+    'Disallow: /build/*/checkout/callback'
+  ];
+
+  const lines = [
+    'User-agent: *',
+    ...publicPathRules,
+    '',
+    // v1.1.9 Part C: explicit AI-crawler allow rules, rather than leaving
+    // these to fall through to the wildcard block above. Functionally
+    // that wildcard already permits them (Allow: / with the same path
+    // exclusions) -- these lines exist to make the intent unambiguous to
+    // anyone (or any tool) auditing this file specifically for AI-crawler
+    // policy, and to insulate these agents from ever being caught by a
+    // FUTURE blanket AI-blocking change to the wildcard block without
+    // that change's author having to remember these exist. Being cited
+    // by an AI answer engine is free visibility worth inviting, not
+    // something to guard against.
+    //
+    // Per robots.txt's own spec, a crawler matching a SPECIFIC
+    // User-agent block does not also fall back to the wildcard block --
+    // so this repeats the exact same path exclusions as above, rather
+    // than a bare "Allow: /" that would inadvertently reopen /admin,
+    // /api/*, and the in-progress checkout/preview flow specifically for
+    // these agents. Multiple consecutive User-agent lines sharing one
+    // rule set is valid syntax (RFC 9309) -- grouped here by operator for
+    // readability, all given the same treatment since this project isn't
+    // taking a position on training vs. citation/search use, just
+    // inviting AI visibility generally.
+    '# OpenAI',
+    'User-agent: GPTBot',
+    'User-agent: OAI-SearchBot',
+    'User-agent: ChatGPT-User',
+    ...publicPathRules,
+    '',
+    '# Anthropic (Claude)',
+    'User-agent: ClaudeBot',
+    'User-agent: Claude-SearchBot',
+    'User-agent: Claude-User',
+    ...publicPathRules,
+    '',
+    '# Perplexity',
+    'User-agent: PerplexityBot',
+    'User-agent: Perplexity-User',
+    ...publicPathRules,
+    '',
+    '# Google (AI training/answer surfaces -- Googlebot itself is already covered by the wildcard block above)',
+    'User-agent: Google-Extended',
+    ...publicPathRules,
+    '',
+    '# Apple',
+    'User-agent: Applebot-Extended',
+    ...publicPathRules,
+    '',
+    '# Amazon',
+    'User-agent: Amazonbot',
+    ...publicPathRules,
+    '',
+    '# Meta',
+    'User-agent: Meta-ExternalAgent',
+    ...publicPathRules,
     '',
     `Sitemap: ${rootUrl}/sitemap.xml`
+  ];
+
+  res.set('Content-Type', 'text/plain');
+  res.send(lines.join('\n'));
+});
+
+// v1.1.9 Part C: llms.txt -- an emerging, not-yet-fully-standardized
+// convention some AI crawlers/assistants reportedly consult for a
+// plain-text, human-and-AI-readable summary of what a site is and where
+// its key pages live (distinct from robots.txt, which only governs
+// crawl permissions, and from the JSON-LD structured data above, which
+// is machine-only). Cheap to add, no real downside, and consistent with
+// this version's general "invite AI visibility" stance. Built from the
+// same siteSettings already loaded onto res.locals by this router's own
+// middleware above -- no new admin input required for this to work out
+// of the box, same approach the homepage's Organization/WebSite JSON-LD
+// already takes.
+router.get('/llms.txt', (req, res) => {
+  const rootUrl = `${req.protocol}://${req.get('host')}`;
+  const siteTitle = res.locals.siteSettings.site_title;
+  const metaDescription = res.locals.siteSettings.meta_description;
+
+  const lines = [
+    `# ${siteTitle}`,
+    '',
+    `> ${metaDescription}`,
+    '',
+    `${siteTitle} is a client-facing website builder. A visitor picks a website type, fills in a short form, gets AI-polished copy dropped into a live preview, and pays to have the finished site deployed live -- no design or coding skill needed.`,
+    '',
+    '## Pages',
+    '',
+    `- [Home](${rootUrl}/): overview, how it works, and pricing`,
+    `- [How it works](${rootUrl}/#how-it-works): the three-step build -> preview -> pay flow`,
+    `- [Browse website types](${rootUrl}/explore): every website type currently available to build`
   ];
 
   res.set('Content-Type', 'text/plain');

@@ -76,15 +76,16 @@ router.put('/resend-details-rate-limit', requireCsrf, asyncHandler(async (req, r
   res.json({ value: parsed.data.value });
 }));
 
-// v1.1.1 Part D: lets Advay get REAL evidence of whether ip-api.com (and,
-// if that fails, the ipwho.is fallback added this version) is actually
-// reachable from Render's network — by tapping a button in the dashboard
-// he already uses from an Android phone, with no terminal/SSH access
-// needed. Bypasses lib/geolocation.js's 1h cache entirely (every click is
-// a fresh, live attempt) and returns the FULL attempt trail, not just the
-// final currency/country — see lib/geolocation.js's runGeoDiagnostic for
-// what each attempt records (provider, success/failure, HTTP status,
-// latency, error message).
+// v1.1.1 Part D, updated v1.1.9 Part D: lets Advay confirm the local
+// GeoLite2-Country database (data/GeoLite2-Country.mmdb) actually loaded
+// and correctly resolves a given IP — by tapping a button in the
+// dashboard he already uses from an Android phone, with no terminal/SSH
+// access needed. Bypasses lib/geolocation.js's 1h cache entirely (every
+// click is a fresh lookup) and returns the full attempt record (now
+// always a single entry, since there's only one local database to check,
+// not two competing third-party providers as before this version) — see
+// lib/geolocation.js's runGeoDiagnostic for exactly what it records
+// (success/failure, latency, error message).
 //
 // `ip` defaults to the requesting admin's own connection if not provided —
 // genuinely useful as a smoke test (if THIS fails, something is broken
