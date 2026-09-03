@@ -7,6 +7,7 @@ const { substitutePlaceholders, substitutePlainText } = require('../lib/template
 const { createRateLimiter } = require('../lib/rateLimit');
 const { OPTION_BASED_FIELD_TYPES, MULTI_SELECT_FIELD_TYPES } = require('../lib/fieldTypes');
 const { addTargetBlankToExternalLinks } = require('../lib/externalLinks');
+const { getRealClientIp } = require('../lib/clientIp');
 
 const router = express.Router();
 
@@ -180,7 +181,9 @@ function validateAiOutput(parsed, outputFields) {
 }
 
 router.post('/:slug/generate', express.json(), asyncHandler(async (req, res) => {
-  const ip = req.ip;
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
+  // visitor IP, not Cloudflare's edge address.
+  const ip = getRealClientIp(req);
   const pool = getPool();
 
   const typeResult = await pool.query(

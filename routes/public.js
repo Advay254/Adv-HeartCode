@@ -16,6 +16,7 @@ const { getLandingSections } = require('../lib/landingSections');
 const { DEFAULT_CONTENT } = require('../lib/landingSectionTypes');
 const { escapeHtml } = require('../lib/template');
 const { sendResendDetailsEmail } = require('../lib/email');
+const { getRealClientIp } = require('../lib/clientIp');
 
 const router = express.Router();
 
@@ -147,7 +148,10 @@ function round2(n) {
 // gracefully falls back to plain USD (never a raw number mislabeled under
 // the wrong currency) if no rate is cached for it yet.
 async function resolveVisitorPricing(req) {
-  const geo = await getCurrencyForIp(req.ip);
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- req.ip alone can resolve
+  // to Cloudflare's own edge address rather than the visitor's, which is
+  // exactly what caused a Kenyan visitor to be priced in EUR.
+  const geo = await getCurrencyForIp(getRealClientIp(req));
   const isKenyan = geo.countryCode === 'KE';
 
   if (isKenyan) {
@@ -189,7 +193,10 @@ async function resolveVisitorPricing(req) {
 // explicitly 'KES'. Server-side only; never trusts anything from the
 // client about currency or country.
 async function resolveChargeForCheckout(req, priceUsd) {
-  const geo = await getCurrencyForIp(req.ip);
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- same fix as
+  // resolveVisitorPricing above, this decides the ACTUAL charge currency
+  // so it must resolve the real visitor IP too.
+  const geo = await getCurrencyForIp(getRealClientIp(req));
   const currency = await getChargeCurrencyForCountry(geo.countryCode);
   return convertUsdTo(priceUsd, currency); // { amount, currency, rate }
 }
@@ -774,7 +781,9 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
 // the browser to. Nothing is deployed yet — that only happens once
 // payment is confirmed, via the webhook or the callback page below.
 router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), asyncHandler(async (req, res) => {
-  const ip = req.ip;
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
+  // visitor IP, not Cloudflare's edge address.
+  const ip = getRealClientIp(req);
   if (!checkoutLimiter.tryConsume(ip)) {
     return res.status(429).json({ error: 'Too many checkout attempts, please try again later' });
   }
@@ -972,7 +981,9 @@ const RESEND_DETAILS_GENERIC_MESSAGE =
   "If that email matches a site we've deployed, we've sent the details to it — check your spam folder if it doesn't arrive shortly.";
 
 router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler(async (req, res) => {
-  if (!(await resendDetailsLimiter.tryConsume(req.ip))) {
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
+  // visitor IP, not Cloudflare's edge address.
+  if (!(await resendDetailsLimiter.tryConsume(getRealClientIp(req)))) {
     return res.status(429).json({
       error: "You've reached today's check limit — try again tomorrow."
     });

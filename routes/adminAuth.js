@@ -11,6 +11,7 @@ const {
 const { requireAdminSession, COOKIE_NAME, getSessionCookie } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
+const { getRealClientIp } = require('../lib/clientIp');
 
 // v1.1.4: shortened from 7 days to 24 hours -- deliberate security
 // hardening (the admin panel controls real payment and AI provider
@@ -97,7 +98,10 @@ pageRouter.get(`${INTERNAL_ADMIN_PREFIX}/login`, (req, res) => {
 const apiRouter = express.Router();
 
 apiRouter.post('/login', asyncHandler(async (req, res) => {
-  const ip = req.ip;
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- the lockout must key off
+  // the real visitor IP, not Cloudflare's edge address, or every visitor
+  // behind Cloudflare would share one lockout bucket.
+  const ip = getRealClientIp(req);
 
   if (isLockedOut(ip)) {
     return res.status(429).json({ error: 'Too many attempts, try again later' });

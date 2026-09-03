@@ -3,6 +3,7 @@ const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { createRateLimiter } = require('../lib/rateLimit');
+const { getRealClientIp } = require('../lib/clientIp');
 
 const router = express.Router();
 
@@ -46,7 +47,9 @@ const eventLimiter = createRateLimiter({ max: 60, windowMs: 60 * 60 * 1000 });
 // route does the minimum necessary work and returns 204 with no body,
 // rather than anything a beacon-style caller would never read anyway.
 router.post('/', express.json(), asyncHandler(async (req, res) => {
-  if (!eventLimiter.tryConsume(req.ip)) {
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
+  // visitor IP, not Cloudflare's edge address.
+  if (!eventLimiter.tryConsume(getRealClientIp(req))) {
     return res.status(429).end();
   }
 

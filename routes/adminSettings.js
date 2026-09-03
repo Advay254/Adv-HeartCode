@@ -5,6 +5,7 @@ const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { runGeoDiagnostic } = require('../lib/geolocation');
+const { resolveClientIp } = require('../lib/clientIp');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -103,7 +104,18 @@ router.get('/geo-diagnostic', asyncHandler(async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid ip query parameter' });
   }
-  const testIp = parsed.data.ip || req.ip;
+
+  // v1.1.9 hotfix Part 2: this is the exact check that surfaced the bug —
+  // a visitor testing from Kenya resolved to Belgium/EUR because req.ip
+  // was landing on Cloudflare's own edge address (104.23.241.68), not
+  // the visitor's. See lib/clientIp.js for the full explanation. A
+  // manually-supplied `ip` query param (testing a specific address pulled
+  // from Render's logs) always wins and bypasses this resolution
+  // entirely — it's an explicit override, not "the requesting admin's own
+  // connection".
+  const clientIpInfo = resolveClientIp(req);
+  const usedManualOverride = Boolean(parsed.data.ip);
+  const testIp = parsed.data.ip || clientIpInfo.ip;
 
   const pool = getPool();
   const settingResult = await pool.query(
@@ -116,17 +128,32 @@ router.get('/geo-diagnostic', asyncHandler(async (req, res) => {
     res.json({
       ...diagnostic,
       kenyanPaymentCurrency,
-      adminOwnIp: req.ip,
-      // v1.1.9 hotfix: raw proxy-chain visibility, added after a real
-      // trust-proxy misconfiguration (see server.js's trust proxy
+      // adminOwnIp is now the RESOLVED real IP (CF-Connecting-IP when
+      // present, req.ip otherwise) rather than the raw req.ip this used
+      // to report — reporting the pre-fix value here would have hidden
+      // the very bug this diagnostic exists to catch.
+      adminOwnIp: clientIpInfo.ip,
+      // v1.1.9 hotfix Part 2: exactly which source resolved testIp, so
+      // this class of bug is diagnosable at a glance instead of needing
+      // another investigation — 'manual-override' (an explicit ?ip= was
+      // given), 'cf-connecting-ip' (Cloudflare's header was present and
+      // used), or 'req.ip' (no CF-Connecting-IP header was seen at all,
+      // meaning Cloudflare genuinely isn't fronting this request).
+      ipSource: usedManualOverride ? 'manual-override' : clientIpInfo.source,
+      // The raw CF-Connecting-IP header value, or null if Cloudflare
+      // didn't set it on this request at all.
+      cfConnectingIpHeader: (typeof req.headers['cf-connecting-ip'] === 'string' && req.headers['cf-connecting-ip'])
+        || null,
+      // v1.1.9 hotfix Part 1: raw proxy-chain visibility, added after a
+      // real trust-proxy misconfiguration (see server.js's trust proxy
       // comment) made req.ip resolve to a private/internal address for
-      // every visitor. If this ever regresses again, these two fields
-      // show exactly what's arriving without needing to guess blindly a
-      // second time: rawForwardedFor is the literal X-Forwarded-For
+      // every visitor. rawForwardedFor is the literal X-Forwarded-For
       // header text, and trustedHopChain is what Express's own trust
       // proxy resolution considered along the way (req.ips) — an empty
       // array here with a non-empty rawForwardedFor would itself be a
       // clear signal that trust proxy isn't trusting enough of the chain.
+      // Kept alongside the CF-specific fields above since a regression
+      // could in principle come from either layer.
       rawForwardedFor: req.headers['x-forwarded-for'] || null,
       trustedHopChain: req.ips
     });
