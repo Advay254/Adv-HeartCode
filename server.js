@@ -38,6 +38,7 @@ const eventsRouter = require('./routes/events');
 const webhooksRouter = require('./routes/webhooks');
 const sitePasswordCache = require('./lib/sitePasswordCache');
 const { createRateLimiter } = require('./lib/rateLimit');
+const { getRealClientIp } = require('./lib/clientIp');
 const { refreshExchangeRates } = require('./lib/currency');
 const { seedEmailProviderFromEnvIfNeeded } = require('./lib/emailProvider');
 const { getIconSvg } = require('./lib/icons');
@@ -201,7 +202,11 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/webhooks/')) {
     return next();
   }
-  if (!globalLimiter.tryConsume(req.ip)) {
+  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- req.ip alone can land on
+  // Cloudflare's own edge address rather than the real visitor's once
+  // Cloudflare is in front of a request, which would key this limiter
+  // off the wrong address entirely.
+  if (!globalLimiter.tryConsume(getRealClientIp(req))) {
     return res.status(429).json({ error: 'Too many requests, please slow down' });
   }
   next();
