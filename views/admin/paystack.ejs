@@ -58,15 +58,17 @@
       <p id="kenyanCurrencyStatus" class="admin-msg" style="display:none;"></p>
     </div>
 
-    <!-- v1.1.1 Part D: lets you get real, live evidence of whether the
-         geolocation lookup (used to decide which currency a visitor sees,
-         including the Kenyan toggle above) is actually working from
-         Render's own network — straight from this dashboard, no terminal
-         needed. Every click is a fresh, uncached lookup. -->
+    <!-- v1.1.1 Part D, updated v1.1.9 Part D: lets you get real, live
+         evidence of whether the geolocation lookup (used to decide which
+         currency a visitor sees, including the Kenyan toggle above) is
+         actually working — straight from this dashboard, no terminal
+         needed. As of v1.1.9 this checks the local GeoLite2-Country
+         database file rather than a third-party network service; every
+         click is still a fresh, uncached lookup. -->
     <div class="admin-card mt-6 max-w-xl">
       <h2 class="text-sm font-semibold text-hc-ink">Geolocation health check</h2>
       <p class="mt-1 text-sm text-gray-500">
-        Runs a live geolocation lookup (bypassing the normal 1-hour cache) and shows exactly what happened: which provider(s) were tried, whether each succeeded or failed, and why. Defaults to testing your own connection; for a real answer to "why did a Kenyan visitor see USD", paste in a real visitor's IP address from your logs instead.
+        Runs a live geolocation lookup against the local database (bypassing the normal 1-hour cache) and shows exactly what happened: whether it succeeded or failed, and why. Defaults to testing your own connection; for a real answer to "why did a Kenyan visitor see USD", paste in a real visitor's IP address from your logs instead.
       </p>
       <label class="admin-label" for="geoDiagnosticIp">IP address to test (optional)</label>
       <input class="admin-input" id="geoDiagnosticIp" type="text" placeholder="Leave blank to test your own connection">
