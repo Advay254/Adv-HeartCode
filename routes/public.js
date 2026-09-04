@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const { asyncHandler } = require('../lib/asyncHandler');
 const crypto = require('crypto');
 const { z } = require('zod');
@@ -267,6 +269,55 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
   res.set('Content-Type', 'application/xml');
   res.send(xml);
 }));
+
+// Apple Pay merchant domain verification (Paystack's "Verify your
+// domain" flow, under Settings > Apple Pay). Apple requires this exact
+// file, served byte-for-byte unmodified, at this exact path over HTTPS,
+// with no redirects -- it's a signed blob (Paystack generates it, not
+// this app), so it's stored as-is under data/ and streamed back
+// verbatim rather than reconstructed as a string literal in code, where
+// a single mistyped or re-encoded character would silently invalidate
+// the signature and fail verification with no useful error on Apple's
+// or Paystack's side.
+//
+// Deliberately NOT placed under public/ + served via express.static:
+// serve-static's default dotfiles policy is 'ignore' for any path
+// segment starting with a dot -- '.well-known' would be silently
+// 404'd, not served, with nothing in this app's own logs to explain
+// why. An explicit route sidesteps that policy entirely rather than
+// needing to override it (which would apply to every other dotfile
+// express.static might ever be asked to serve, a broader change than
+// this one file needs).
+//
+// Read once at startup, not per-request -- this file changes only when
+// Advay re-verifies the domain on Paystack (rare, manual), never as
+// part of normal app operation.
+const APPLE_PAY_DOMAIN_ASSOCIATION_PATH = path.join(__dirname, '..', 'data', 'apple-developer-merchantid-domain-association');
+let applePayDomainAssociationContent = null;
+try {
+  applePayDomainAssociationContent = fs.readFileSync(APPLE_PAY_DOMAIN_ASSOCIATION_PATH, 'utf8');
+} catch (err) {
+  // Same "log clearly, don't crash the app over an optional file"
+  // posture as the rest of this codebase (e.g. lib/paystack.js treating
+  // an unconfigured Paystack as absent rather than fatal) -- Apple Pay
+  // domain verification is opt-in, not required for HeartCode to run.
+  console.error(
+    '[PUBLIC] Apple Pay domain association file not found at data/apple-developer-merchantid-domain-association ' +
+    '-- /.well-known/apple-developer-merchantid-domain-association will 404 until it is added:',
+    err.message
+  );
+}
+
+router.get('/.well-known/apple-developer-merchantid-domain-association', (req, res) => {
+  if (!applePayDomainAssociationContent) {
+    return res.status(404).send('Not found');
+  }
+  // text/plain, no charset suffix, no trailing newline appended by this
+  // handler -- res.send() with a string that already has none sends the
+  // file's exact original bytes back unchanged.
+  res.set('Content-Type', 'text/plain');
+  res.send(applePayDomainAssociationContent);
+});
 
 // Revised per Advay's explicit choice: the admin path is deliberately NOT
 // listed here (see middleware/adminSlug.js for where "keep it out of
