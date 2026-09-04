@@ -289,6 +289,50 @@
       if (res.ok) { applyConfig(data); showStatus('Live secret cleared.', 'success'); }
     });
 
+    // v1.1.9 hotfix Part 3: currency display conversion master toggle.
+    // A real toggle button, not a checkbox + separate Save -- clicking it
+    // flips state and saves immediately, then re-renders from the
+    // server's response (same immediate-effect pattern as notification
+    // channels' Enable/Disable button).
+    const currencyConversionBadge = document.getElementById('currencyConversionBadge');
+    const toggleCurrencyConversionBtn = document.getElementById('toggleCurrencyConversionBtn');
+
+    function applyCurrencyConversionState(enabled) {
+      currencyConversionBadge.textContent = enabled ? 'on' : 'off';
+      currencyConversionBadge.className = 'admin-badge ' + (enabled ? 'admin-badge-active' : 'admin-badge-error');
+      toggleCurrencyConversionBtn.textContent = enabled ? 'Turn off' : 'Turn on';
+    }
+
+    async function loadCurrencyConversion() {
+      const res = await window.adminFetch('/api/admin/settings/currency-conversion');
+      const data = await res.json();
+      applyCurrencyConversionState(data.enabled);
+    }
+
+    toggleCurrencyConversionBtn.addEventListener('click', async () => {
+      const nextEnabled = currencyConversionBadge.textContent !== 'on';
+      toggleCurrencyConversionBtn.disabled = true;
+      try {
+        const res = await window.adminFetch('/api/admin/settings/currency-conversion', {
+          method: 'PUT',
+          body: JSON.stringify({ enabled: nextEnabled })
+        });
+        const data = await res.json();
+        const statusEl = document.getElementById('currencyConversionStatus');
+        statusEl.style.display = 'block';
+        if (res.ok) {
+          applyCurrencyConversionState(data.enabled);
+          statusEl.className = 'admin-msg admin-msg-success';
+          statusEl.textContent = 'Saved.';
+        } else {
+          statusEl.className = 'admin-msg admin-msg-error';
+          statusEl.textContent = data.error || 'Failed to save.';
+        }
+      } finally {
+        toggleCurrencyConversionBtn.disabled = false;
+      }
+    });
+
     // v1.0.6: Kenyan visitor payment currency toggle.
     async function loadKenyanCurrency() {
       const res = await window.adminFetch('/api/admin/settings/kenyan-payment-currency');
@@ -309,6 +353,7 @@
     });
 
     load();
+    loadCurrencyConversion();
     loadKenyanCurrency();
 
     // v1.1.1 Part D: geolocation health check panel.
