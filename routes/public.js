@@ -148,6 +148,37 @@ function round2(n) {
 // gracefully falls back to plain USD (never a raw number mislabeled under
 // the wrong currency) if no rate is cached for it yet.
 async function resolveVisitorPricing(req) {
+  // v1.1.9 hotfix Part 3: master on/off switch for this DISPLAY-only
+  // conversion, admin-controlled via the Payments page (routes/
+  // adminSettings.js's GET/PUT /currency-conversion). Off (the default)
+  // short-circuits straight to plain USD for EVERY visitor, Kenyan or
+  // not, with no geolocation lookup even attempted -- this is
+  // deliberately absolute (it does NOT fall through to the Kenyan
+  // reference-currency line below either) because the ask behind this
+  // toggle is "show $ to literally everyone," not "show $ to everyone
+  // except the one existing special case."
+  //
+  // NOTE for later: if kenyan_payment_currency (above/below) is ever
+  // flipped to 'KES' while this toggle is off, the browsing-page estimate
+  // will show USD while the actual checkout charge (resolveChargeForCheckout,
+  // which does NOT consult this toggle) will be KES -- a real, deliberate
+  // display/charge mismatch this toggle can create in that combination.
+  // Not a bug: it's the direct consequence of "off means $ for everyone,
+  // no exceptions." Worth revisiting only if that combination becomes
+  // real (M-Pesa going live on Paystack is still an open item as of this
+  // version).
+  const pool = getPool();
+  const conversionSetting = await pool.query(
+    "SELECT value FROM site_settings WHERE key = 'currency_conversion_enabled'"
+  );
+  const conversionEnabled = conversionSetting.rowCount > 0 && conversionSetting.rows[0].value === 'true';
+
+  if (!conversionEnabled) {
+    return function (priceUsd) {
+      return { displayPrimary: formatMoney(priceUsd, 'USD'), displaySecondary: null };
+    };
+  }
+
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- req.ip alone can resolve
   // to Cloudflare's own edge address rather than the visitor's, which is
   // exactly what caused a Kenyan visitor to be priced in EUR.

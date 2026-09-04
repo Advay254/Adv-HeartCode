@@ -45,6 +45,50 @@ router.put('/kenyan-payment-currency', requireCsrf, asyncHandler(async (req, res
   res.json({ value: parsed.data.value });
 }));
 
+// v1.1.9 hotfix Part 3: a master on/off switch for the DISPLAY-only
+// currency conversion shown while browsing (routes/public.js's
+// resolveVisitorPricing -- the home/explore/build pages' estimated
+// price). Off (the default) means every visitor sees a plain USD price
+// everywhere, with no geolocation lookup even attempted for pricing
+// display. On restores the existing behavior: a geolocation-based local-
+// currency estimate for most visitors, plus the Kenyan-specific handling
+// above.
+//
+// This is DELIBERATELY separate from, and does not affect, the Kenyan
+// charge-currency setting above or resolveChargeForCheckout -- that
+// function decides what a visitor is actually BILLED and always runs
+// its own geolocation check regardless of this toggle, since Kenya/KES
+// billing is a distinct feature (whether M-Pesa is live on Paystack) and
+// must keep working the same either way. This toggle only ever changes
+// what's shown before checkout, never what's charged.
+router.get('/currency-conversion', asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT value FROM site_settings WHERE key = 'currency_conversion_enabled'"
+  );
+  const enabled = result.rowCount > 0 && result.rows[0].value === 'true';
+  res.json({ enabled });
+}));
+
+const updateCurrencyConversionSchema = z.object({
+  enabled: z.boolean()
+});
+
+router.put('/currency-conversion', requireCsrf, asyncHandler(async (req, res) => {
+  const parsed = updateCurrencyConversionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'enabled must be true or false' });
+  }
+
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO site_settings (key, value, updated_at) VALUES ('currency_conversion_enabled', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [String(parsed.data.enabled)]
+  );
+  res.json({ enabled: parsed.data.enabled });
+}));
+
 // v1.1.2 Part C: admin-configurable daily-per-IP cap on the public
 // resend-details lookup (routes/public.js's POST /api/resend-details) —
 // read fresh from this same row on every single request via
