@@ -1,4 +1,4 @@
-# HeartCode
+# HeartCode 
 
 HeartCode is a client-facing website builder platform: a client picks a website type, fills in a short form, gets AI-polished copy dropped into a live preview, and (starting in v1.0.4) pays to have the site deployed for real.
 
