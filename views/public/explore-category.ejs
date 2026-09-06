@@ -41,11 +41,20 @@
             </div>
             <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
             <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+            <% if (siteSettings.show_type_prices_early === 'true') { %>
             <div class="mt-5">
               <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
               <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>
             </div>
+            <% } %>
+            <% if (t.demoUrl) { %>
+            <div class="mt-5 flex gap-2">
+              <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center">Preview</a>
+              <a href="/build/<%= t.slug %>" class="hc-pill-btn flex-1 justify-center">Build this</a>
+            </div>
+            <% } else { %>
             <a href="/build/<%= t.slug %>" class="hc-pill-btn mt-5 w-full">Build this</a>
+            <% } %>
           </div>
         <% }); %>
       </div>

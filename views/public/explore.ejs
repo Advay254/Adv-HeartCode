@@ -15,7 +15,7 @@
     </p>
     <h1 class="font-display text-4xl uppercase text-white sm:text-5xl">Find your kind of site</h1>
     <p class="mt-4 text-base text-white/80 sm:text-lg">
-      Every price below is already converted to your own currency — pick a type to see the form.
+      <% if (siteSettings.show_type_prices_early === 'true') { %>Every price below is already converted to your own currency. Pick a type to see the form.<% } else { %>Browse every website type below, take a look at a live preview, and pick the one that feels right.<% } %>
     </p>
   </div>
 </section>
@@ -39,7 +39,7 @@
             <%- getIconSvg('sparkles') %>
           </div>
           <h2 class="mt-5 text-lg font-semibold text-hc-ink">Nothing available right now</h2>
-          <p class="mt-2 text-sm text-hc-ink/60">Check back soon — new website types are added regularly.</p>
+          <p class="mt-2 text-sm text-hc-ink/60">Check back soon. New website types are added regularly.</p>
         </div>
       <% } else { %>
         <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -50,11 +50,20 @@
               </div>
               <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
               <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+              <% if (siteSettings.show_type_prices_early === 'true') { %>
               <div class="mt-5">
                 <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
                 <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>
               </div>
+              <% } %>
+              <% if (t.demoUrl) { %>
+              <div class="mt-5 flex gap-2">
+                <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center">Preview</a>
+                <a href="/build/<%= t.slug %>" class="hc-pill-btn flex-1 justify-center">Build this</a>
+              </div>
+              <% } else { %>
               <a href="/build/<%= t.slug %>" class="hc-pill-btn mt-5 w-full">Build this</a>
+              <% } %>
             </div>
           <% }); %>
         </div>
@@ -89,11 +98,20 @@
               </div>
               <h2 class="mt-4 text-lg font-semibold text-hc-ink"><%= t.name %></h2>
               <p class="mt-1 line-clamp-2 flex-1 text-sm text-hc-ink/60"><%= t.description %></p>
+              <% if (siteSettings.show_type_prices_early === 'true') { %>
               <div class="mt-5">
                 <p class="text-base font-semibold text-hc-blue"><%= t.displayPrimary %></p>
                 <% if (t.displaySecondary) { %><p class="text-xs text-hc-ink/50"><%= t.displaySecondary %></p><% } %>
               </div>
+              <% } %>
+              <% if (t.demoUrl) { %>
+              <div class="mt-5 flex gap-2">
+                <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center">Preview</a>
+                <a href="/build/<%= t.slug %>" class="hc-pill-btn flex-1 justify-center">Build this</a>
+              </div>
+              <% } else { %>
               <a href="/build/<%= t.slug %>" class="hc-pill-btn mt-5 w-full">Build this</a>
+              <% } %>
             </div>
           <% }); %>
         </div>
