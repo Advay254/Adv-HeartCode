@@ -416,6 +416,33 @@
     display: block;
     width: 100%;
   }
+  /* v1.1.9 Part E bug fix: the base .admin-table rule above (outside this
+     media query) sets `min-w-[32rem]` unconditionally and only cancels it
+     at `sm:` (640px) and up -- meaning on any screen NARROWER than 640px
+     (exactly where this whole is-responsive-stack block is trying to
+     help), the table element itself was still floored at a hard 32rem
+     (512px) minimum width. Every other rule in this file's
+     responsive-stack pattern correctly flips things to `display: block`
+     for a vertical stack, but nothing had ever reset THIS specific
+     property back to 0 for the table element itself -- so the stack
+     rendered internally correct (each row's own label/value flex split
+     genuinely works) while the whole 512px-wide block sat inside a
+     narrower (e.g. 375px) viewport, pushing every row's right-aligned
+     value off the visible screen edge (space-between inside a too-wide
+     flex row shoves the value toward that row's own far-right edge, which
+     is now off past the actual device width) -- exactly the "labels
+     visible, values look disconnected/cut off, whole thing overflows"
+     symptom this version's build brief described. This single missing
+     reset affected EVERY page using is-responsive-stack (Website Types
+     was just the one specifically reported), not only the page named in
+     that report -- fixed here, once, for all of them, rather than adding
+     a narrower one-off override on the Website Types table specifically.
+     td already resets its own min-width to 0 in its own rule further
+     below; this line does the same for the table element itself, which
+     nothing previously did. */
+  .admin-table.is-responsive-stack {
+    min-width: 0;
+  }
   .admin-table.is-responsive-stack tr {
     border-bottom: 8px solid theme('colors.gray.100');
     padding: 0.75rem 0.25rem;
