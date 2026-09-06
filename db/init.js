@@ -990,6 +990,26 @@ BEGIN
     ALTER TABLE deployed_sites RENAME COLUMN cloudflare_project_name TO deployed_slug;
   END IF;
 END $$;
+
+-- v1.1.9 Part B: master on/off switch for showing a specific type's price
+-- on /explore's cards and the /build form header. Same generic
+-- site_settings table and ON CONFLICT DO NOTHING seeding pattern as every
+-- other site-wide toggle in this file -- see lib/siteSettings.js's
+-- DEFAULTS (which already covers a fresh install where this row hasn't
+-- been seeded yet) and routes/adminSiteSettings.js's updateSchema for the
+-- admin-facing side. Defaults to 'false': prices stay hidden until an
+-- admin explicitly turns this on.
+INSERT INTO site_settings (key, value) VALUES ('show_type_prices_early', 'false')
+ON CONFLICT (key) DO NOTHING;
+
+-- v1.1.9 Part C: an optional live-demo link per website type, shown as a
+-- secondary "Preview" action alongside "Build this" on /explore's cards
+-- when set (see routes/public.js's formatExploreType and
+-- views/public/explore.ejs / explore-category.ejs). NULL by default and
+-- left NULL on every existing row -- purely additive, nothing renders
+-- differently for a type until an admin fills one in via the Website Type
+-- Details page.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS demo_url TEXT DEFAULT NULL;
 `;
 
 const CURRENT_VERSION = '1.1.9';
