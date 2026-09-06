@@ -51,6 +51,12 @@
         <label class="admin-label" for="socialLinkedinUrl">LinkedIn URL</label>
         <input class="admin-input" type="url" name="social_linkedin_url" id="socialLinkedinUrl" placeholder="https://linkedin.com/company/yourcompany">
 
+        <h2 class="mt-5 text-sm font-semibold text-hc-ink">Type gallery &amp; form pricing</h2>
+        <label class="admin-checkbox-label"><input type="checkbox" name="show_type_prices_early" id="showTypePricesEarly"> Show prices on the type gallery and form</label>
+        <p class="mt-1 text-xs text-gray-500">
+          Off by default: /explore's cards and the /build form header show no price at all, so a visitor decides based on the type itself (and its demo, if one's set) before seeing a number. Turn this on to show each type's price on both pages again. Either way, checkout always shows the real charge amount, and the "From $X" line on the landing page's category teaser is unaffected.
+        </p>
+
         <button type="submit" class="admin-btn mt-4">Save site settings</button>
       </form>
       <p id="siteSettingsStatus" class="admin-msg" style="display:none;"></p>
