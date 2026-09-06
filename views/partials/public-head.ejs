@@ -1,6 +1,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' — ' + siteSettings.site_title : siteSettings.site_title %></title>
+<title><%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ', ' + siteSettings.site_title : siteSettings.site_title %></title>
 <%
   // v1.1.2 Part A: per-page meta description override, same fallback shape
   // as pageTitle above -- a route can pass `pageDescription` (e.g. a
@@ -11,7 +11,7 @@
 %>
 <meta name="description" content="<%= effectiveDescription %>">
 <meta property="og:type" content="website">
-<meta property="og:title" content="<%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ' — ' + siteSettings.site_title : siteSettings.site_title %>">
+<meta property="og:title" content="<%= typeof pageTitle !== 'undefined' && pageTitle ? pageTitle + ', ' + siteSettings.site_title : siteSettings.site_title %>">
 <meta property="og:description" content="<%= effectiveDescription %>">
 <% if (siteSettings.og_image_url) { %><meta property="og:image" content="<%= siteSettings.og_image_url %>"><% } %>
 <% if (siteSettings.favicon_url) { %><link rel="icon" href="<%= siteSettings.favicon_url %>"><% } %>
