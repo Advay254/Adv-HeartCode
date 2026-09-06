@@ -655,6 +655,12 @@ function formatExploreType(t, priceFor) {
     name: t.name,
     description: t.description,
     iconName: t.icon_name,
+    // v1.1.9 Part C: optional live-demo link, shown as a secondary
+    // "Preview" action next to "Build this" when set. NULL/undefined
+    // (nothing configured) collapses to null here so every view can use
+    // the same simple truthiness check regardless of which DB driver
+    // quirk might otherwise return '' vs null vs undefined.
+    demoUrl: t.demo_url || null,
     ...priceFor(priceUsd)
   };
 }
@@ -822,7 +828,7 @@ router.get('/build/:slug/preview', asyncHandler(async (req, res) => {
   }
 
   res.render('public/preview', {
-    pageTitle: `Preview — ${typeResult.rows[0].name}`,
+    pageTitle: `Preview, ${typeResult.rows[0].name}`,
     websiteType: { slug: typeResult.rows[0].slug, name: typeResult.rows[0].name }
   });
 }));
@@ -852,7 +858,7 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
   const charge = await resolveChargeForCheckout(req, priceUsd);
 
   res.render('public/checkout', {
-    pageTitle: `Checkout — ${t.name}`,
+    pageTitle: `Checkout, ${t.name}`,
     websiteType: { id: t.id, slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) }
   });
 }));
@@ -1060,14 +1066,14 @@ const resendDetailsBodySchema = z.object({
 // "more helpful" by being specific about whether a match was found would
 // reintroduce exactly this leak — don't.
 const RESEND_DETAILS_GENERIC_MESSAGE =
-  "If that email matches a site we've deployed, we've sent the details to it — check your spam folder if it doesn't arrive shortly.";
+  "If that email matches a site we've deployed, we've sent the details to it. Check your spam folder if it doesn't arrive shortly.";
 
 router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   if (!(await resendDetailsLimiter.tryConsume(getRealClientIp(req)))) {
     return res.status(429).json({
-      error: "You've reached today's check limit — try again tomorrow."
+      error: "You've reached today's check limit. Try again tomorrow."
     });
   }
 

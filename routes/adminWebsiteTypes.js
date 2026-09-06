@@ -94,6 +94,14 @@ const updateTypeSchema = z.object({
   // longer isn't blocked, just past the point where it stops helping.
   seoTitle: z.string().max(200).optional(),
   seoDescription: z.string().max(500).optional(),
+  // v1.1.9 Part C: optional live-demo link shown on /explore's card for
+  // this type. Same "omitted = don't change, '' = clear it back to null"
+  // convention as seoTitle/seoDescription/deploySlugPattern just above --
+  // not URL-format-validated beyond a length cap, matching how
+  // favicon_url/og_image_url etc. are handled in routes/adminSiteSettings.js
+  // (a malformed value just fails to load as a link client-side, not a
+  // server error).
+  demoUrl: z.string().trim().max(2000).optional(),
   // v1.1.4 Part D: same "omitted = don't change" convention as everything
   // else in this schema. null (or 0) explicitly clears back to
   // uncategorized — a plain omitted field can't distinguish "don't
@@ -278,7 +286,7 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const { id } = paramsParsed.data;
-  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription, categoryId } = bodyParsed.data;
+  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription, demoUrl, categoryId } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -313,16 +321,19 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     // back to the global site_settings title/description again."
     seo_title: seoTitle !== undefined ? (seoTitle === '' ? null : seoTitle) : current.seo_title,
     seo_description: seoDescription !== undefined ? (seoDescription === '' ? null : seoDescription) : current.seo_description,
+    // v1.1.9 Part C: same '' clears / omitted keeps convention as
+    // deploySlugPattern/seoTitle/seoDescription above.
+    demo_url: demoUrl !== undefined ? (demoUrl === '' ? null : demoUrl) : current.demo_url,
     category_id: categoryId !== undefined ? categoryId : current.category_id
   };
 
   const result = await pool.query(
     `UPDATE website_types SET name = $1, description = $2, is_active = $3,
        price_usd = $4, display_order = $5, icon_name = $6, deploy_slug_pattern = $7,
-       seo_title = $8, seo_description = $9, category_id = $10, updated_at = NOW()
-     WHERE id = $11 RETURNING *`,
+       seo_title = $8, seo_description = $9, category_id = $10, demo_url = $11, updated_at = NOW()
+     WHERE id = $12 RETURNING *`,
     [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name,
-      next.deploy_slug_pattern, next.seo_title, next.seo_description, next.category_id, id]
+      next.deploy_slug_pattern, next.seo_title, next.seo_description, next.category_id, next.demo_url, id]
   );
   const t = result.rows[0];
 
@@ -363,6 +374,7 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     deploySlugWarnings,
     seoTitle: t.seo_title,
     seoDescription: t.seo_description,
+    demoUrl: t.demo_url,
     categoryId: t.category_id
   });
 }));

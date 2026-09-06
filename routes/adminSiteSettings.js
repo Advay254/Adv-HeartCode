@@ -36,7 +36,13 @@ const updateSchema = z.object({
   social_twitter_url: z.string().trim().max(2000).optional(),
   social_facebook_url: z.string().trim().max(2000).optional(),
   social_instagram_url: z.string().trim().max(2000).optional(),
-  social_linkedin_url: z.string().trim().max(2000).optional()
+  social_linkedin_url: z.string().trim().max(2000).optional(),
+  // v1.1.9 Part B: master on/off switch for the type-gallery/form price
+  // display -- stored as the literal strings 'true'/'false' (matching
+  // this table's existing all-strings convention), not a JSON boolean,
+  // so the enum here is deliberately stricter than every url/text field
+  // above it.
+  show_type_prices_early: z.enum(['true', 'false']).optional()
 });
 
 router.get('/', asyncHandler(async (req, res) => {
