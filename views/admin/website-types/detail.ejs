@@ -29,6 +29,11 @@
           <textarea class="admin-textarea" name="description" id="detailsDescription"><%= websiteType.description %></textarea>
           <label class="admin-label" for="detailsPriceUsd">Price (USD)</label>
           <input class="admin-input" type="number" name="priceUsd" id="detailsPriceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01">
+          <label class="admin-label" for="detailsDemoUrl">Live demo link <span class="font-normal text-gray-400">(optional)</span></label>
+          <input class="admin-input" type="text" name="demoUrl" id="detailsDemoUrl" value="<%= websiteType.demo_url || '' %>" placeholder="e.g. https://example.com/portfolio-demo">
+          <p class="mt-1 text-xs text-gray-500">
+            If set, a "Preview" button appears next to "Build this" on this type's /explore card, linking here in a new tab. Leave blank to show just "Build this" as before.
+          </p>
           <label class="admin-label" for="detailsIconName">Icon</label>
           <select class="admin-select" name="iconName" id="detailsIconName">
             <% iconNames.forEach(function (name) { %><option value="<%= name %>" <%= websiteType.icon_name === name ? 'selected' : '' %>><%= name %></option><% }); %>
