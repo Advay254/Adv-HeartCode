@@ -1122,6 +1122,7 @@
           name: form.name.value,
           description: form.description.value,
           priceUsd: Number(form.priceUsd.value) || 0,
+          demoUrl: form.demoUrl.value,
           displayOrder: Number(form.displayOrder.value) || 0,
           isActive: form.isActive.checked,
           iconName: form.iconName.value,
@@ -1969,6 +1970,11 @@
       Object.keys(data).forEach(key => {
         if (form[key]) form[key].value = data[key];
       });
+      // v1.1.9 Part B: a checkbox, not a text input -- the generic loop
+      // above sets .value for every other field, but a checkbox's checked
+      // state isn't driven by .value, so this needs its own line rather
+      // than being folded into that loop.
+      form.show_type_prices_early.checked = data.show_type_prices_early === 'true';
     }
 
     document.getElementById('siteSettingsForm').addEventListener('submit', async (e) => {
@@ -1989,7 +1995,11 @@
           social_twitter_url: form.social_twitter_url.value,
           social_facebook_url: form.social_facebook_url.value,
           social_instagram_url: form.social_instagram_url.value,
-          social_linkedin_url: form.social_linkedin_url.value
+          social_linkedin_url: form.social_linkedin_url.value,
+          // v1.1.9 Part B: checkbox -> 'true'/'false' string, matching
+          // this table's existing all-strings convention (see
+          // routes/adminSiteSettings.js's updateSchema).
+          show_type_prices_early: form.show_type_prices_early.checked ? 'true' : 'false'
         })
       });
       const statusEl = document.getElementById('siteSettingsStatus');
