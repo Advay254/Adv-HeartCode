@@ -1010,9 +1010,61 @@ ON CONFLICT (key) DO NOTHING;
 -- differently for a type until an admin fills one in via the Website Type
 -- Details page.
 ALTER TABLE website_types ADD COLUMN IF NOT EXISTS demo_url TEXT DEFAULT NULL;
+
+-- v1.2.0: SEO landing pages. seo_pages is a NEW, independent table -- each
+-- row is one keyword-targeted page (e.g. "thank-you-website"), deliberately
+-- decoupled from website_types (several SEO pages can point at the same
+-- type; a type can gain/lose SEO pages) with no change to the product
+-- configuration itself. target_website_type_id is nullable and ON DELETE
+-- SET NULL (not CASCADE) -- deleting a website type must never delete or
+-- hide an SEO page that pointed at it, the same "don't let a parent
+-- deletion silently hide child content" principle every other FK in this
+-- schema already follows (see website_types.category_id's own ON DELETE
+-- SET NULL). A page left with a null target degrades its CTA to /explore
+-- rather than a broken link -- see routes/public.js's renderLandingPage().
+CREATE TABLE IF NOT EXISTS seo_pages (
+  id SERIAL PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  page_title TEXT NOT NULL,
+  meta_description TEXT NOT NULL,
+  target_website_type_id INTEGER REFERENCES website_types(id) ON DELETE SET NULL,
+  cta_text TEXT NOT NULL DEFAULT 'Build this website',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- v1.2.0: extends the existing v1.1.3 landing_sections CMS (see that
+-- version's migration comment above) to support MULTIPLE independent
+-- pages instead of just the homepage, rather than building a second
+-- content system for SEO pages. DEFAULT 'home' means every row that
+-- exists before this migration runs automatically becomes a 'home'
+-- section with no separate UPDATE needed -- the existing homepage keeps
+-- rendering exactly as it did before this version, unchanged. A new SEO
+-- page gets its own distinct page_slug (matching its seo_pages.slug) and
+-- its own independent ordered list of sections -- see
+-- lib/landingSections.js (now cached per page_slug, not as one shared
+-- array) and routes/adminLandingSections.js (every route now scoped by
+-- page_slug, including the up/down move swap, which must never pick a
+-- neighbor belonging to a DIFFERENT page's list).
+ALTER TABLE landing_sections ADD COLUMN IF NOT EXISTS page_slug TEXT NOT NULL DEFAULT 'home';
+
+-- v1.2.0: related_pages joins the section-type catalog -- internal
+-- cross-linking between SEO pages (e.g. an "anniversary website" page
+-- linking to "birthday website"), same add/edit/remove/reorder list UI
+-- every other repeatable section already has. Same drop-and-recreate
+-- pattern as this constraint's every prior widening above -- NOT VALID
+-- for the same reason (see the v1.1.5 incident note on this same
+-- constraint further up this file): re-validating every existing row
+-- against a WIDER allowed-values list can never fail (widening only ever
+-- adds permitted values, never removes one an existing row might already
+-- have), so paying for a full-table re-scan on every boot to re-confirm
+-- that is pure waste at this project's scale.
+ALTER TABLE landing_sections DROP CONSTRAINT IF EXISTS landing_sections_section_type_check;
+ALTER TABLE landing_sections ADD CONSTRAINT landing_sections_section_type_check
+  CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq', 'related_pages')) NOT VALID;
 `;
 
-const CURRENT_VERSION = '1.1.9';
+const CURRENT_VERSION = '1.2.0';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
@@ -1048,7 +1100,7 @@ async function initDB() {
     try {
       const unknownSections = await db.query(
         `SELECT id, section_type, display_order, is_active FROM landing_sections
-         WHERE section_type NOT IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq')`
+         WHERE section_type NOT IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq', 'related_pages')`
       );
       if (unknownSections.rowCount > 0) {
         console.warn(
