@@ -248,6 +248,18 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
   const result = await pool.query(
     'SELECT slug, updated_at FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC'
   );
+  // v1.2.0: every active SEO landing page gets its own <url> entry too --
+  // these are real, independently-indexable pages the same way /explore
+  // or a /build/:slug page is, and the whole point of building them is
+  // for search engines to find them. created_at doubles as lastmod since
+  // this table has no updated_at column of its own (unlike website_types)
+  // -- an admin editing an SEO page's landing_sections doesn't currently
+  // bump anything on the seo_pages row itself, so this is the best
+  // signal available this version, not a claim that the page's content
+  // has never changed since creation.
+  const seoPagesResult = await pool.query(
+    'SELECT slug, created_at FROM seo_pages WHERE is_active = true ORDER BY slug ASC'
+  );
 
   const urls = [
     { loc: `${rootUrl}/`, changefreq: 'weekly', priority: '1.0' },
@@ -257,6 +269,12 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
       changefreq: 'weekly',
       priority: '0.7',
       lastmod: t.updated_at ? new Date(t.updated_at).toISOString().slice(0, 10) : null
+    })),
+    ...seoPagesResult.rows.map(p => ({
+      loc: `${rootUrl}/${p.slug}`,
+      changefreq: 'weekly',
+      priority: '0.7',
+      lastmod: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : null
     }))
   ];
 
@@ -441,7 +459,18 @@ router.get('/llms.txt', (req, res) => {
   res.send(lines.join('\n'));
 });
 
-router.get('/', asyncHandler(async (req, res) => {
+// v1.2.0: extracted from the old GET / handler so the exact same
+// section-rendering logic (hero/footer extraction, category_teaser and
+// faq's live-data wiring, JSON-LD assembly) serves both the homepage AND
+// every independent SEO landing page, rather than a second near-copy of
+// this logic living in the new GET /:seoSlug route below. `isHomepage`
+// gates the Organization+WebSite JSON-LD specifically -- see the comment
+// on that block below for why that pair stays homepage-only rather than
+// being emitted on every page this function now serves. `seoPage`, when
+// passed, is the seo_pages row (already resolved to include its target
+// type's actual slug, or null) that drives this page's own CTA banner --
+// see views/public/landing.ejs's own use of it.
+async function renderLandingPage(req, res, { pageSlug, pageTitle, pageDescription, isHomepage, seoPage }) {
   const pool = getPool();
   const priceFor = await resolveVisitorPricing(req);
 
@@ -452,12 +481,15 @@ router.get('/', asyncHandler(async (req, res) => {
   // attribute in a form that could confuse it).
   const statsNumber = String(res.locals.siteSettings.manual_stats_number || '').replace(/[^0-9]/g, '') || '0';
 
-  // v1.1.2 Part A: Organization + WebSite JSON-LD on the homepage only —
-  // this is the canonical page for "what is this business/site", which is
-  // exactly what these two schema.org types describe. Built entirely from
-  // existing site_settings values (already loaded onto res.locals by this
-  // router's own middleware above) plus the request's own root URL — no
-  // new admin input required for this to work out of the box.
+  const structuredData = [];
+
+  // v1.1.2 Part A: Organization + WebSite JSON-LD, homepage only — this
+  // is the canonical page for "what is this business/site", which is
+  // exactly what these two schema.org types describe. An SEO landing
+  // page is a keyword-targeted funnel, not that canonical entity page, so
+  // it never emits these two regardless of what sections it has — see
+  // confirmation #5 in this version's delivery notes for why this can
+  // never be confused with an SEO page's own meta description below.
   //
   // v1.1.6 Part D: Organization gains logo/description/sameAs/contactPoint,
   // each ONLY included when the admin has actually set the underlying
@@ -470,66 +502,106 @@ router.get('/', asyncHandler(async (req, res) => {
   // OG image before logo_url existed) — see db/init.js's migration
   // comment for why the two are deliberately separate fields, not one
   // reused for both purposes.
-  const rootUrl = `${req.protocol}://${req.get('host')}`;
-  const orgLogo = res.locals.siteSettings.logo_url || res.locals.siteSettings.og_image_url || '';
-  const sameAs = [
-    res.locals.siteSettings.social_twitter_url,
-    res.locals.siteSettings.social_facebook_url,
-    res.locals.siteSettings.social_instagram_url,
-    res.locals.siteSettings.social_linkedin_url
-  ].filter(Boolean);
-  const structuredData = [
-    {
-      '@context': 'https://schema.org',
-      '@type': 'Organization',
-      name: res.locals.siteSettings.site_title,
-      url: rootUrl,
-      ...(res.locals.siteSettings.meta_description ? { description: res.locals.siteSettings.meta_description } : {}),
-      ...(orgLogo ? { logo: orgLogo } : {}),
-      ...(sameAs.length > 0 ? { sameAs } : {}),
-      ...(res.locals.siteSettings.contact_email ? {
-        contactPoint: {
-          '@type': 'ContactPoint',
-          email: res.locals.siteSettings.contact_email,
-          contactType: 'customer support'
-        }
-      } : {})
-    },
-    {
-      '@context': 'https://schema.org',
-      '@type': 'WebSite',
-      name: res.locals.siteSettings.site_title,
-      url: rootUrl,
-      description: res.locals.siteSettings.meta_description
-    }
-  ];
+  if (isHomepage) {
+    const rootUrl = `${req.protocol}://${req.get('host')}`;
+    const orgLogo = res.locals.siteSettings.logo_url || res.locals.siteSettings.og_image_url || '';
+    const sameAs = [
+      res.locals.siteSettings.social_twitter_url,
+      res.locals.siteSettings.social_facebook_url,
+      res.locals.siteSettings.social_instagram_url,
+      res.locals.siteSettings.social_linkedin_url
+    ].filter(Boolean);
+    structuredData.push(
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: res.locals.siteSettings.site_title,
+        url: rootUrl,
+        ...(res.locals.siteSettings.meta_description ? { description: res.locals.siteSettings.meta_description } : {}),
+        ...(orgLogo ? { logo: orgLogo } : {}),
+        ...(sameAs.length > 0 ? { sameAs } : {}),
+        ...(res.locals.siteSettings.contact_email ? {
+          contactPoint: {
+            '@type': 'ContactPoint',
+            email: res.locals.siteSettings.contact_email,
+            contactType: 'customer support'
+          }
+        } : {})
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: res.locals.siteSettings.site_title,
+        url: rootUrl,
+        description: res.locals.siteSettings.meta_description
+      }
+    );
+  }
+
+  // v1.1.3: the Skilline-redesigned landing page renders from
+  // landing_sections (lib/landingSections.js), not the old
+  // landingContent/landingSteps setup that res.locals already carries
+  // (that stays wired up only for /explore's shared footer partial — see
+  // db/init.js's migration comment). The hero and footer sections are
+  // pulled out and passed separately from "everything else" so the view
+  // can place the always-present stats counter right after the hero
+  // without depending on admin-set display_order, and so the footer
+  // reliably renders last regardless of where it sits in that order. Per
+  // the build brief's "never completely blank" requirement, a fresh
+  // page with zero rows (or a full landing_sections read failure —
+  // getLandingSections() never throws, just returns []) falls back to a
+  // minimal hardcoded hero built from DEFAULT_CONTENT.hero; the stats
+  // counter below is independent of landing_sections entirely, so it
+  // still renders either way.
+  //
+  // v1.2.0: now reads THIS page's own section list (pageSlug), not
+  // always 'home' — see lib/landingSections.js's per-page cache.
+  const landingSections = await getLandingSections(pageSlug);
+  const heroSection = landingSections.find(s => s.sectionType === 'hero') || {
+    id: 0, sectionType: 'hero', content: DEFAULT_CONTENT.hero, displayOrder: 1, isActive: true
+  };
+  const footerSection = landingSections.find(s => s.sectionType === 'footer') || null;
+  const middleSections = landingSections.filter(s => s.sectionType !== 'hero' && s.sectionType !== 'footer');
 
   // v1.1.6 Part D: FAQPage JSON-LD, built from the SAME query result the
   // 'faq' landing section's partial renders from (faqEntries, passed to
   // res.render below) — one shared source, so the structured data can
   // never list a question the visible page doesn't, or vice versa.
-  // Entirely absent from `structuredData` (not emitted as an empty
-  // FAQPage) when there are zero active entries — Google's own guidance
-  // for FAQPage markup is that it should mirror visible on-page content,
-  // and there's nothing visible to mirror in that case (see
+  //
+  // v1.2.0: gated on THIS page actually having an active 'faq' section —
+  // a page with no faq section on it gets no FAQPage schema regardless of
+  // whether faq_entries has rows, and (per this version's build brief)
+  // the homepage having one is now completely independent of whether a
+  // given SEO page does. Also still entirely absent from `structuredData`
+  // (not emitted as an empty FAQPage) when there are zero active
+  // entries even if the section IS present — Google's own guidance for
+  // FAQPage markup is that it should mirror visible on-page content, and
+  // there's nothing visible to mirror in that case (see
   // views/partials/landing-sections/faq.ejs's own empty-state branch).
-  const faqEntriesResult = await pool.query(
-    'SELECT question, answer FROM faq_entries WHERE is_active = true ORDER BY display_order ASC, id ASC'
-  );
-  const faqEntries = faqEntriesResult.rows;
-  if (faqEntries.length > 0) {
-    structuredData.push({
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      mainEntity: faqEntries.map(entry => ({
-        '@type': 'Question',
-        name: entry.question,
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: entry.answer
-        }
-      }))
-    });
+  // faq_entries itself stays one global list shared by every page that
+  // chooses to include a faq section — this version doesn't split it
+  // per-page (flagged in this version's delivery notes).
+  const hasFaqSection = middleSections.some(s => s.sectionType === 'faq');
+  let faqEntries = [];
+  if (hasFaqSection) {
+    const faqEntriesResult = await pool.query(
+      'SELECT question, answer FROM faq_entries WHERE is_active = true ORDER BY display_order ASC, id ASC'
+    );
+    faqEntries = faqEntriesResult.rows;
+    if (faqEntries.length > 0) {
+      structuredData.push({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqEntries.map(entry => ({
+          '@type': 'Question',
+          name: entry.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: entry.answer
+          }
+        }))
+      });
+    }
   }
 
   // v1.1.5 Part B: the section formerly known as the fixed, non-CMS
@@ -544,6 +616,14 @@ router.get('/', asyncHandler(async (req, res) => {
   // new section's compact 2-card layout — see this version's delivery
   // notes on that specific call).
   //
+  // v1.2.0: gated on THIS page actually having an active category_teaser
+  // section (same reasoning as hasFaqSection just above) — skips two
+  // extra DB queries entirely on any page that doesn't use this section
+  // type, homepage included, with no change to what actually renders
+  // (categoryTeaserCategories/FallbackTypes are only ever read by that
+  // one partial, which itself is only ever invoked when this section
+  // type is present in middleSections).
+  //
   // Primary: first 2 ACTIVE categories by display_order, each carrying
   // its cheapest active type's price as a single representative "From
   // $X" figure (chosen over a min–max range — simpler to read at a
@@ -554,85 +634,63 @@ router.get('/', asyncHandler(async (req, res) => {
   // admin who hasn't set any up yet): up to 2 active website TYPES
   // directly, same non-breaking "don't let an empty category list hide
   // real content" principle already used for /explore itself in v1.1.4.
-  const categoriesResult = await pool.query(
-    'SELECT * FROM website_categories WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 2'
-  );
-
   let categoryTeaserCategories = [];
   let categoryTeaserFallbackTypes = [];
+  const hasCategoryTeaserSection = middleSections.some(s => s.sectionType === 'category_teaser');
 
-  if (categoriesResult.rowCount > 0) {
-    const categoryIds = categoriesResult.rows.map(c => c.id);
-    // DISTINCT ON + ORDER BY price_usd ASC picks exactly one row per
-    // category — its cheapest active type — in a single query rather
-    // than one query per category.
-    const cheapestTypesResult = await pool.query(
-      `SELECT DISTINCT ON (category_id) *
-       FROM website_types
-       WHERE is_active = true AND category_id = ANY($1)
-       ORDER BY category_id, price_usd ASC, id ASC`,
-      [categoryIds]
+  if (hasCategoryTeaserSection) {
+    const categoriesResult = await pool.query(
+      'SELECT * FROM website_categories WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 2'
     );
-    const cheapestByCategory = new Map(cheapestTypesResult.rows.map(t => [t.category_id, t]));
 
-    categoryTeaserCategories = categoriesResult.rows.map(c => {
-      const cheapest = cheapestByCategory.get(c.id);
-      return {
-        slug: c.slug,
-        name: c.name,
-        description: c.description,
-        iconName: c.icon_name,
-        // A category with zero active types in it yet (admin created it
-        // but hasn't assigned/activated anything) has no price to show —
-        // the partial renders the card without a price line rather than
-        // a misleading "$0" in that case.
-        ...(cheapest ? priceFor(Number(cheapest.price_usd) || 0) : {})
-      };
-    });
-  } else {
-    const fallbackTypesResult = await pool.query(
-      'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 2'
-    );
-    categoryTeaserFallbackTypes = fallbackTypesResult.rows.map(t => {
-      const priceUsd = Number(t.price_usd) || 0;
-      return {
-        slug: t.slug,
-        name: t.name,
-        description: t.description,
-        iconName: t.icon_name,
-        ...priceFor(priceUsd)
-      };
-    });
+    if (categoriesResult.rowCount > 0) {
+      const categoryIds = categoriesResult.rows.map(c => c.id);
+      // DISTINCT ON + ORDER BY price_usd ASC picks exactly one row per
+      // category — its cheapest active type — in a single query rather
+      // than one query per category.
+      const cheapestTypesResult = await pool.query(
+        `SELECT DISTINCT ON (category_id) *
+         FROM website_types
+         WHERE is_active = true AND category_id = ANY($1)
+         ORDER BY category_id, price_usd ASC, id ASC`,
+        [categoryIds]
+      );
+      const cheapestByCategory = new Map(cheapestTypesResult.rows.map(t => [t.category_id, t]));
+
+      categoryTeaserCategories = categoriesResult.rows.map(c => {
+        const cheapest = cheapestByCategory.get(c.id);
+        return {
+          slug: c.slug,
+          name: c.name,
+          description: c.description,
+          iconName: c.icon_name,
+          // A category with zero active types in it yet (admin created it
+          // but hasn't assigned/activated anything) has no price to show —
+          // the partial renders the card without a price line rather than
+          // a misleading "$0" in that case.
+          ...(cheapest ? priceFor(Number(cheapest.price_usd) || 0) : {})
+        };
+      });
+    } else {
+      const fallbackTypesResult = await pool.query(
+        'SELECT * FROM website_types WHERE is_active = true ORDER BY display_order ASC, id ASC LIMIT 2'
+      );
+      categoryTeaserFallbackTypes = fallbackTypesResult.rows.map(t => {
+        const priceUsd = Number(t.price_usd) || 0;
+        return {
+          slug: t.slug,
+          name: t.name,
+          description: t.description,
+          iconName: t.icon_name,
+          ...priceFor(priceUsd)
+        };
+      });
+    }
   }
 
-  // v1.1.3: the Skilline-redesigned landing page renders from
-  // landing_sections (lib/landingSections.js), not the old
-  // landingContent/landingSteps setup that res.locals already carries
-  // (that stays wired up only for /explore's shared footer partial — see
-  // db/init.js's migration comment). The hero and footer sections are
-  // pulled out and passed separately from "everything else" so the view
-  // can place the always-present stats counter right after the hero
-  // without depending on admin-set display_order, and so the footer
-  // reliably renders last regardless of where it sits in that order. Per
-  // the build brief's "never completely blank" requirement, a fresh
-  // install with zero rows (or a full landing_sections read failure —
-  // getLandingSections() never throws, just returns []) falls back to a
-  // minimal hardcoded hero built from DEFAULT_CONTENT.hero; the stats
-  // counter below is independent of landing_sections entirely, so it
-  // still renders either way.
-  //
-  // v1.1.5: category_teaser now flows through middleSections like every
-  // other section type — it's no longer pulled out and hardcoded
-  // separately the way the old fixed teaser was.
-  const landingSections = await getLandingSections();
-  const heroSection = landingSections.find(s => s.sectionType === 'hero') || {
-    id: 0, sectionType: 'hero', content: DEFAULT_CONTENT.hero, displayOrder: 1, isActive: true
-  };
-  const footerSection = landingSections.find(s => s.sectionType === 'footer') || null;
-  const middleSections = landingSections.filter(s => s.sectionType !== 'hero' && s.sectionType !== 'footer');
-
   res.render('public/landing', {
-    pageTitle: null,
+    pageTitle: pageTitle || null,
+    pageDescription: pageDescription || null,
     statsNumber,
     structuredData,
     heroSection,
@@ -640,8 +698,13 @@ router.get('/', asyncHandler(async (req, res) => {
     footerSection,
     categoryTeaserCategories,
     categoryTeaserFallbackTypes,
-    faqEntries
+    faqEntries,
+    seoPage: seoPage || null
   });
+}
+
+router.get('/', asyncHandler(async (req, res) => {
+  await renderLandingPage(req, res, { pageSlug: 'home', pageTitle: null, pageDescription: null, isHomepage: true, seoPage: null });
 }));
 
 // v1.1.4 Part D: shared by GET /explore and GET /explore/:categorySlug so
@@ -1119,6 +1182,61 @@ router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler
   }
 
   res.status(200).json({ message: RESEND_DETAILS_GENERIC_MESSAGE });
+}));
+
+// v1.2.0: MUST be the LAST route registered on this router. `/:seoSlug`
+// matches any single path segment, which would otherwise shadow every
+// specific route above it (explore, build, resend-details, sitemap.xml,
+// robots.txt, llms.txt, .well-known/*) if it were registered any
+// earlier — Express tries routes in registration order and stops at the
+// first match, so a more specific route registered BEFORE this one
+// always wins; registered after, this one is only ever reached once
+// nothing more specific already claimed the path. This is also exactly
+// why routes/adminSeoPages.js separately REJECTS any of those same
+// reserved slugs at creation time (lib/reservedSlugs.js) rather than
+// relying on route order alone to make a collision harmless — order
+// prevents a collision from breaking something that already worked, but
+// it can't stop the new page itself from being silently unreachable.
+router.get('/:seoSlug', asyncHandler(async (req, res, next) => {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT sp.*, wt.slug AS target_type_slug
+     FROM seo_pages sp
+     LEFT JOIN website_types wt ON wt.id = sp.target_website_type_id
+     WHERE sp.slug = $1`,
+    [req.params.seoSlug]
+  );
+
+  if (result.rowCount === 0 || !result.rows[0].is_active) {
+    // Falls through to this app's normal 404 handling rather than a
+    // custom one here — same reasoning as every other "not found" path
+    // in this router (e.g. GET /build/:slug for an inactive/missing
+    // type): one 404 presentation, not a second bespoke one for this
+    // specific route.
+    return next();
+  }
+  const seoPageRow = result.rows[0];
+
+  // A page with no target_website_type_id assigned (never set, or its
+  // target type was later deleted -- see db/init.js's ON DELETE SET NULL
+  // on this column) must never render a CTA pointing at "/build/undefined"
+  // or similar. Falls back to linking at /explore instead so the visitor
+  // still has a real, working next step -- and this is exactly the
+  // "shouldn't really be active" case flagged in this version's delivery
+  // notes: an admin gets a working fallback link either way, but a page
+  // in this state is worth them assigning a real target or deactivating.
+  const ctaUrl = seoPageRow.target_type_slug ? `/build/${seoPageRow.target_type_slug}` : '/explore';
+
+  await renderLandingPage(req, res, {
+    pageSlug: seoPageRow.slug,
+    pageTitle: seoPageRow.page_title,
+    pageDescription: seoPageRow.meta_description,
+    isHomepage: false,
+    seoPage: {
+      ctaText: seoPageRow.cta_text,
+      ctaUrl
+    }
+  });
 }));
 
 module.exports = router;

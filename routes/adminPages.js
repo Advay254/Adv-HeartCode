@@ -93,6 +93,18 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/faq`, (req, res) => {
   res.render('admin/faq');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/seo-pages`, asyncHandler(async (req, res) => {
+  const pool = getPool();
+  // Same reasoning as the website-types detail route just above: this
+  // page already server-renders, so fetching the target-type dropdown's
+  // options here avoids a separate client round trip before it can show
+  // the right one pre-selected on edit.
+  const typesResult = await pool.query(
+    'SELECT id, name FROM website_types ORDER BY display_order ASC, id ASC'
+  );
+  res.render('admin/seo-pages', { websiteTypes: typesResult.rows });
+}));
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {
   res.render('admin/submissions');
 });
@@ -113,9 +125,17 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/landing-page`, (req, res) => {
   res.render('admin/landing-page');
 });
 
-router.get(`${INTERNAL_ADMIN_PREFIX}/landing-sections`, (req, res) => {
-  res.render('admin/landing-sections');
-});
+router.get(`${INTERNAL_ADMIN_PREFIX}/landing-sections`, asyncHandler(async (req, res) => {
+  const pool = getPool();
+  // v1.2.0: the page selector needs every SEO page that exists (active
+  // or not -- an admin editing a currently-inactive page's sections is a
+  // completely normal workflow, e.g. building it out before flipping it
+  // live), so this is a plain unfiltered list, same "admin sees
+  // everything, public only sees active" split every other admin list in
+  // this app already follows.
+  const seoPagesResult = await pool.query('SELECT slug, page_title FROM seo_pages ORDER BY slug ASC');
+  res.render('admin/landing-sections', { seoPages: seoPagesResult.rows });
+}));
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/scripts`, (req, res) => {
   res.render('admin/scripts');
