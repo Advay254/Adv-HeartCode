@@ -1,0 +1,28 @@
+<%
+  var rp = section.content;
+  var links = rp.links || [];
+%>
+<!--
+  v1.2.0: internal cross-linking between SEO landing pages (and/or
+  /explore, a specific /build/:slug, or an external URL — see
+  lib/landingSectionTypes.js's relatedPagesSchema comment for why this is
+  plain { label, url } pairs rather than a reference to another seo_pages
+  row by id). No highlighted_word/eyebrow here — this section is
+  deliberately simpler than feature_cards/bullet_list/etc., closer in
+  spirit to footer.ejs's own link-column layout than to any
+  content-heavy section type.
+-->
+<section class="bg-white px-4 py-16 sm:px-6" data-reveal>
+  <div class="mx-auto max-w-3xl text-center">
+    <h2 class="text-2xl font-bold text-hc-ink sm:text-3xl"><%= rp.heading %></h2>
+    <% if (links.length === 0) { %>
+      <p class="mt-6 text-sm text-hc-ink/50">Nothing linked here yet.</p>
+    <% } else { %>
+      <div class="mt-8 flex flex-wrap justify-center gap-3">
+        <% links.forEach(function (link) { %>
+          <a href="<%= link.url %>" class="hc-pill-btn-outline"><%= link.label %></a>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</section>
