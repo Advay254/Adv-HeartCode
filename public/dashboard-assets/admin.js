@@ -2260,6 +2260,7 @@
       if (section.sectionType === 'footer') return `${(c.link_columns || []).length} link column(s)`;
       if (section.sectionType === 'category_teaser') return c.heading || '';
       if (section.sectionType === 'faq') return c.heading || '';
+      if (section.sectionType === 'related_pages') return `${c.heading || ''} (${(c.links || []).length} link(s))`;
       return '';
     }
 
@@ -2328,6 +2329,28 @@
         eyebrow_text: readField(panel, 'eyebrow_text'),
         heading: readField(panel, 'heading'),
         highlighted_word: readField(panel, 'highlighted_word')
+      };
+    }
+
+    // ---- related_pages (v1.2.0) ----
+    // Reuses footerLinkRowHtml's exact { label, url } row shape below (see
+    // wirePanelRows' TOP_LEVEL_ARRAY_BY_TYPE entry) rather than a new
+    // near-identical row renderer — the two are structurally identical
+    // (plain label+url pairs), just used in different sections.
+    function renderRelatedPagesForm(c) {
+      return `
+        ${textField('Heading', 'heading', c.heading)}
+        <p class="admin-label">Links</p>
+        <div data-array="links">${(c.links || []).map(footerLinkRowHtml).join('')}</div>
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-links>Add link</button>
+        <p class="mt-2 text-xs text-gray-500">
+          Link to another SEO page (e.g. /thank-you-website), a website type's build page (/build/portfolio), /explore, or any external URL.
+        </p>`;
+    }
+    function collectRelatedPagesForm(panel) {
+      return {
+        heading: readField(panel, 'heading'),
+        links: readRows(panel, 'links')
       };
     }
 
@@ -2565,7 +2588,8 @@
       testimonials: { render: renderTestimonialsForm, collect: collectTestimonialsForm },
       footer: { render: renderFooterForm, collect: collectFooterForm },
       category_teaser: { render: renderCategoryTeaserForm, collect: collectCategoryTeaserForm },
-      faq: { render: renderFaqForm, collect: collectFaqForm }
+      faq: { render: renderFaqForm, collect: collectFaqForm },
+      related_pages: { render: renderRelatedPagesForm, collect: collectRelatedPagesForm }
     };
 
     // Wires whichever single top-level array field a section's form has
@@ -2578,7 +2602,8 @@
         cta_image_cards: { name: 'cards', rowHtmlFn: ctaCardRowHtml },
         bullet_list: { name: 'items', rowHtmlFn: bulletItemRowHtml },
         testimonials: { name: 'items', rowHtmlFn: testimonialRowHtml },
-        footer: { name: 'link_columns', rowHtmlFn: footerColumnRowHtml }
+        footer: { name: 'link_columns', rowHtmlFn: footerColumnRowHtml },
+        related_pages: { name: 'links', rowHtmlFn: footerLinkRowHtml }
       };
       const arrayField = TOP_LEVEL_ARRAY_BY_TYPE[sectionType];
       if (!arrayField) return; // hero / split_image_text have no array field at all
@@ -2655,8 +2680,16 @@
       return wrap;
     }
 
+    // v1.2.0: which page's sections this whole panel is currently showing
+    // -- driven by the #pageSelector <select> added to this page's view.
+    // Every other function above (renderCard's save/move/toggle/delete
+    // handlers) operates on a section by its own global id and needs no
+    // awareness of this at all; only load() (which page to fetch) and the
+    // "Add section" handler (which page a new section belongs to) do.
+    let currentPageSlug = 'home';
+
     async function load() {
-      const res = await window.adminFetch('/api/admin/landing-sections');
+      const res = await window.adminFetch(`/api/admin/landing-sections?page=${encodeURIComponent(currentPageSlug)}`);
       const data = await res.json();
       sections = data.sections;
       listEl.innerHTML = '';
@@ -2692,7 +2725,7 @@
       const sectionType = document.getElementById('newSectionType').value;
       const res = await window.adminFetch('/api/admin/landing-sections', {
         method: 'POST',
-        body: JSON.stringify({ sectionType })
+        body: JSON.stringify({ sectionType, pageSlug: currentPageSlug })
       });
       if (res.ok) {
         load();
@@ -2700,6 +2733,11 @@
         const data = await res.json();
         alert(data.error || 'Failed to add section.');
       }
+    });
+
+    document.getElementById('pageSelector').addEventListener('change', (e) => {
+      currentPageSlug = e.target.value;
+      load();
     });
 
     load();
@@ -2860,6 +2898,162 @@
     load();
   }
 
+  // ---- SEO Pages (v1.2.0) ----
+  // Deliberately structured like initCategoriesPage() above -- same flat
+  // list-management pattern -- but simpler in the ways that fall directly
+  // out of the schema: no move up/down (seo_pages has no display_order;
+  // each page is an independent URL, never browsed as an ordered list),
+  // and slug isn't editable in the edit row at all (see
+  // routes/adminSeoPages.js's updateSchema comment for why).
+  function initSeoPagesPage() {
+    function render(pages) {
+      const list = document.getElementById('seoPagesList');
+      list.innerHTML = pages.map(p => `
+        <div class="admin-card" data-id="${p.id}">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-sm text-hc-ink">${escapeHtml(p.pageTitle)}</strong>
+                <span class="text-xs text-gray-400">/${escapeHtml(p.slug)}</span>
+                <span class="admin-badge ${p.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${p.isActive ? 'active' : 'inactive'}</span>
+              </div>
+              <p class="mt-1 text-sm text-hc-ink/60 break-words">${escapeHtml(p.metaDescription)}</p>
+              <p class="mt-1 text-xs text-gray-400">
+                Target: ${p.targetWebsiteTypeName ? escapeHtml(p.targetWebsiteTypeName) : 'none (CTA links to /explore)'}
+                &middot; CTA: "${escapeHtml(p.ctaText)}"
+              </p>
+              <div id="editRow-${p.id}" style="display:none;" class="mt-3"></div>
+            </div>
+            <div class="flex shrink-0 flex-wrap gap-2">
+              <button type="button" class="admin-btn-outline admin-btn-sm edit-seo-page" data-id="${p.id}">Edit</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm toggle-seo-page" data-id="${p.id}" data-active="${p.isActive}">${p.isActive ? 'Deactivate' : 'Activate'}</button>
+              <button type="button" class="admin-btn-danger admin-btn-sm remove-seo-page" data-id="${p.id}">Remove</button>
+            </div>
+          </div>
+        </div>`).join('') || '<p class="text-sm text-gray-400">No SEO pages yet.</p>';
+
+      list.querySelectorAll('.toggle-seo-page').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const isActive = btn.dataset.active === 'true';
+          const res = await window.adminFetch(`/api/admin/seo-pages/${btn.dataset.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: !isActive })
+          });
+          if (res.ok) load();
+        });
+      });
+      list.querySelectorAll('.remove-seo-page').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this SEO page? Its URL will stop working immediately. Any sections already built for it are kept (not deleted) in case a page with the same slug is created again later.')) return;
+          const res = await window.adminFetch(`/api/admin/seo-pages/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) load();
+        });
+      });
+      list.querySelectorAll('.edit-seo-page').forEach(btn => {
+        btn.addEventListener('click', () => openEditRow(btn.dataset.id, pages));
+      });
+    }
+
+    function openEditRow(id, pages) {
+      const seoPage = pages.find(p => String(p.id) === String(id));
+      if (!seoPage) return;
+      const row = document.getElementById(`editRow-${id}`);
+      row.style.display = 'block';
+      row.innerHTML = `
+        <label class="admin-label">Page title</label>
+        <input class="admin-input" type="text" data-field="pageTitle" maxlength="200" value="${escapeHtml(seoPage.pageTitle)}">
+        <label class="admin-label">Meta description</label>
+        <textarea class="admin-textarea" data-field="metaDescription" maxlength="500">${escapeHtml(seoPage.metaDescription)}</textarea>
+        <label class="admin-label">Target website type</label>
+        <select class="admin-select" data-field="targetWebsiteTypeId"></select>
+        <label class="admin-label">CTA button text</label>
+        <input class="admin-input" type="text" data-field="ctaText" maxlength="100" value="${escapeHtml(seoPage.ctaText)}">
+        <div class="mt-2 flex gap-2">
+          <button type="button" class="admin-btn admin-btn-sm save-edit">Save changes</button>
+          <button type="button" class="admin-btn-outline admin-btn-sm cancel-edit">Cancel</button>
+        </div>`;
+      attachCharCounter(row.querySelector('[data-field="metaDescription"]'));
+      const typeSelect = row.querySelector('[data-field="targetWebsiteTypeId"]');
+      const noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = 'None (CTA links to /explore)';
+      typeSelect.appendChild(noneOpt);
+      window.HC_SEO_PAGE_WEBSITE_TYPES.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        if (String(t.id) === String(seoPage.targetWebsiteTypeId)) opt.selected = true;
+        typeSelect.appendChild(opt);
+      });
+      row.querySelector('.cancel-edit').addEventListener('click', () => {
+        row.style.display = 'none';
+        row.innerHTML = '';
+      });
+      row.querySelector('.save-edit').addEventListener('click', async () => {
+        const targetValue = row.querySelector('[data-field="targetWebsiteTypeId"]').value;
+        const res = await window.adminFetch(`/api/admin/seo-pages/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            pageTitle: row.querySelector('[data-field="pageTitle"]').value,
+            metaDescription: row.querySelector('[data-field="metaDescription"]').value,
+            targetWebsiteTypeId: targetValue ? Number(targetValue) : null,
+            ctaText: row.querySelector('[data-field="ctaText"]').value
+          })
+        });
+        if (res.ok) {
+          load();
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to save SEO page.');
+        }
+      });
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/seo-pages');
+      const pages = await res.json();
+      render(pages);
+    }
+
+    document.getElementById('addSeoPageForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/seo-pages', {
+        method: 'POST',
+        body: JSON.stringify({
+          slug: form.slug.value,
+          pageTitle: form.pageTitle.value,
+          metaDescription: form.metaDescription.value,
+          targetWebsiteTypeId: form.targetWebsiteTypeId.value ? Number(form.targetWebsiteTypeId.value) : undefined,
+          ctaText: form.ctaText.value || undefined
+        })
+      });
+      const statusEl = document.getElementById('addSeoPageStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        statusEl.className = 'admin-msg admin-msg-success';
+        statusEl.textContent = 'SEO page added. Add its sections from the Landing Sections page.';
+        form.reset();
+        load();
+      } else {
+        const data = await res.json();
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to add SEO page.';
+      }
+    });
+
+    // Same "read from the already-server-rendered <select>" pattern as
+    // window.HC_CATEGORY_ICON_NAMES above -- avoids fetching or
+    // duplicating the website-types list a second time just for the edit
+    // row's dropdown.
+    window.HC_SEO_PAGE_WEBSITE_TYPES = Array.from(document.getElementById('seoPageTargetType').options)
+      .filter(o => o.value)
+      .map(o => ({ id: o.value, name: o.textContent }));
+    attachCharCounter(document.getElementById('seoPageMetaDescription'));
+
+    load();
+  }
+
   // ---- FAQ page (v1.1.6 Part D) ----
   // Deliberately structured identically to initCategoriesPage() just
   // above -- same "same list-management pattern used for Categories/
@@ -3016,5 +3210,6 @@
     if (page === 'landing-sections') initLandingSectionsPage();
     if (page === 'categories') initCategoriesPage();
     if (page === 'faq') initFaqPage();
+    if (page === 'seo-pages') initSeoPagesPage();
   });
 })();
