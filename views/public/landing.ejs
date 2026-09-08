@@ -8,6 +8,20 @@
 
 <%- include('../partials/landing-sections/hero', { section: heroSection }) %>
 
+<% if (typeof seoPage !== 'undefined' && seoPage) { %>
+<!-- v1.2.0: SEO landing page CTA banner — driven by seo_pages.cta_text and
+     the resolved target link (routes/public.js's renderLandingPage), not
+     a landing_sections row itself. Only ever rendered when this page IS
+     an SEO page (seoPage is null for the homepage), placed right after
+     the hero so it's the first thing a keyword-targeted visitor sees
+     after the headline. -->
+<section class="bg-hc-yellow/10 px-4 py-8 text-center sm:px-6">
+  <div class="mx-auto max-w-2xl" data-reveal>
+    <a href="<%= seoPage.ctaUrl %>" class="hc-pill-btn inline-block"><%= seoPage.ctaText %></a>
+  </div>
+</section>
+<% } %>
+
 <!-- STATS: kept as a fixed, non-CMS section — NOT part of landing_sections.
      This is the "honest stats counter" the v1.1.3 build brief itself says
      not to rebuild under a different name. Unchanged from the
@@ -37,7 +51,8 @@
     bullet_list: '../partials/landing-sections/bullet-list',
     testimonials: '../partials/landing-sections/testimonials',
     category_teaser: '../partials/landing-sections/category-teaser',
-    faq: '../partials/landing-sections/faq'
+    faq: '../partials/landing-sections/faq',
+    related_pages: '../partials/landing-sections/related-pages'
   };
 %>
 <% middleSections.forEach(function (section) { %>
