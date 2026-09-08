@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>SEO Pages | HeartCode Admin</title>
+</head>
+<body data-page="seo-pages">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'seo-pages' }) %>
+  <main class="admin-main">
+    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">SEO Pages</h1>
+    <p class="mb-6 max-w-2xl text-sm text-gray-500">
+      Independent, keyword-targeted landing pages (e.g. <code>/thank-you-website</code>) alongside the homepage. Each one gets its own title, meta description, and its own section list on the <a href="/<%= slug %>/landing-sections" class="underline">Landing Sections</a> page (pick it from the page selector there once it's created here). The slug can't be changed after creation, since it's also that page's live URL.
+    </p>
+
+    <div class="admin-card max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Add SEO page</h2>
+      <form id="addSeoPageForm">
+        <label class="admin-label" for="seoPageSlug">Slug</label>
+        <input class="admin-input" type="text" name="slug" id="seoPageSlug" required placeholder="e.g. thank-you-website">
+        <label class="admin-label" for="seoPagePageTitle">Page title</label>
+        <input class="admin-input" type="text" name="pageTitle" id="seoPagePageTitle" required maxlength="200" placeholder="Browser tab / &lt;title&gt;">
+        <label class="admin-label" for="seoPageMetaDescription">Meta description</label>
+        <textarea class="admin-textarea" name="metaDescription" id="seoPageMetaDescription" required maxlength="500" placeholder="Shown in search results"></textarea>
+        <label class="admin-label" for="seoPageTargetType">Target website type <span class="font-normal text-gray-400">(optional)</span></label>
+        <select class="admin-select" name="targetWebsiteTypeId" id="seoPageTargetType">
+          <option value="">None (CTA links to /explore instead)</option>
+          <% websiteTypes.forEach(function (t) { %><option value="<%= t.id %>"><%= t.name %></option><% }); %>
+        </select>
+        <label class="admin-label" for="seoPageCtaText">CTA button text</label>
+        <input class="admin-input" type="text" name="ctaText" id="seoPageCtaText" maxlength="100" placeholder="Build this website">
+        <button type="submit" class="admin-btn mt-3">Add SEO page</button>
+      </form>
+      <p id="addSeoPageStatus" class="admin-msg" style="display:none;"></p>
+    </div>
+
+    <div id="seoPagesList" class="mt-6 space-y-3"></div>
+  </main>
+</div>
+</body>
+</html>
