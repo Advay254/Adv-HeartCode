@@ -89,6 +89,10 @@
 
         <p id="formError" class="hc-msg hc-msg-error" style="display:none;"></p>
         <button type="submit" id="submitBtn" class="hc-pill-btn mt-6 w-full">Build my site</button>
+        <!-- v1.2.1 Part B: plain expectation-setting line before submit,
+             swapped by public/site.js for rotating status text once the
+             generate request is actually in flight. Never both at once. -->
+        <p id="buildStatusHint" class="mt-3 text-center text-xs text-hc-ink/50" aria-live="polite">This usually takes under a minute.</p>
       </form>
     </div>
   </div>
