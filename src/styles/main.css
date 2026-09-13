@@ -266,3 +266,66 @@
   cursor: default;
 }
 
+/* v1.2.1 Part B: build-button loading animation. Pure CSS, no JS
+   animation library and no image assets -- three small circles colored
+   with the existing brand palette (hc-yellow against the submit button's
+   own hc-blue background, so they read clearly against it) pulsing in
+   sequence via one @keyframes rule and a staggered animation-delay per
+   dot. Rendered INSIDE the disabled submit button by public/site.js's
+   buildLoadingDotsHtml(), replacing that button's text entirely for the
+   duration of the generate request -- this is the only place these
+   classes are used, on the /build/:slug form only. */
+.hc-loading-dots {
+  @apply inline-flex items-center justify-center gap-1.5;
+}
+.hc-loading-dots span {
+  @apply inline-block h-2.5 w-2.5 rounded-full bg-hc-yellow;
+  animation: hc-loading-dot-pulse 1.2s ease-in-out infinite both;
+}
+.hc-loading-dots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.hc-loading-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes hc-loading-dot-pulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hc-loading-dots span {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* v1.2.1 Part A: minimal typography for the three legal pages' admin-
+   authored HTML (views/public/legal-page.ejs), which ships as plain
+   <h2>/<p> markup with no Tailwind classes of its own -- an admin editing
+   this content in a textarea should not have to remember to hand-add
+   utility classes to every element for it to read cleanly. Scoped to
+   .legal-content only, so this never affects any other admin-pasted HTML
+   elsewhere on the site (Template tab output, email bodies, the password
+   page gate) which each already render inside their own specific
+   context. */
+.legal-content h2 {
+  @apply mt-8 font-display text-xl text-hc-ink first:mt-0;
+}
+.legal-content p {
+  @apply mt-3 text-sm leading-relaxed text-hc-ink/80;
+}
+.legal-content ul,
+.legal-content ol {
+  @apply mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-hc-ink/80;
+}
+.legal-content a {
+  @apply text-hc-blue underline underline-offset-2;
+}
+
