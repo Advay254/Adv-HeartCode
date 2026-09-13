@@ -33,6 +33,7 @@ const adminLandingRouter = require('./routes/adminLanding');
 const adminLandingSectionsRouter = require('./routes/adminLandingSections');
 const adminRecoveryRouter = require('./routes/adminRecovery');
 const adminFunnelRouter = require('./routes/adminFunnel');
+const adminLegalRouter = require('./routes/adminLegal');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
 const eventsRouter = require('./routes/events');
@@ -314,7 +315,12 @@ app.use('/api/admin', cors({ origin: false }));
 // try to re-read an already-consumed request stream).
 const ADMIN_DEFAULT_JSON_LIMIT = '100kb';
 const ADMIN_LARGE_HTML_JSON_LIMIT = '10mb';
-const LARGE_HTML_ADMIN_ROUTE_RE = /^\/website-types\/\d+\/(template|email-template|password-page)$/;
+// v1.2.1 Part A: the Legal Pages save route added the same "admin pastes
+// a large chunk of HTML" shape as the three website-types routes above,
+// just site-wide instead of per website type — /legal-pages/:pageKey
+// rather than /website-types/:id/template — so it gets the same raised
+// ceiling for the exact same reason.
+const LARGE_HTML_ADMIN_ROUTE_RE = /^\/(website-types\/\d+\/(template|email-template|password-page)|legal-pages\/[a-z_]+)$/;
 
 function adminJsonBodyParser(req, res, next) {
   // req.path here is already relative to this router's '/api/admin' mount
@@ -345,6 +351,7 @@ app.use('/api/admin/landing', adminLandingRouter);
 app.use('/api/admin/landing-sections', adminLandingSectionsRouter);
 app.use('/api/admin/pending-deployments', adminRecoveryRouter);
 app.use('/api/admin/funnel', adminFunnelRouter);
+app.use('/api/admin/legal-pages', adminLegalRouter);
 
 // v1.1.4 Part B: body-parser (express.json(), used above) forwards a
 // request whose body exceeds its configured limit — or whose body isn't
