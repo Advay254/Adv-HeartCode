@@ -49,12 +49,21 @@
       // column), with a computed fallback only for the edge case of an
       // admin clearing it entirely.
     %>
-    <div class="border-t border-white/10 py-6 text-center text-xs text-white/40 sm:text-left">
-      <% if (f.tagline) { %>
-        <%= f.tagline %>
-      <% } else { %>
-        &copy; <%= new Date().getFullYear() %> <%= siteSettings.site_title %>. All rights reserved.
-      <% } %>
+    <div class="flex flex-col items-center gap-4 border-t border-white/10 py-6 text-center text-xs text-white/40 sm:flex-row sm:justify-between sm:text-left">
+      <div>
+        <% if (f.tagline) { %>
+          <%= f.tagline %>
+        <% } else { %>
+          &copy; <%= new Date().getFullYear() %> <%= siteSettings.site_title %>. All rights reserved.
+        <% } %>
+      </div>
+      <!-- v1.2.1 Part A: hardcoded, not admin-managed like link_columns
+           above — these three routes are fixed and always exist. -->
+      <nav class="flex flex-wrap justify-center gap-x-5 gap-y-1">
+        <a href="/privacy-policy" class="transition-colors hover:text-white/70">Privacy Policy</a>
+        <a href="/terms" class="transition-colors hover:text-white/70">Terms and Conditions</a>
+        <a href="/cookie-policy" class="transition-colors hover:text-white/70">Cookie Policy</a>
+      </nav>
     </div>
   </div>
 </footer>
