@@ -1062,9 +1062,101 @@ ALTER TABLE landing_sections ADD COLUMN IF NOT EXISTS page_slug TEXT NOT NULL DE
 ALTER TABLE landing_sections DROP CONSTRAINT IF EXISTS landing_sections_section_type_check;
 ALTER TABLE landing_sections ADD CONSTRAINT landing_sections_section_type_check
   CHECK (section_type IN ('hero', 'feature_cards', 'split_image_text', 'cta_image_cards', 'bullet_list', 'testimonials', 'footer', 'category_teaser', 'faq', 'related_pages')) NOT VALID;
+
+-- v1.2.1 Part A: three static, site-wide legal pages (Privacy Policy,
+-- Terms and Conditions, Cookie Policy), versioned the exact same way
+-- templates/email_templates/password_page_templates already are (a new
+-- row on save, the previous active row deactivated, nothing ever
+-- deleted, rollback is a pointer flip). This table is deliberately NOT
+-- scoped to a website_type_id the way password_page_templates is: these
+-- three pages are site-wide, one active version per page_key, not one
+-- per website type. See routes/adminLegal.js for the admin CRUD and
+-- routes/public.js for the public GET routes.
+CREATE TABLE IF NOT EXISTS legal_pages (
+  id SERIAL PRIMARY KEY,
+  page_key TEXT NOT NULL,
+  html_content TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seeded with real starting content, not placeholder text, describing
+-- exactly what this specific installation actually does today (see this
+-- version's delivery notes for the full reasoning behind each claim
+-- below). Third-party AI/email providers are named generically
+-- ("a third-party AI provider" / "whichever email provider is currently
+-- configured") rather than by vendor, since both are admin-configurable
+-- and can change at any time (see lib/ai-provider.js and
+-- lib/emailProvider.js) -- naming a specific vendor here would go stale
+-- the moment an admin switches providers, with nothing to remind them
+-- this page needs updating too.
+--
+-- WHERE NOT EXISTS (per page_key), not ON CONFLICT -- same reasoning as
+-- landing_content/landing_sections above: page_key has no unique
+-- constraint of its own (is_active/version already carry the real
+-- per-page invariant, enforced at the application layer the same way
+-- every other versioned-content table in this schema is, not via a DB
+-- constraint), so there is no natural conflict target for ON CONFLICT to
+-- key off. Each INSERT only ever fires once per page_key, on a truly
+-- fresh install; an existing install upgrading to v1.2.1 already has no
+-- rows for any of these three keys, so this seeds real content on that
+-- first boot too, not just a brand new database.
+--
+-- The Terms page's refund policy section is left as a clearly marked
+-- placeholder on purpose -- there is no actual refund policy decided yet,
+-- and inventing one here would misrepresent a real, binding commitment
+-- this business has not made. An admin can replace it via the Legal
+-- Pages tab once a real policy exists.
+INSERT INTO legal_pages (page_key, html_content)
+SELECT 'privacy_policy', $$<h2>What this page covers</h2>
+<p>This policy explains what information this site collects from you, and how it is used, when you build and buy a website through it.</p>
+<h2>Your email address</h2>
+<p>We only collect your email address after you complete a successful payment for a website. Filling out a build form and generating a preview does not, by itself, send us your email address or any of your other answers.</p>
+<h2>Form answers and AI-generated content</h2>
+<p>The answers you type into a build form, and any AI-generated copy produced from them, are sent to a third-party AI provider for processing. Which provider is used is a setting the site owner can change at any time, so this policy describes it generically rather than naming one specific company.</p>
+<h2>Payment information</h2>
+<p>Payments are processed directly by Paystack. This site does not see or store your card details at any point. Paystack has its own privacy policy governing how it handles your payment information.</p>
+<h2>Confirmation emails</h2>
+<p>Once your website is deployed, a confirmation email with your site details is sent to the email address you provided at checkout. This email is sent through whichever email provider is currently configured for this site, another setting the site owner can change at any time.</p>
+<h2>Your IP address</h2>
+<p>Your IP address is used transiently, at the moment of your visit, to decide which currency to display prices in and to apply basic rate limiting against abuse. It is not stored permanently.</p>
+<h2>Analytics</h2>
+<p>Anonymous, non-identifying session data is collected for internal funnel analytics, to help understand how visitors move through the build process. This data is not tied to your name or email address.</p>
+<h2>Contact</h2>
+<p>If you have questions about this policy, please get in touch using the contact details provided elsewhere on this site.</p>$$
+WHERE NOT EXISTS (SELECT 1 FROM legal_pages WHERE page_key = 'privacy_policy');
+
+INSERT INTO legal_pages (page_key, html_content)
+SELECT 'terms', $$<h2>Using this site</h2>
+<p>No registration or account is required to use this site. You choose a website type, fill out a short form, preview the result, and pay to have it deployed.</p>
+<h2>Pricing</h2>
+<p>Pricing is set by the site owner and may vary by website type. The price shown to you at checkout is the price you pay.</p>
+<h2>Payment</h2>
+<p>Payment is processed by Paystack. By completing checkout, you also agree to Paystack's own terms governing how your payment is processed.</p>
+<h2>Site passwords</h2>
+<p>If you set a password to gate access to your deployed site, that password is a basic visitor deterrent only, not real security. It is never stored in a form that can be recovered, so if you forget it, it cannot be looked up or reset for you.</p>
+<h2>AI-generated content</h2>
+<p>Where AI-generated content is used, it is based entirely on the information you submit through the build form. Beyond that, we do not guarantee the accuracy of any AI-generated content.</p>
+<h2>Refund policy</h2>
+<p>[Placeholder: a refund policy has not been written yet. This section will be updated once one is in place.]</p>
+<h2>Contact</h2>
+<p>If you have questions about these terms, please get in touch using the contact details provided elsewhere on this site.</p>$$
+WHERE NOT EXISTS (SELECT 1 FROM legal_pages WHERE page_key = 'terms');
+
+INSERT INTO legal_pages (page_key, html_content)
+SELECT 'cookie_policy', $$<h2>Cookies</h2>
+<p>This site uses one cookie: a session cookie for the admin dashboard, used only to keep the site owner logged in while managing this site. If you are a regular visitor building or previewing a website, you will not receive this cookie.</p>
+<h2>Local browser storage</h2>
+<p>While you fill out a build form, your answers are temporarily held in your browser's sessionStorage so your progress is not lost if you navigate back a step. This data stays in your browser and clears when you close the tab. sessionStorage is also used to correlate anonymous analytics events during your visit, without identifying you personally.</p>
+<h2>Future changes</h2>
+<p>The site owner may add third-party analytics scripts to this site in the future, using an admin tool built for that purpose. If that happens, this policy will be updated to reflect it.</p>
+<h2>Contact</h2>
+<p>If you have questions about this policy, please get in touch using the contact details provided elsewhere on this site.</p>$$
+WHERE NOT EXISTS (SELECT 1 FROM legal_pages WHERE page_key = 'cookie_policy');
 `;
 
-const CURRENT_VERSION = '1.2.0';
+const CURRENT_VERSION = '1.2.1';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
