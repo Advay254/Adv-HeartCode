@@ -19,6 +19,7 @@ const { DEFAULT_CONTENT } = require('../lib/landingSectionTypes');
 const { escapeHtml } = require('../lib/template');
 const { sendResendDetailsEmail } = require('../lib/email');
 const { getRealClientIp } = require('../lib/clientIp');
+const { getActiveLegalPage } = require('../lib/legalPages');
 
 const router = express.Router();
 
@@ -264,6 +265,12 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
   const urls = [
     { loc: `${rootUrl}/`, changefreq: 'weekly', priority: '1.0' },
     { loc: `${rootUrl}/explore`, changefreq: 'weekly', priority: '0.8' },
+    // v1.2.1 Part A: the three legal pages are real, indexable pages too,
+    // just low-priority, rarely-changing ones — 'monthly' rather than
+    // 'weekly', and the lowest priority of anything in this sitemap.
+    { loc: `${rootUrl}/privacy-policy`, changefreq: 'monthly', priority: '0.2' },
+    { loc: `${rootUrl}/terms`, changefreq: 'monthly', priority: '0.2' },
+    { loc: `${rootUrl}/cookie-policy`, changefreq: 'monthly', priority: '0.2' },
     ...result.rows.map(t => ({
       loc: `${rootUrl}/build/${t.slug}`,
       changefreq: 'weekly',
@@ -1106,6 +1113,47 @@ const resendDetailsLimiter = createDynamicRateLimiter({
     // silently becoming unlimited.
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
   }
+});
+
+// v1.2.1 Part A: the three site-wide legal pages. Registered here, before
+// GET /:seoSlug (the last route in this file), for the exact same reason
+// every other specific route in this file is — see that route's own
+// comment and lib/reservedSlugs.js, which these three slugs were also
+// added to so an admin can never create an SEO page that would silently
+// shadow one of these. All three share one small handler since they only
+// differ in which page_key/title they load — see lib/legalPages.js for
+// the actual DB read.
+const LEGAL_PAGES_CONFIG = [
+  { path: '/privacy-policy', pageKey: 'privacy_policy', pageTitle: 'Privacy Policy' },
+  { path: '/terms', pageKey: 'terms', pageTitle: 'Terms and Conditions' },
+  { path: '/cookie-policy', pageKey: 'cookie_policy', pageTitle: 'Cookie Policy' }
+];
+
+LEGAL_PAGES_CONFIG.forEach(({ path, pageKey, pageTitle }) => {
+  router.get(path, asyncHandler(async (req, res) => {
+    const page = await getActiveLegalPage(pageKey);
+    if (!page) {
+      // Should not happen in practice — db/init.js seeds all three on
+      // first boot — but an admin table with nothing marked active is a
+      // real possibility this route should degrade out of, not crash on.
+      // Found via an actual concurrency/edge-case test run, not
+      // reasoning alone: views/public/not-found.ejs requires `message`
+      // and `pageTitle` locals (see routes/public.js's own other
+      // res.status(404).render('public/not-found', {...}) call sites) —
+      // rendering it with no locals throws a ReferenceError inside EJS,
+      // turning what should be a clean 404 into a 500.
+      return res.status(404).render('public/not-found', {
+        pageTitle: 'Not found',
+        message: 'That page is not available right now.'
+      });
+    }
+    res.render('public/legal-page', {
+      pageTitle,
+      pageDescription: pageTitle + ' for ' + res.locals.siteSettings.site_title,
+      htmlContent: page.html_content,
+      lastUpdated: new Date(page.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    });
+  }));
 });
 
 router.get('/resend-details', (req, res) => {

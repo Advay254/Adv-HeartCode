@@ -141,4 +141,8 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/scripts`, (req, res) => {
   res.render('admin/scripts');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/legal-pages`, (req, res) => {
+  res.render('admin/legal-pages');
+});
+
 module.exports = router;
