@@ -100,6 +100,44 @@
       errorEl.style.display = 'none';
     }
 
+    // v1.2.1 Part B: rotating status text shown under the button while a
+    // generate request is in flight, replacing the plain "This usually
+    // takes under a minute" hint for that duration (see build.ejs's
+    // buildStatusHint paragraph — never both at once). Scoped to this one
+    // form only, per this version's build brief ("Nowhere else").
+    var BUILD_LOADING_MESSAGES = [
+      'Personalizing your details…',
+      'Polishing the wording…',
+      'Laying out your page…',
+      'Almost done…'
+    ];
+    var buildLoadingIntervalId = null;
+    var buildStatusHintEl = document.getElementById('buildStatusHint');
+    var BUILD_STATUS_HINT_DEFAULT_TEXT = buildStatusHintEl ? buildStatusHintEl.textContent : '';
+
+    function buildLoadingDotsHtml() {
+      return '<span class="hc-loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>';
+    }
+
+    function startBuildLoadingAnimation() {
+      submitBtn.innerHTML = buildLoadingDotsHtml();
+      if (!buildStatusHintEl) return;
+      var index = 0;
+      buildStatusHintEl.textContent = BUILD_LOADING_MESSAGES[0];
+      buildLoadingIntervalId = setInterval(function () {
+        index = (index + 1) % BUILD_LOADING_MESSAGES.length;
+        buildStatusHintEl.textContent = BUILD_LOADING_MESSAGES[index];
+      }, 3500);
+    }
+
+    function stopBuildLoadingAnimation() {
+      if (buildLoadingIntervalId) {
+        clearInterval(buildLoadingIntervalId);
+        buildLoadingIntervalId = null;
+      }
+      if (buildStatusHintEl) buildStatusHintEl.textContent = BUILD_STATUS_HINT_DEFAULT_TEXT;
+    }
+
     function resetSubmitButton() {
       submitBtn.disabled = false;
       // v1.1.5 Part D: "Generate my site" read like a generic AI/builder
@@ -108,6 +146,7 @@
       // button text (kept in sync deliberately; this is the only other
       // place that string appears).
       submitBtn.textContent = 'Build my site';
+      stopBuildLoadingAnimation();
     }
 
     form.addEventListener('submit', function (e) {
@@ -136,7 +175,7 @@
 
       saveDraft();
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Building…';
+      startBuildLoadingAnimation();
 
       fetch('/api/build/' + encodeURIComponent(slug) + '/generate', {
         method: 'POST',
