@@ -13,4 +13,16 @@
     </nav>
     <p class="text-xs text-hc-ink/40"><%= landingContent.footerText %></p>
   </div>
+  <!-- v1.2.1 Part A: the three legal pages, on every page this partial
+       renders on (build/checkout/explore/resend-details). Hardcoded
+       links, not admin-managed like landingFooterLinks above — these
+       three routes are fixed and always exist (see routes/public.js),
+       unlike that list which an admin builds from scratch. -->
+  <div class="border-t border-black/5 py-4">
+    <nav class="mx-auto flex max-w-6xl flex-wrap justify-center gap-x-6 gap-y-2 px-4 text-xs text-hc-ink/40 sm:px-6">
+      <a href="/privacy-policy" class="transition-colors hover:text-hc-ink/60">Privacy Policy</a>
+      <a href="/terms" class="transition-colors hover:text-hc-ink/60">Terms and Conditions</a>
+      <a href="/cookie-policy" class="transition-colors hover:text-hc-ink/60">Cookie Policy</a>
+    </nav>
+  </div>
 </footer>
