@@ -3189,6 +3189,97 @@
     load();
   }
 
+  // ---- legal pages (v1.2.1 Part A) ----
+  //
+  // Same version-save/rollback shape as website-types-detail's Template/
+  // Password Page tabs above (see initWebsiteTypesDetailPage), just
+  // looped over the three fixed page_key tabs instead of one call site
+  // per website type, and with no placeholder reference/validation (legal
+  // pages have no {{token}} set of their own). All three tabs load
+  // eagerly on page load, same as that page's own tabs, not lazily on
+  // tab click.
+  function initLegalPagesPage() {
+    const PAGE_KEYS = ['privacy_policy', 'terms', 'cookie_policy'];
+
+    document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
+      });
+    });
+
+    function wireFileUploadIntoTextarea(fileInputId, textareaId) {
+      const fileInput = document.getElementById(fileInputId);
+      const textarea = document.getElementById(textareaId);
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          textarea.value = typeof reader.result === 'string' ? reader.result : '';
+          fileInput.value = ''; // so picking the exact same file again still fires 'change'
+        };
+        reader.onerror = () => {
+          alert('Could not read that file.');
+          fileInput.value = '';
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    PAGE_KEYS.forEach(pageKey => {
+      wireFileUploadIntoTextarea('legalFileInput_' + pageKey, 'legalHtmlContent_' + pageKey);
+
+      async function loadLegalPage() {
+        const res = await window.adminFetch(`/api/admin/legal-pages/${pageKey}`);
+        const data = await res.json();
+        document.getElementById('legalCurrentVersion_' + pageKey).textContent = data.active ? 'v' + data.active.version : 'none yet';
+        document.getElementById('legalHtmlContent_' + pageKey).value = data.active ? data.active.htmlContent : '';
+        const historyBody = document.getElementById('legalHistoryTableBody_' + pageKey);
+        historyBody.innerHTML = data.history.map(h => `
+          <tr>
+            <td data-label="Version">v${h.version}</td>
+            <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
+            <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-legal-page" data-version="${h.version}">Rollback to this</button>`}</td>
+          </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet.</td></tr>';
+
+        historyBody.querySelectorAll('.rollback-legal-page').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Roll back to version ${btn.dataset.version}?`)) return;
+            const res = await window.adminFetch(`/api/admin/legal-pages/${pageKey}/rollback/${btn.dataset.version}`, { method: 'POST' });
+            if (res.ok) loadLegalPage();
+          });
+        });
+      }
+
+      const section = document.querySelector(`[data-page-key="${pageKey}"]`);
+      const form = section.querySelector('.legal-page-form');
+      const statusEl = document.getElementById('legalStatus_' + pageKey);
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const res = await window.adminFetch(`/api/admin/legal-pages/${pageKey}`, {
+          method: 'PUT',
+          body: JSON.stringify({ htmlContent: document.getElementById('legalHtmlContent_' + pageKey).value })
+        });
+        const data = await res.json();
+        statusEl.style.display = 'block';
+        if (res.ok) {
+          statusEl.className = 'admin-msg admin-msg-success';
+          statusEl.textContent = `Saved as v${data.version}.`;
+          loadLegalPage();
+        } else {
+          statusEl.className = 'admin-msg admin-msg-error';
+          statusEl.textContent = data.error || 'Failed to save this page.';
+        }
+      });
+
+      loadLegalPage();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -3211,5 +3302,6 @@
     if (page === 'categories') initCategoriesPage();
     if (page === 'faq') initFaqPage();
     if (page === 'seo-pages') initSeoPagesPage();
+    if (page === 'legal-pages') initLegalPagesPage();
   });
 })();
