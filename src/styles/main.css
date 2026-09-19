@@ -306,17 +306,26 @@
   }
 }
 
-/* v1.2.1 Part A: minimal typography for the three legal pages' admin-
-   authored HTML (views/public/legal-page.ejs), which ships as plain
-   <h2>/<p> markup with no Tailwind classes of its own -- an admin editing
-   this content in a textarea should not have to remember to hand-add
-   utility classes to every element for it to read cleanly. Scoped to
-   .legal-content only, so this never affects any other admin-pasted HTML
-   elsewhere on the site (Template tab output, email bodies, the password
-   page gate) which each already render inside their own specific
-   context. */
+/* v1.2.1 Part A: minimal typography for admin-authored HTML that ships
+   with no Tailwind classes of its own -- the three legal pages
+   (views/public/legal-page.ejs) originally, joined in v1.2.2 Part C by
+   every SEO page's own raw HTML/rendered-Markdown content block
+   (views/public/seo-page-content.ejs) -- both are exactly the same shape
+   of problem (an admin pasting/writing plain markup into a textarea
+   shouldn't have to hand-add utility classes for it to read cleanly), so
+   they deliberately share this one class rather than each getting a
+   near-identical copy. Scoped to .legal-content only, so this never
+   affects any other admin-pasted HTML elsewhere on the site (Template
+   tab output, email bodies, the password page gate) which each already
+   render inside their own specific context. */
 .legal-content h2 {
   @apply mt-8 font-display text-xl text-hc-ink first:mt-0;
+}
+.legal-content h1 {
+  @apply mt-8 font-display text-2xl text-hc-ink first:mt-0;
+}
+.legal-content h3 {
+  @apply mt-6 font-display text-lg text-hc-ink first:mt-0;
 }
 .legal-content p {
   @apply mt-3 text-sm leading-relaxed text-hc-ink/80;
@@ -327,5 +336,34 @@
 }
 .legal-content a {
   @apply text-hc-blue underline underline-offset-2;
+}
+/* v1.2.2 Part C additions: covers Markdown constructs the three fixed
+   legal pages never used (raw HTML pasted directly, or admin-authored
+   Markdown rendered via `marked` at request time -- see routes/public.js)
+   but an SEO page's freeform content plausibly will. */
+.legal-content blockquote {
+  @apply mt-3 border-l-4 border-hc-blue/20 pl-4 text-sm italic leading-relaxed text-hc-ink/70;
+}
+.legal-content code {
+  @apply rounded bg-black/5 px-1.5 py-0.5 font-mono text-xs text-hc-ink;
+}
+.legal-content pre {
+  @apply mt-3 overflow-x-auto rounded-xl bg-hc-ink px-4 py-3 text-xs text-white/90;
+}
+.legal-content pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+.legal-content img {
+  @apply mt-3 max-w-full rounded-xl;
+}
+.legal-content hr {
+  @apply my-6 border-black/10;
+}
+.legal-content table {
+  @apply mt-3 w-full border-collapse text-sm;
+}
+.legal-content th,
+.legal-content td {
+  @apply border border-black/10 px-3 py-2 text-left;
 }
 
