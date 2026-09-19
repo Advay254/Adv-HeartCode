@@ -1,0 +1,74 @@
+<%
+  // v1.2.2 Parts D+F: shared by every public footer context (this file is
+  // include()'d from views/partials/public-footer.ejs, views/partials/
+  // landing-sections/footer.ejs, views/public/landing.ejs's zero-sections
+  // fallback footer, and views/public/seo-page-content.ejs) so there is
+  // exactly ONE place that decides which of these links render and in
+  // what order, rather than four copies that could drift.
+  //
+  // `footerExtrasVariant` (a local passed by whichever partial includes
+  // this one) picks light-on-dark vs. dark-on-light colors to match that
+  // specific footer's own existing palette -- landing-sections/footer.ejs
+  // is a dark (bg-hc-ink) footer, the other three are light (bg-white).
+  // Defaults to 'light' since three of the four call sites are light.
+  var variant = (typeof footerExtrasVariant !== 'undefined' && footerExtrasVariant === 'dark') ? 'dark' : 'light';
+  var textClass = variant === 'dark' ? 'text-white/40' : 'text-hc-ink/40';
+  var linkHoverClass = variant === 'dark' ? 'hover:text-white/70' : 'hover:text-hc-ink/60';
+  var borderClass = variant === 'dark' ? 'border-white/10' : 'border-black/5';
+
+  // Real Lucide icons, not brand logos -- Lucide dropped per-platform
+  // brand marks years ago (trademark reasons), so these are the closest
+  // reasonable stand-ins from the curated set already bundled in
+  // public/icons/ (see lib/icons.js): X (Twitter) -> the literal 'x'
+  // glyph, Instagram -> 'camera' (a photo-sharing platform), Facebook ->
+  // 'users' (a social/community platform), LinkedIn -> 'briefcase' (a
+  // professional-network platform).
+  var socialLinks = [];
+  if (siteSettings.social_twitter_url) socialLinks.push({ url: siteSettings.social_twitter_url, icon: 'x', label: 'X (Twitter)' });
+  if (siteSettings.social_facebook_url) socialLinks.push({ url: siteSettings.social_facebook_url, icon: 'users', label: 'Facebook' });
+  if (siteSettings.social_instagram_url) socialLinks.push({ url: siteSettings.social_instagram_url, icon: 'camera', label: 'Instagram' });
+  if (siteSettings.social_linkedin_url) socialLinks.push({ url: siteSettings.social_linkedin_url, icon: 'briefcase', label: 'LinkedIn' });
+
+  // res.locals set on every request by routes/public.js's router-wide
+  // middleware -- `|| []` only guards the (should-be-unreachable) case
+  // where that middleware's own try/catch swallowed a DB error before
+  // ever setting these.
+  var footerPages = (typeof footerSeoPages !== 'undefined' && footerSeoPages) || [];
+  var customLinks = (typeof footerCustomLinks !== 'undefined' && footerCustomLinks) || [];
+%>
+<% if (footerPages.length > 0) { %>
+<!-- Part D: real crawlable <a href> to every active SEO page -- pulled
+     fresh (well, cache-fresh -- see lib/footerExtras.js) from seo_pages
+     on every request, never JS-rendered. -->
+<div class="border-t <%= borderClass %> py-4">
+  <nav class="mx-auto flex max-w-6xl flex-wrap justify-center gap-x-5 gap-y-1.5 px-4 text-xs <%= textClass %> sm:px-6">
+    <% footerPages.forEach(function (p) { %>
+      <a href="/<%= p.slug %>" class="transition-colors <%= linkHoverClass %>"><%= p.pageTitle %></a>
+    <% }); %>
+  </nav>
+</div>
+<% } %>
+
+<% if (siteSettings.contact_email || socialLinks.length > 0 || customLinks.length > 0) { %>
+<!-- Part F: contact email + any social URL that's actually set (never a
+     link to an empty field), plus admin-added custom links. -->
+<div class="border-t <%= borderClass %> py-4">
+  <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-5 gap-y-2 px-4 text-xs <%= textClass %> sm:px-6">
+    <% if (siteSettings.contact_email) { %>
+      <a href="mailto:<%= siteSettings.contact_email %>" class="inline-flex items-center gap-1.5 transition-colors <%= linkHoverClass %> [&>svg]:h-3.5 [&>svg]:w-3.5">
+        <%- getIconSvg('mail') %><span><%= siteSettings.contact_email %></span>
+      </a>
+    <% } %>
+    <% socialLinks.forEach(function (s) { %>
+      <a href="<%= s.url %>" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 transition-colors <%= linkHoverClass %> [&>svg]:h-3.5 [&>svg]:w-3.5">
+        <%- getIconSvg(s.icon) %><span><%= s.label %></span>
+      </a>
+    <% }); %>
+    <% customLinks.forEach(function (l) { %>
+      <a href="<%= l.url %>" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 transition-colors <%= linkHoverClass %> [&>svg]:h-3.5 [&>svg]:w-3.5">
+        <%- getIconSvg('link') %><span><%= l.label %></span>
+      </a>
+    <% }); %>
+  </div>
+</div>
+<% } %>
