@@ -1154,9 +1154,96 @@ SELECT 'cookie_policy', $$<h2>Cookies</h2>
 <h2>Contact</h2>
 <p>If you have questions about this policy, please get in touch using the contact details provided elsewhere on this site.</p>$$
 WHERE NOT EXISTS (SELECT 1 FROM legal_pages WHERE page_key = 'cookie_policy');
+
+-- v1.2.2 Part C: seo_pages gains content_format, and seo_page_content is
+-- a NEW, independent versioned-content table -- an SEO page's body is no
+-- longer built from the landing_sections section-type catalog at all
+-- (that system stays exactly as-is for the homepage; see
+-- routes/adminLandingSections.js's page selector, which no longer lists
+-- SEO pages as of this version). Versioned the exact same way
+-- legal_pages/templates/email_templates/password_page_templates already
+-- are: a new row on save, the previous active row deactivated, nothing
+-- ever deleted, rollback is a pointer flip -- see routes/adminSeoPages.js's
+-- content sub-routes, structurally identical to routes/adminLegal.js.
+-- ON DELETE CASCADE (unlike every content-versioning table above, which
+-- has no parent FK at all) is deliberate here: seo_page_content rows have
+-- no meaning independent of the seo_pages row they belong to, so deleting
+-- an SEO page correctly takes its content history with it -- there's no
+-- "orphaned content an admin might want back" the way an orphaned
+-- landing_sections page_slug is kept around for (see routes/adminSeoPages.js's
+-- own DELETE /:id comment on that different, deliberate choice for that
+-- other table).
+ALTER TABLE seo_pages ADD COLUMN IF NOT EXISTS content_format TEXT NOT NULL DEFAULT 'html';
+
+-- Same DROP-then-ADD idempotent pattern as every other CHECK constraint
+-- in this file (e.g. landing_sections_section_type_check above) --
+-- NOT VALID since every row already satisfies this the moment the column
+-- above is added (DEFAULT 'html' backfills every existing row before this
+-- constraint ever runs), so there is nothing for a full-table revalidation
+-- scan to usefully catch, only cost to pay for it (see this file's own
+-- NOT VALID precedent and HANDOFF.md's/learnings' note on this exact
+-- tradeoff).
+ALTER TABLE seo_pages DROP CONSTRAINT IF EXISTS seo_pages_content_format_check;
+ALTER TABLE seo_pages ADD CONSTRAINT seo_pages_content_format_check
+  CHECK (content_format IN ('html', 'markdown')) NOT VALID;
+
+CREATE TABLE IF NOT EXISTS seo_page_content (
+  id SERIAL PRIMARY KEY,
+  seo_page_id INTEGER NOT NULL REFERENCES seo_pages(id) ON DELETE CASCADE,
+  raw_content TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Added via its own ALTER, not folded into the CREATE TABLE above, even
+-- though both landed in this same version -- CREATE TABLE IF NOT EXISTS
+-- is a no-op the moment the table already exists (confirmed the hard way
+-- during this version's own testing: restarting against a DB that had
+-- already run the block above once did NOT pick up this column), so a
+-- column added after its table's own CREATE TABLE always needs an
+-- explicit ALTER, same as every other retrofitted column in this file
+-- (e.g. seo_pages.content_format two statements up).
+--
+-- Caught by actually running the rollback flow end-to-end during this
+-- version's own testing (real bug, not a hypothetical): rolling back to
+-- a version saved under a different format than the page's CURRENT
+-- content_format left the two disagreeing, so the restored raw_content
+-- rendered through the wrong renderer (Markdown source shown as literal
+-- unparsed text, or raw HTML tags shown as plain text the other way
+-- around). Each version now carries the format it was actually saved
+-- under; routes/adminSeoPages.js's rollback route restores both
+-- together, and seo_pages.content_format (kept, exactly as originally
+-- scoped) still reflects whichever version is currently active -- it's
+-- now simply kept in sync BY rollback too, not just by a content save.
+ALTER TABLE seo_page_content ADD COLUMN IF NOT EXISTS content_format TEXT NOT NULL DEFAULT 'html';
+
+ALTER TABLE seo_page_content DROP CONSTRAINT IF EXISTS seo_page_content_content_format_check;
+ALTER TABLE seo_page_content ADD CONSTRAINT seo_page_content_content_format_check
+  CHECK (content_format IN ('html', 'markdown')) NOT VALID;
+
+-- v1.2.2 Part F: admin-managed custom footer links -- same shape and same
+-- add/edit/remove/reorder list-management pattern as landing_footer_links
+-- above (see routes/adminSiteSettings.js's custom-links sub-routes,
+-- structurally identical to routes/adminLanding.js's footer-links ones).
+-- Deliberately its own table, not folded into landing_footer_links --
+-- those feed the OLD pre-v1.1.3 footer wiring
+-- (landingFooterLinks/lib/landingContent.js) that only views/partials/public-footer.ejs's
+-- nav row still reads; these feed the NEW site-wide contact/social/custom
+-- links row this version adds to every public page's footer (see
+-- views/partials/public-footer-extras.ejs), a visually and semantically
+-- separate row. Starts empty on every install (no seed row) -- unlike
+-- landing_footer_links, there's no sensible default custom link to
+-- pre-fill.
+CREATE TABLE IF NOT EXISTS custom_footer_links (
+  id SERIAL PRIMARY KEY,
+  label TEXT NOT NULL,
+  url TEXT NOT NULL,
+  display_order INTEGER DEFAULT 0
+);
 `;
 
-const CURRENT_VERSION = '1.2.1';
+const CURRENT_VERSION = '1.2.2';
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
