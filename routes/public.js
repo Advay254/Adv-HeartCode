@@ -20,6 +20,8 @@ const { escapeHtml } = require('../lib/template');
 const { sendResendDetailsEmail } = require('../lib/email');
 const { getRealClientIp } = require('../lib/clientIp');
 const { getActiveLegalPage } = require('../lib/legalPages');
+const { getFooterExtras } = require('../lib/footerExtras');
+const { marked } = require('marked');
 
 const router = express.Router();
 
@@ -37,18 +39,27 @@ const router = express.Router();
 // needs the CMS-driven footer text/links on every public page, not just
 // the landing page itself, for the same "don't make every route
 // remember to fetch this" reason.
+// v1.2.2 Parts D+F: footerExtras (active SEO pages + admin custom links)
+// joins the same middleware for the exact same reason — the new
+// site-wide footer content row (views/partials/public-footer-extras.ejs)
+// renders on every public page, including every SEO page, so it needs to
+// be available everywhere this middleware already reaches rather than
+// wired into one specific route.
 router.use(async (req, res, next) => {
   try {
-    const [siteSettings, activeScripts, landing] = await Promise.all([
+    const [siteSettings, activeScripts, landing, footerExtras] = await Promise.all([
       getSiteSettings(),
       getActiveScriptsByPlacement(),
-      getLandingContent()
+      getLandingContent(),
+      getFooterExtras()
     ]);
     res.locals.siteSettings = siteSettings;
     res.locals.activeScripts = activeScripts;
     res.locals.landingContent = landing.content;
     res.locals.landingSteps = landing.steps;
     res.locals.landingFooterLinks = landing.footerLinks;
+    res.locals.footerSeoPages = footerExtras.seoPages;
+    res.locals.footerCustomLinks = footerExtras.customLinks;
   } catch (err) {
     // These helpers already catch their own DB errors internally and fall
     // back to safe defaults — this catch is only for something more
@@ -468,16 +479,20 @@ router.get('/llms.txt', (req, res) => {
 
 // v1.2.0: extracted from the old GET / handler so the exact same
 // section-rendering logic (hero/footer extraction, category_teaser and
-// faq's live-data wiring, JSON-LD assembly) serves both the homepage AND
-// every independent SEO landing page, rather than a second near-copy of
-// this logic living in the new GET /:seoSlug route below. `isHomepage`
-// gates the Organization+WebSite JSON-LD specifically -- see the comment
-// on that block below for why that pair stays homepage-only rather than
-// being emitted on every page this function now serves. `seoPage`, when
-// passed, is the seo_pages row (already resolved to include its target
-// type's actual slug, or null) that drives this page's own CTA banner --
-// see views/public/landing.ejs's own use of it.
-async function renderLandingPage(req, res, { pageSlug, pageTitle, pageDescription, isHomepage, seoPage }) {
+// faq's live-data wiring, JSON-LD assembly) serves the homepage's
+// landing_sections-driven layout. `isHomepage` gates the
+// Organization+WebSite JSON-LD specifically -- see the comment on that
+// block below.
+// v1.2.2 Part C: this function is now ONLY ever called for the homepage
+// (isHomepage is always true, pageSlug is always 'home') -- SEO pages no
+// longer share this rendering path at all (see routes/adminSeoPages.js's
+// content sub-routes and this file's own GET /:seoSlug route below,
+// which renders views/public/seo-page-content.ejs instead). The
+// `seoPage` parameter this function used to accept (driving landing.ejs's
+// now-removed CTA banner) is gone along with that banner -- an SEO
+// page's own admin-authored content can include whatever call-to-action
+// link it wants directly now, with full control instead of one fixed slot.
+async function renderLandingPage(req, res, { pageSlug, pageTitle, pageDescription, isHomepage }) {
   const pool = getPool();
   const priceFor = await resolveVisitorPricing(req);
 
@@ -705,13 +720,12 @@ async function renderLandingPage(req, res, { pageSlug, pageTitle, pageDescriptio
     footerSection,
     categoryTeaserCategories,
     categoryTeaserFallbackTypes,
-    faqEntries,
-    seoPage: seoPage || null
+    faqEntries
   });
 }
 
 router.get('/', asyncHandler(async (req, res) => {
-  await renderLandingPage(req, res, { pageSlug: 'home', pageTitle: null, pageDescription: null, isHomepage: true, seoPage: null });
+  await renderLandingPage(req, res, { pageSlug: 'home', pageTitle: null, pageDescription: null, isHomepage: true });
 }));
 
 // v1.1.4 Part D: shared by GET /explore and GET /explore/:categorySlug so
@@ -1247,13 +1261,7 @@ router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler
 // it can't stop the new page itself from being silently unreachable.
 router.get('/:seoSlug', asyncHandler(async (req, res, next) => {
   const pool = getPool();
-  const result = await pool.query(
-    `SELECT sp.*, wt.slug AS target_type_slug
-     FROM seo_pages sp
-     LEFT JOIN website_types wt ON wt.id = sp.target_website_type_id
-     WHERE sp.slug = $1`,
-    [req.params.seoSlug]
-  );
+  const result = await pool.query('SELECT * FROM seo_pages WHERE slug = $1', [req.params.seoSlug]);
 
   if (result.rowCount === 0 || !result.rows[0].is_active) {
     // Falls through to this app's normal 404 handling rather than a
@@ -1265,25 +1273,38 @@ router.get('/:seoSlug', asyncHandler(async (req, res, next) => {
   }
   const seoPageRow = result.rows[0];
 
-  // A page with no target_website_type_id assigned (never set, or its
-  // target type was later deleted -- see db/init.js's ON DELETE SET NULL
-  // on this column) must never render a CTA pointing at "/build/undefined"
-  // or similar. Falls back to linking at /explore instead so the visitor
-  // still has a real, working next step -- and this is exactly the
-  // "shouldn't really be active" case flagged in this version's delivery
-  // notes: an admin gets a working fallback link either way, but a page
-  // in this state is worth them assigning a real target or deactivating.
-  const ctaUrl = seoPageRow.target_type_slug ? `/build/${seoPageRow.target_type_slug}` : '/explore';
+  // v1.2.2 Part C: an SEO page's body is now one versioned content row,
+  // not a landing_sections section-list (see this version's db/init.js
+  // migration and routes/adminSeoPages.js's content sub-routes) — the
+  // homepage's own GET / route above is completely untouched and still
+  // calls renderLandingPage()/views/public/landing.ejs exactly as before.
+  const contentResult = await pool.query(
+    'SELECT raw_content FROM seo_page_content WHERE seo_page_id = $1 AND is_active = true LIMIT 1',
+    [seoPageRow.id]
+  );
 
-  await renderLandingPage(req, res, {
-    pageSlug: seoPageRow.slug,
+  // A page created but never given a content version yet (or one whose
+  // only version was somehow removed, which nothing in this app actually
+  // does) has nothing to show — falls through to the normal 404 rather
+  // than rendering an empty shell, the same "not really ready to be
+  // public" reasoning the is_active check above already uses.
+  if (contentResult.rowCount === 0) {
+    return next();
+  }
+
+  const rawContent = contentResult.rows[0].raw_content;
+  // marked.parse() is synchronous here (no async extensions registered
+  // anywhere in this app) — cheap enough to run at request time for
+  // page-length content, no need to pre-render/cache the HTML output
+  // (see this version's delivery notes for why: an SEO page's content is
+  // edited rarely and read by relatively few visitors per page compared
+  // to, say, the homepage).
+  const renderedContent = seoPageRow.content_format === 'markdown' ? marked.parse(rawContent) : rawContent;
+
+  res.render('public/seo-page-content', {
     pageTitle: seoPageRow.page_title,
     pageDescription: seoPageRow.meta_description,
-    isHomepage: false,
-    seoPage: {
-      ctaText: seoPageRow.cta_text,
-      ctaUrl
-    }
+    renderedContent
   });
 }));
 

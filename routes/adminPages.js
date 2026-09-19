@@ -125,17 +125,14 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/landing-page`, (req, res) => {
   res.render('admin/landing-page');
 });
 
-router.get(`${INTERNAL_ADMIN_PREFIX}/landing-sections`, asyncHandler(async (req, res) => {
-  const pool = getPool();
-  // v1.2.0: the page selector needs every SEO page that exists (active
-  // or not -- an admin editing a currently-inactive page's sections is a
-  // completely normal workflow, e.g. building it out before flipping it
-  // live), so this is a plain unfiltered list, same "admin sees
-  // everything, public only sees active" split every other admin list in
-  // this app already follows.
-  const seoPagesResult = await pool.query('SELECT slug, page_title FROM seo_pages ORDER BY slug ASC');
-  res.render('admin/landing-sections', { seoPages: seoPagesResult.rows });
-}));
+router.get(`${INTERNAL_ADMIN_PREFIX}/landing-sections`, (req, res) => {
+  // v1.2.2 Part C: the page selector is Home-only now -- SEO pages no
+  // longer have a landing_sections section list at all (see
+  // routes/adminSeoPages.js's content sub-routes and routes/public.js's
+  // GET /:seoSlug), so the seo_pages query this route used to run just
+  // to populate that selector's extra options is gone along with them.
+  res.render('admin/landing-sections');
+});
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/scripts`, (req, res) => {
   res.render('admin/scripts');

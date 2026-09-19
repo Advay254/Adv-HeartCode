@@ -5,6 +5,8 @@ const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { getSiteSettings, refreshSiteSettingsCache, DEFAULTS } = require('../lib/siteSettings');
+const { moveItem } = require('../lib/reorder');
+const { refreshFooterExtrasCache } = require('../lib/footerExtras');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -88,6 +90,88 @@ router.put('/', requireCsrf, asyncHandler(async (req, res) => {
 
   const fresh = await refreshSiteSettingsCache();
   res.json(fresh);
+}));
+
+// ---- custom footer links (v1.2.2 Part F) ----
+//
+// Structurally identical to routes/adminLanding.js's footer-links trio
+// (same schema shape, same moveItem() helper, same refresh-cache-after-
+// write pattern) -- see lib/footerExtras.js's own comment for why this is
+// a separate table/cache from that one rather than reusing it.
+
+function formatCustomLink(l) {
+  return { id: l.id, label: l.label, url: l.url, displayOrder: l.display_order };
+}
+
+const customLinkSchema = z.object({
+  label: z.string().trim().min(1).max(100),
+  url: z.string().trim().min(1).max(500)
+});
+
+const moveSchema = z.object({ direction: z.enum(['up', 'down']) });
+
+router.get('/custom-links', asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const result = await pool.query('SELECT * FROM custom_footer_links ORDER BY display_order ASC, id ASC');
+  res.json(result.rows.map(formatCustomLink));
+}));
+
+router.post('/custom-links', requireCsrf, asyncHandler(async (req, res) => {
+  const parsed = customLinkSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid custom link data' });
+
+  const pool = getPool();
+  const maxOrderResult = await pool.query('SELECT COALESCE(MAX(display_order), 0) AS max_order FROM custom_footer_links');
+  const nextOrder = Number(maxOrderResult.rows[0].max_order) + 1;
+
+  const result = await pool.query(
+    'INSERT INTO custom_footer_links (label, url, display_order) VALUES ($1, $2, $3) RETURNING *',
+    [parsed.data.label, parsed.data.url, nextOrder]
+  );
+  await refreshFooterExtrasCache();
+  res.status(201).json(formatCustomLink(result.rows[0]));
+}));
+
+router.put('/custom-links/:id', requireCsrf, asyncHandler(async (req, res) => {
+  const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
+  if (!idParsed.success) return res.status(400).json({ error: 'Invalid custom link id' });
+  const bodyParsed = customLinkSchema.partial().safeParse(req.body);
+  if (!bodyParsed.success) return res.status(400).json({ error: 'Invalid custom link data' });
+
+  const pool = getPool();
+  const existing = await pool.query('SELECT * FROM custom_footer_links WHERE id = $1', [idParsed.data.id]);
+  if (existing.rowCount === 0) return res.status(404).json({ error: 'Custom link not found' });
+  const current = existing.rows[0];
+  const { label, url } = bodyParsed.data;
+
+  const result = await pool.query(
+    'UPDATE custom_footer_links SET label = $1, url = $2 WHERE id = $3 RETURNING *',
+    [label !== undefined ? label : current.label, url !== undefined ? url : current.url, idParsed.data.id]
+  );
+  await refreshFooterExtrasCache();
+  res.json(formatCustomLink(result.rows[0]));
+}));
+
+router.delete('/custom-links/:id', requireCsrf, asyncHandler(async (req, res) => {
+  const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
+  if (!idParsed.success) return res.status(400).json({ error: 'Invalid custom link id' });
+  const pool = getPool();
+  const result = await pool.query('DELETE FROM custom_footer_links WHERE id = $1 RETURNING id', [idParsed.data.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Custom link not found' });
+  await refreshFooterExtrasCache();
+  res.json({ success: true });
+}));
+
+router.put('/custom-links/:id/move', requireCsrf, asyncHandler(async (req, res) => {
+  const idParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(req.params);
+  const bodyParsed = moveSchema.safeParse(req.body);
+  if (!idParsed.success || !bodyParsed.success) return res.status(400).json({ error: 'Invalid request' });
+
+  const result = await moveItem(getPool(), 'custom_footer_links', idParsed.data.id, bodyParsed.data.direction);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'Custom link not found' });
+  if (result.error === 'no_neighbor') return res.status(200).json({ success: true });
+  await refreshFooterExtrasCache();
+  res.json({ success: true });
 }));
 
 module.exports = router;
