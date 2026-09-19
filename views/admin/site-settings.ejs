@@ -37,7 +37,7 @@
              Organization JSON-LD entirely (see routes/public.js), not
              emitted empty. -->
         <h2 class="mt-5 text-sm font-semibold text-hc-ink">Organization info (for search engines)</h2>
-        <p class="mt-1 text-xs text-gray-400">Feeds the Organization structured data search engines read. None of this is shown directly on the site itself.</p>
+        <p class="mt-1 text-xs text-gray-400">Feeds the Organization structured data search engines read. Contact email and any social URL set below also render as real links in the site-wide public footer (only fields that aren't empty show up there).</p>
         <label class="admin-label" for="logoUrl">Logo URL</label>
         <input class="admin-input" type="url" name="logo_url" id="logoUrl" placeholder="https://example.com/logo.png">
         <label class="admin-label" for="contactEmail">Contact email</label>
@@ -76,6 +76,28 @@
       <input class="admin-input" type="number" id="resendDetailsRateLimit" min="1" max="1000" step="1">
       <button type="button" id="saveResendDetailsRateLimitBtn" class="admin-btn mt-4">Save</button>
       <p id="resendDetailsRateLimitStatus" class="admin-msg" style="display:none;"></p>
+    </div>
+
+    <!-- v1.2.2 Part F: any additional link Advay wants in the public
+         footer beyond the fixed X/Facebook/Instagram/LinkedIn fields
+         above -- rendered with a generic link icon (see
+         views/partials/public-footer-extras.ejs), since there's no way
+         to auto-detect the right platform icon for an arbitrary entry.
+         Same add/remove/reorder list pattern as the Landing Page's own
+         footer links card (views/admin/landing-page.ejs) -- deliberately
+         a separate list/table from that one, see lib/footerExtras.js's
+         comment for why. -->
+    <div class="admin-card mt-6 max-w-xl">
+      <h2 class="text-sm font-semibold text-hc-ink">Footer custom links</h2>
+      <p class="mt-1 text-sm text-gray-500">Extra links shown in the site-wide public footer, alongside the contact/social links above.</p>
+      <form id="addCustomLinkForm" class="mt-2">
+        <label class="admin-label" for="customLinkLabel">Label</label>
+        <input class="admin-input" type="text" name="label" id="customLinkLabel" required maxlength="100">
+        <label class="admin-label" for="customLinkUrl">URL</label>
+        <input class="admin-input" type="text" name="url" id="customLinkUrl" required maxlength="500" placeholder="https://...">
+        <button type="submit" class="admin-btn admin-btn-sm mt-2">Add link</button>
+      </form>
+      <div id="customLinksList" class="mt-4 space-y-2"></div>
     </div>
   </main>
 </div>

@@ -20,12 +20,9 @@
       <label class="admin-label" for="pageSelector">Page</label>
       <select class="admin-select" id="pageSelector">
         <option value="home">Home (/)</option>
-        <% seoPages.forEach(function (p) { %>
-          <option value="<%= p.slug %>">/<%= p.slug %> &mdash; <%= p.page_title %></option>
-        <% }); %>
       </select>
       <p class="mt-1 text-xs text-gray-500">
-        Each page has its own independent section list. New SEO pages are created on the <a href="/<%= slug %>/seo-pages" class="underline">SEO Pages</a> page and show up here once added.
+        SEO pages (created on the <a href="/<%= slug %>/seo-pages" class="underline">SEO Pages</a> page) each have their own single content block instead of a section list — edit them there directly.
       </p>
     </div>
 
