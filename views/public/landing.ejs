@@ -8,20 +8,6 @@
 
 <%- include('../partials/landing-sections/hero', { section: heroSection }) %>
 
-<% if (typeof seoPage !== 'undefined' && seoPage) { %>
-<!-- v1.2.0: SEO landing page CTA banner — driven by seo_pages.cta_text and
-     the resolved target link (routes/public.js's renderLandingPage), not
-     a landing_sections row itself. Only ever rendered when this page IS
-     an SEO page (seoPage is null for the homepage), placed right after
-     the hero so it's the first thing a keyword-targeted visitor sees
-     after the headline. -->
-<section class="bg-hc-yellow/10 px-4 py-8 text-center sm:px-6">
-  <div class="mx-auto max-w-2xl" data-reveal>
-    <a href="<%= seoPage.ctaUrl %>" class="hc-pill-btn inline-block"><%= seoPage.ctaText %></a>
-  </div>
-</section>
-<% } %>
-
 <!-- STATS: kept as a fixed, non-CMS section — NOT part of landing_sections.
      This is the "honest stats counter" the v1.1.3 build brief itself says
      not to rebuild under a different name. Unchanged from the
@@ -34,7 +20,7 @@
 <section class="bg-hc-ink px-4 py-16 text-center sm:px-6">
   <div class="mx-auto max-w-2xl" data-reveal>
     <p class="font-display text-6xl text-hc-yellow sm:text-7xl">
-      <span data-countup="<%= statsNumber %>">0</span>
+      <span data-countup="<%= statsNumber %>"><%= statsNumber %></span>
     </p>
     <p class="mt-3 text-sm uppercase tracking-widest text-white/70"><%= siteSettings.manual_stats_label %></p>
   </div>
@@ -81,6 +67,7 @@
       <a href="/cookie-policy" class="transition-colors hover:text-hc-ink/60">Cookie Policy</a>
     </nav>
   </footer>
+  <%- include('../partials/public-footer-extras', { footerExtrasVariant: 'light' }) %>
 <% } %>
 
 <%- include('../partials/public-footer-scripts') %>

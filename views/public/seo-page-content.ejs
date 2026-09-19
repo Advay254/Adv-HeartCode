@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/public-head') %>
+</head>
+<body class="bg-white font-sans text-hc-ink antialiased" data-page="seo-page">
+<%- include('../partials/public-body-start-scripts') %>
+
+<%- include('../partials/public-nav') %>
+
+<!-- v1.2.2 Part C: an SEO page's entire body is one admin-authored
+     content block (raw HTML, or Markdown already rendered to HTML by
+     routes/public.js's GET /:seoSlug before this template ever sees it)
+     -- no landing_sections section-type catalog involved at all, unlike
+     the homepage (see views/public/landing.ejs, untouched by this
+     version). Reuses .legal-content's typography (src/styles/main.css)
+     rather than a second near-identical class -- both are the same
+     shape of problem: generic styling for admin-pasted HTML/rendered-
+     Markdown with no utility classes of its own. -->
+<main class="bg-white px-4 py-12 sm:px-6 sm:py-16">
+  <div class="mx-auto max-w-3xl">
+    <h1 class="font-display text-3xl text-hc-ink sm:text-4xl"><%= pageTitle %></h1>
+    <div class="legal-content mt-8">
+      <%- renderedContent %>
+    </div>
+  </div>
+</main>
+
+<%- include('../partials/public-footer') %>
+<%- include('../partials/public-footer-scripts') %>
+</body>
+</html>
