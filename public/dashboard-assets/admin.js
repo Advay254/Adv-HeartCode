@@ -2027,8 +2027,70 @@
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
+    // v1.2.2 Part F: footer custom links. Same shape as
+    // initLandingPagePage()'s own footer-links list (renderFooterLinks/
+    // moveFooterLink/removeFooterLink), against the separate
+    // custom-links endpoints/table (see routes/adminSiteSettings.js and
+    // lib/footerExtras.js's comment on why this is a separate list).
+    async function loadCustomLinks() {
+      const res = await window.adminFetch('/api/admin/site-settings/custom-links');
+      const links = await res.json();
+      renderCustomLinks(links);
+    }
+
+    function renderCustomLinks(links) {
+      const list = document.getElementById('customLinksList');
+      list.innerHTML = links.map((l, i) => `
+        <div class="flex flex-col gap-2 rounded-md border border-gray-200 p-2.5 sm:flex-row sm:items-center sm:gap-3" data-id="${l.id}">
+          <div class="flex shrink-0 flex-row gap-1 sm:flex-col">
+            <button type="button" class="admin-btn-outline admin-btn-sm move-custom-link-up" data-id="${l.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm move-custom-link-down" data-id="${l.id}" ${i === links.length - 1 ? 'disabled' : ''}>↓</button>
+          </div>
+          <div class="min-w-0 flex-1 text-sm">
+            <span class="font-medium text-hc-ink">${escapeHtml(l.label)}</span>
+            <span class="ml-2 text-gray-400 break-all">${escapeHtml(l.url)}</span>
+          </div>
+          <button type="button" class="admin-btn-danger admin-btn-sm shrink-0 remove-custom-link" data-id="${l.id}">Remove</button>
+        </div>`).join('') || '<p class="text-sm text-gray-400">No custom links yet.</p>';
+
+      list.querySelectorAll('.move-custom-link-up').forEach(btn => btn.addEventListener('click', () => moveCustomLink(btn.dataset.id, 'up')));
+      list.querySelectorAll('.move-custom-link-down').forEach(btn => btn.addEventListener('click', () => moveCustomLink(btn.dataset.id, 'down')));
+      list.querySelectorAll('.remove-custom-link').forEach(btn => btn.addEventListener('click', () => removeCustomLink(btn.dataset.id)));
+    }
+
+    async function moveCustomLink(id, direction) {
+      const res = await window.adminFetch(`/api/admin/site-settings/custom-links/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+      if (res.ok) loadCustomLinks();
+    }
+
+    async function removeCustomLink(id) {
+      if (!confirm('Remove this footer link?')) return;
+      const res = await window.adminFetch(`/api/admin/site-settings/custom-links/${id}`, { method: 'DELETE' });
+      if (res.ok) loadCustomLinks();
+    }
+
+    document.getElementById('addCustomLinkForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await window.adminFetch('/api/admin/site-settings/custom-links', {
+        method: 'POST',
+        body: JSON.stringify({ label: form.label.value, url: form.url.value })
+      });
+      if (res.ok) {
+        form.reset();
+        loadCustomLinks();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to add custom link.');
+      }
+    });
+
     load();
     loadResendDetailsRateLimit();
+    loadCustomLinks();
   }
 
   // ---- script injection manager page (v1.0.7) ----
@@ -2923,9 +2985,11 @@
                 &middot; CTA: "${escapeHtml(p.ctaText)}"
               </p>
               <div id="editRow-${p.id}" style="display:none;" class="mt-3"></div>
+              <div id="contentRow-${p.id}" style="display:none;" class="mt-3"></div>
             </div>
             <div class="flex shrink-0 flex-wrap gap-2">
               <button type="button" class="admin-btn-outline admin-btn-sm edit-seo-page" data-id="${p.id}">Edit</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm content-seo-page" data-id="${p.id}">Content</button>
               <button type="button" class="admin-btn-outline admin-btn-sm toggle-seo-page" data-id="${p.id}" data-active="${p.isActive}">${p.isActive ? 'Deactivate' : 'Activate'}</button>
               <button type="button" class="admin-btn-danger admin-btn-sm remove-seo-page" data-id="${p.id}">Remove</button>
             </div>
@@ -2944,13 +3008,16 @@
       });
       list.querySelectorAll('.remove-seo-page').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('Delete this SEO page? Its URL will stop working immediately. Any sections already built for it are kept (not deleted) in case a page with the same slug is created again later.')) return;
+          if (!confirm('Delete this SEO page? Its URL will stop working immediately, and its content history goes with it.')) return;
           const res = await window.adminFetch(`/api/admin/seo-pages/${btn.dataset.id}`, { method: 'DELETE' });
           if (res.ok) load();
         });
       });
       list.querySelectorAll('.edit-seo-page').forEach(btn => {
         btn.addEventListener('click', () => openEditRow(btn.dataset.id, pages));
+      });
+      list.querySelectorAll('.content-seo-page').forEach(btn => {
+        btn.addEventListener('click', () => toggleContentRow(btn.dataset.id));
       });
     }
 
@@ -3009,6 +3076,124 @@
       });
     }
 
+    // Same helper as initWebsiteTypesDetailPage()'s Template tab and
+    // initLegalPagesPage() -- each of those pages has its own copy too
+    // (established convention in this file: small, self-contained
+    // per-page helpers rather than one shared hoisted function).
+    function wireFileUploadIntoTextarea(fileInputEl, textareaEl) {
+      fileInputEl.addEventListener('change', () => {
+        const file = fileInputEl.files && fileInputEl.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          textareaEl.value = typeof reader.result === 'string' ? reader.result : '';
+          fileInputEl.value = ''; // so picking the exact same file again still fires 'change'
+        };
+        reader.onerror = () => {
+          alert('Could not read that file.');
+          fileInputEl.value = '';
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    // v1.2.2 Part C: matches the Template tab's UI pattern exactly (format
+    // toggle here is the one addition Template doesn't need, since a
+    // website type's template is always HTML) -- new version on save,
+    // previous deactivated, nothing ever deleted, rollback as a pointer
+    // flip. One real structural difference from openEditRow() above: this
+    // fetches its data lazily (only when first opened, cached in
+    // `loadedContentIds` after that) since a page with many SEO pages
+    // would otherwise fire N content requests just to render the list.
+    const loadedContentIds = new Set();
+
+    function toggleContentRow(id) {
+      const row = document.getElementById(`contentRow-${id}`);
+      const isOpen = row.style.display !== 'none';
+      if (isOpen) {
+        row.style.display = 'none';
+        return;
+      }
+      row.style.display = 'block';
+      if (loadedContentIds.has(id)) return; // already rendered once, just re-showing
+      loadedContentIds.add(id);
+
+      row.innerHTML = `
+        <div class="admin-card">
+          <p class="text-sm text-gray-500">Content format</p>
+          <select class="admin-select" data-field="contentFormat">
+            <option value="html">HTML</option>
+            <option value="markdown">Markdown</option>
+          </select>
+          <label class="admin-label">Or upload a .html/.md file (fills the box below, nothing is saved until you click "Save new version")</label>
+          <input class="admin-input" type="file" data-field="contentFile" accept=".html,.htm,.md,.markdown,.txt,text/html,text/markdown,text/plain">
+          <label class="admin-label">Raw content (current version: <span data-field="currentVersion">none</span>)</label>
+          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" data-field="rawContent"></textarea>
+          <button type="button" class="admin-btn mt-3 save-seo-content">Save new version</button>
+          <p class="admin-msg" data-field="contentStatus" style="display:none;"></p>
+        </div>
+        <div class="admin-table-wrap mt-4">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Version</th><th>Format</th><th>Created</th><th></th></tr></thead>
+            <tbody data-field="historyTableBody"></tbody>
+          </table>
+        </div>`;
+
+      const formatSelect = row.querySelector('[data-field="contentFormat"]');
+      const fileInput = row.querySelector('[data-field="contentFile"]');
+      const textarea = row.querySelector('[data-field="rawContent"]');
+      const currentVersionEl = row.querySelector('[data-field="currentVersion"]');
+      const statusEl = row.querySelector('[data-field="contentStatus"]');
+      const historyBody = row.querySelector('[data-field="historyTableBody"]');
+
+      wireFileUploadIntoTextarea(fileInput, textarea);
+
+      async function loadContent() {
+        const res = await window.adminFetch(`/api/admin/seo-pages/${id}/content`);
+        const data = await res.json();
+        formatSelect.value = data.contentFormat;
+        currentVersionEl.textContent = data.active ? 'v' + data.active.version : 'none yet';
+        textarea.value = data.active ? data.active.rawContent : '';
+        historyBody.innerHTML = data.history.map(h => `
+          <tr>
+            <td data-label="Version">v${h.version}</td>
+            <td data-label="Format">${h.contentFormat === 'markdown' ? 'Markdown' : 'HTML'}</td>
+            <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
+            <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-seo-content" data-version="${h.version}">Rollback to this</button>`}</td>
+          </tr>`).join('') || '<tr><td colspan="4" data-label="">No versions yet.</td></tr>';
+
+        historyBody.querySelectorAll('.rollback-seo-content').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Roll back to version ${btn.dataset.version}?`)) return;
+            const res = await window.adminFetch(`/api/admin/seo-pages/${id}/content/rollback/${btn.dataset.version}`, { method: 'POST' });
+            if (res.ok) loadContent();
+          });
+        });
+      }
+
+      row.querySelector('.save-seo-content').addEventListener('click', async () => {
+        const res = await window.adminFetch(`/api/admin/seo-pages/${id}/content`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            contentFormat: formatSelect.value,
+            rawContent: textarea.value
+          })
+        });
+        const data = await res.json();
+        statusEl.style.display = 'block';
+        if (res.ok) {
+          statusEl.className = 'admin-msg admin-msg-success';
+          statusEl.textContent = `Saved as v${data.version}.`;
+          loadContent();
+        } else {
+          statusEl.className = 'admin-msg admin-msg-error';
+          statusEl.textContent = data.error || 'Failed to save this page\'s content.';
+        }
+      });
+
+      loadContent();
+    }
+
     async function load() {
       const res = await window.adminFetch('/api/admin/seo-pages');
       const pages = await res.json();
@@ -3032,7 +3217,7 @@
       statusEl.style.display = 'block';
       if (res.ok) {
         statusEl.className = 'admin-msg admin-msg-success';
-        statusEl.textContent = 'SEO page added. Add its sections from the Landing Sections page.';
+        statusEl.textContent = 'SEO page added. Click "Content" below to write its page content.';
         form.reset();
         load();
       } else {
