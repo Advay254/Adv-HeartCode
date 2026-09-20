@@ -1,10 +1,18 @@
 <%
-  // v1.2.2 Parts D+F: shared by every public footer context (this file is
-  // include()'d from views/partials/public-footer.ejs, views/partials/
-  // landing-sections/footer.ejs, views/public/landing.ejs's zero-sections
-  // fallback footer, and views/public/seo-page-content.ejs) so there is
-  // exactly ONE place that decides which of these links render and in
-  // what order, rather than four copies that could drift.
+  // v1.2.3: this partial is Part F only now (contact email, social links,
+  // admin custom links). Part D's "every active SEO page" list moved out
+  // of here into views/partials/landing-sections/nav.ejs's hamburger
+  // dropdown instead -- see that file's own comment for why: a footer
+  // row was the wrong place for it (real user feedback after v1.2.2
+  // shipped it there), the hamburger menu is what people actually expect
+  // a page list to live in.
+  //
+  // Shared by every public footer context (this file is include()'d from
+  // views/partials/public-footer.ejs, views/partials/landing-sections/
+  // footer.ejs, views/public/landing.ejs's zero-sections fallback footer,
+  // and views/public/seo-page-content.ejs) so there is exactly ONE place
+  // that decides which of these links render and in what order, rather
+  // than four copies that could drift.
   //
   // `footerExtrasVariant` (a local passed by whichever partial includes
   // this one) picks light-on-dark vs. dark-on-light colors to match that
@@ -33,22 +41,8 @@
   // middleware -- `|| []` only guards the (should-be-unreachable) case
   // where that middleware's own try/catch swallowed a DB error before
   // ever setting these.
-  var footerPages = (typeof footerSeoPages !== 'undefined' && footerSeoPages) || [];
   var customLinks = (typeof footerCustomLinks !== 'undefined' && footerCustomLinks) || [];
 %>
-<% if (footerPages.length > 0) { %>
-<!-- Part D: real crawlable <a href> to every active SEO page -- pulled
-     fresh (well, cache-fresh -- see lib/footerExtras.js) from seo_pages
-     on every request, never JS-rendered. -->
-<div class="border-t <%= borderClass %> py-4">
-  <nav class="mx-auto flex max-w-6xl flex-wrap justify-center gap-x-5 gap-y-1.5 px-4 text-xs <%= textClass %> sm:px-6">
-    <% footerPages.forEach(function (p) { %>
-      <a href="/<%= p.slug %>" class="transition-colors <%= linkHoverClass %>"><%= p.pageTitle %></a>
-    <% }); %>
-  </nav>
-</div>
-<% } %>
-
 <% if (siteSettings.contact_email || socialLinks.length > 0 || customLinks.length > 0) { %>
 <!-- Part F: contact email + any social URL that's actually set (never a
      link to an empty field), plus admin-added custom links. -->
