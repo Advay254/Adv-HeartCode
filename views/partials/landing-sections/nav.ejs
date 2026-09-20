@@ -7,7 +7,26 @@
    else and isn't adding one for a single toggle button — see
    public/site.js's initHomePage() for the vanilla-JS equivalent (a class
    toggle plus an aria-expanded flip), dispatched via this page's existing
-   data-page="home" body attribute. */
+   data-page="home" body attribute.
+
+   v1.2.3: two real fixes based on actual user feedback after v1.2.2:
+   (1) the toggle button's "open" icon was a plain 3-bar hamburger drawn
+   with stroke paths — reported as rendering with no visible glyph at all
+   on the reporter's device (a different failure mode than v1.1.5's
+   diagnosed-and-fixed stale-CSS one; a stroke-only icon is more sensitive
+   to exactly this kind of rendering inconsistency than a filled shape
+   is). Replaced with a filled (fill="currentColor"), not stroked,
+   "dropdown/list" glyph matching a reference icon the reporter supplied
+   directly, which should be more robust for the same reason. (2) the
+   "every active SEO page" list shipped in v1.2.2 as a footer row
+   (views/partials/public-footer-extras.ejs) — real feedback was that
+   people expect a page list in the nav's dropdown menu, not the footer,
+   so it moved here instead (both the desktop hover-dropdown below and
+   the mobile panel further down), and the footer partial dropped that
+   section entirely. `activeSeoPages` comes from res.locals, set by
+   routes/public.js's router-wide middleware from lib/footerExtras.js
+   (name kept as-is; still shared with the footer's own remaining
+   contact/social/custom-links row, see that module's comment). */
 %>
 <div class="relative z-30 w-full bg-white font-poppins">
   <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
@@ -19,6 +38,26 @@
       <a href="/#how-it-works" class="rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink">How it works</a>
       <a href="/explore" class="rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink">Website types</a>
       <a href="/resend-details" class="rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink">Find my site</a>
+      <% if (typeof activeSeoPages !== 'undefined' && activeSeoPages && activeSeoPages.length > 0) { %>
+        <!-- Pure-CSS hover/focus dropdown -- no JS, so it doesn't need
+             wiring into public/site.js's toggle handler at all. Desktop
+             (mouse) only: this whole <nav> is hidden below md, where the
+             mobile panel further down (which doesn't depend on :hover)
+             covers the same links instead. -->
+        <div class="group relative">
+          <button type="button" class="inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium text-hc-ink/70 transition-colors hover:bg-sk-yellow-pale hover:text-hc-ink" aria-haspopup="true">
+            Pages
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="invisible absolute left-0 top-full z-10 mt-1 min-w-[12rem] rounded-xl border border-black/5 bg-white py-2 opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+            <% activeSeoPages.forEach(function (p) { %>
+              <a href="/<%= p.slug %>" class="block px-4 py-2 text-sm text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink"><%= p.pageTitle %></a>
+            <% }); %>
+          </div>
+        </div>
+      <% } %>
       <a href="/explore" class="ml-2 inline-flex items-center justify-center rounded-full bg-sk-yellow px-6 py-2.5 text-sm font-semibold text-hc-ink transition-transform duration-200 ease-out hover:scale-105">
         Get started
       </a>
@@ -32,8 +71,17 @@
       class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-hc-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sk-blue md:hidden"
     >
       <span class="sr-only">Toggle menu</span>
-      <svg data-landing-nav-icon-open class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      <!-- v1.2.3: filled glyph (fill="currentColor", no stroke) matching
+           a reference icon supplied directly by a real user report — a
+           rounded dropdown/select bar with two list rows underneath,
+           standing in for a conventional hamburger. -->
+      <svg data-landing-nav-icon-open class="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="2" width="22" height="6" rx="3" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M16.5 4 L19.5 4 L18 6.2 Z" fill="currentColor"/>
+        <rect x="1" y="11.5" width="4" height="4" rx="1" fill="currentColor"/>
+        <rect x="7" y="12.5" width="16" height="2" rx="1" fill="currentColor"/>
+        <rect x="1" y="17.5" width="4" height="4" rx="1" fill="currentColor"/>
+        <rect x="7" y="18.5" width="16" height="2" rx="1" fill="currentColor"/>
       </svg>
       <svg data-landing-nav-icon-close class="hidden h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -52,6 +100,14 @@
     <a href="/#how-it-works" class="rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink">How it works</a>
     <a href="/explore" class="rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink">Website types</a>
     <a href="/resend-details" class="rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink">Find my site</a>
+    <% if (typeof activeSeoPages !== 'undefined' && activeSeoPages && activeSeoPages.length > 0) { %>
+      <div class="mt-1 border-t border-black/5 pt-2">
+        <p class="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-hc-ink/40">Pages</p>
+        <% activeSeoPages.forEach(function (p) { %>
+          <a href="/<%= p.slug %>" class="block rounded-lg px-3 py-2.5 text-sm font-medium text-hc-ink/70 hover:bg-sk-yellow-pale hover:text-hc-ink"><%= p.pageTitle %></a>
+        <% }); %>
+      </div>
+    <% } %>
     <a href="/explore" class="mt-1 inline-flex items-center justify-center rounded-full bg-sk-yellow px-6 py-2.5 text-sm font-semibold text-hc-ink">
       Get started
     </a>
