@@ -39,12 +39,14 @@ const router = express.Router();
 // needs the CMS-driven footer text/links on every public page, not just
 // the landing page itself, for the same "don't make every route
 // remember to fetch this" reason.
-// v1.2.2 Parts D+F: footerExtras (active SEO pages + admin custom links)
-// joins the same middleware for the exact same reason — the new
-// site-wide footer content row (views/partials/public-footer-extras.ejs)
-// renders on every public page, including every SEO page, so it needs to
-// be available everywhere this middleware already reaches rather than
-// wired into one specific route.
+// v1.2.2 Part F (contact/social/custom links) + v1.2.3 Part D (active SEO
+// pages, moved here from a footer row into the homepage nav's hamburger
+// dropdown after real user feedback that a footer link list was the
+// wrong place for it — see views/partials/landing-sections/nav.ejs)
+// joins the same middleware for the exact same reason — the site-wide
+// footer content row (views/partials/public-footer-extras.ejs) and the
+// homepage nav both need this data on every request they run on, so it's
+// fetched once here rather than wired into specific routes/views.
 router.use(async (req, res, next) => {
   try {
     const [siteSettings, activeScripts, landing, footerExtras] = await Promise.all([
@@ -58,7 +60,7 @@ router.use(async (req, res, next) => {
     res.locals.landingContent = landing.content;
     res.locals.landingSteps = landing.steps;
     res.locals.landingFooterLinks = landing.footerLinks;
-    res.locals.footerSeoPages = footerExtras.seoPages;
+    res.locals.activeSeoPages = footerExtras.seoPages;
     res.locals.footerCustomLinks = footerExtras.customLinks;
   } catch (err) {
     // These helpers already catch their own DB errors internally and fall
