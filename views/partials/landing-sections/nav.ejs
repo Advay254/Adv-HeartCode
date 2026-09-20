@@ -68,14 +68,37 @@
       data-landing-nav-toggle
       aria-expanded="false"
       aria-controls="landing-nav-links"
-      class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-hc-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sk-blue md:hidden"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-transparent text-hc-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-sk-blue md:hidden"
+      style="width:2.5rem;height:2.5rem;background-color:transparent;padding:0;border:0;"
     >
       <span class="sr-only">Toggle menu</span>
       <!-- v1.2.3: filled glyph (fill="currentColor", no stroke) matching
            a reference icon supplied directly by a real user report — a
            rounded dropdown/select bar with two list rows underneath,
-           standing in for a conventional hamburger. -->
-      <svg data-landing-nav-icon-open class="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+           standing in for a conventional hamburger.
+           v1.2.4: explicit width/height attributes added directly on
+           both <svg> elements below, alongside the existing h-6 w-6
+           classes — not redundant despite looking it. An <svg> with no
+           width/height attribute of its own falls back to the browser's
+           intrinsic default box (historically 300x150px) the instant
+           its Tailwind sizing class fails to resolve for ANY reason
+           (a stale/uncompiled CSS bundle, a caching layer serving an
+           older stylesheet, etc.) — which is a well-known SVG behavior,
+           not specific to this app, and matches exactly what a second
+           real user report described after v1.2.3 shipped: a large,
+           oddly-colored box with the icon's own shapes shrunk to a
+           barely-visible mark inside it (consistent with the group of
+           tiny path/rect shapes still holding their relative 24x24
+           proportions while the whole glyph renders at a much larger,
+           unstyled intrinsic size). Explicit attributes remove the
+           dependency on the CSS bundle entirely for this one property —
+           belt-and-suspenders alongside actually tracking down why that
+           CSS bundle isn't the one this repo ships (see this version's
+           delivery notes). The button itself gets the same treatment:
+           an inline style="" duplicating its Tailwind width/height/
+           background classes, since inline styles apply regardless of
+           whether any external stylesheet loaded at all. -->
+      <svg data-landing-nav-icon-open class="h-6 w-6" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1" y="2" width="22" height="6" rx="3" stroke="currentColor" stroke-width="1.6"/>
         <path d="M16.5 4 L19.5 4 L18 6.2 Z" fill="currentColor"/>
         <rect x="1" y="11.5" width="4" height="4" rx="1" fill="currentColor"/>
@@ -83,7 +106,7 @@
         <rect x="1" y="17.5" width="4" height="4" rx="1" fill="currentColor"/>
         <rect x="7" y="18.5" width="16" height="2" rx="1" fill="currentColor"/>
       </svg>
-      <svg data-landing-nav-icon-close class="hidden h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg data-landing-nav-icon-close class="hidden h-6 w-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
       </svg>
     </button>
