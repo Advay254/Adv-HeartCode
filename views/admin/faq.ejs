@@ -8,26 +8,40 @@
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'faq' }) %>
   <main class="admin-main">
-    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">FAQ</h1>
-    <p class="mb-6 max-w-2xl text-sm text-gray-500">
-      Questions and answers shown in the homepage's FAQ section, and in the FAQPage structured data search engines read from the same content.
-      Add an "FAQ" section from the <a href="/<%= slug %>/landing-sections" class="text-brand-500">Landing Sections</a> page to actually show this on the homepage. Entries here have no effect until that section exists and is active.
-      An inactive entry here is hidden from both the visible section and the structured data.
-    </p>
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Content</p>
+        <h1>FAQ</h1>
+        <p>Questions and answers shown in the homepage's FAQ section, and in the FAQPage structured data search engines read from the same content.</p>
+      </div>
+      <div class="admin-page-actions"><a href="/<%= slug %>/landing-sections" class="admin-btn-outline">Homepage sections</a></div>
+    </section>
 
-    <div class="admin-card max-w-xl">
-      <h2 class="text-sm font-semibold text-hc-ink">Add question</h2>
-      <form id="addFaqForm">
-        <label class="admin-label" for="faqQuestion">Question</label>
-        <input class="admin-input" type="text" name="question" id="faqQuestion" required placeholder="e.g. How long does it take to get my site?">
-        <label class="admin-label" for="faqAnswer">Answer</label>
-        <textarea class="admin-textarea" name="answer" id="faqAnswer" required placeholder="Shown when the question is expanded"></textarea>
-        <button type="submit" class="admin-btn mt-3">Add question</button>
-      </form>
-      <p id="addFaqStatus" class="admin-msg" style="display:none;"></p>
+    <div class="admin-callout">
+      Entries here have no effect until an &ldquo;FAQ&rdquo; section exists and is active on the <a href="/<%= slug %>/landing-sections">Landing Sections</a> page.
+      An inactive entry is hidden from both the visible section and the structured data.
     </div>
 
-    <div id="faqList" class="mt-6 space-y-3"></div>
+    <section class="admin-split-grid">
+      <div class="admin-card admin-sticky-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Create</p><h2>Add question</h2></div></div>
+        <form id="addFaqForm">
+          <label class="admin-label" for="faqQuestion">Question</label>
+          <input class="admin-input" type="text" name="question" id="faqQuestion" required placeholder="e.g. How long does it take to get my site?">
+          <label class="admin-label" for="faqAnswer">Answer</label>
+          <textarea class="admin-textarea" name="answer" id="faqAnswer" required placeholder="Shown when the question is expanded"></textarea>
+          <div class="admin-form-actions">
+            <button type="submit" class="admin-btn">Add question</button>
+            <p id="addFaqStatus" class="admin-msg" style="display:none;"></p>
+          </div>
+        </form>
+      </div>
+
+      <div class="admin-list-panel">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Published order</p><h2>Questions</h2></div></div>
+        <div id="faqList" class="admin-entry-list"></div>
+      </div>
+    </section>
   </main>
 </div>
 </body>

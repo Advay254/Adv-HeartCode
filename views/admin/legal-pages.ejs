@@ -8,13 +8,17 @@
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'legal-pages' }) %>
   <main class="admin-main">
-    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Legal Pages</h1>
-    <p class="mb-6 text-sm text-gray-500">
-      Privacy Policy, Terms and Conditions, and Cookie Policy are always live at <code>/privacy-policy</code>,
-      <code>/terms</code>, and <code>/cookie-policy</code>. Each is versioned the same way a website type's
-      Template is: saving here adds a new version and makes it active immediately, nothing is ever deleted, and
-      any past version can be rolled back to below.
-    </p>
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Content</p>
+        <h1>Legal Pages</h1>
+        <p>Privacy Policy, Terms and Conditions, and Cookie Policy are always live at <code>/privacy-policy</code>, <code>/terms</code>, and <code>/cookie-policy</code>.</p>
+      </div>
+    </section>
+
+    <div class="admin-callout">
+      Each is versioned the same way a website type's Template is: saving here adds a new version and makes it active immediately, nothing is ever deleted, and any past version can be rolled back to below.
+    </div>
 
     <%
       const legalPageTabs = [
@@ -32,21 +36,27 @@
 
     <% legalPageTabs.forEach(function (t, i) { %>
       <section id="tab-<%= t.tab %>" class="tab-panel" style="<%= i === 0 ? '' : 'display:none;' %>" data-page-key="<%= t.key %>">
-        <div class="admin-card max-w-2xl">
+        <div class="admin-card admin-ed-narrow">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Page content</p><h2><%= t.label %></h2></div></div>
           <form class="legal-page-form">
             <label class="admin-label" for="legalFileInput_<%= t.key %>">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
             <input class="admin-input" type="file" id="legalFileInput_<%= t.key %>" accept=".txt,.html,text/plain,text/html">
             <label class="admin-label" for="legalHtmlContent_<%= t.key %>">HTML content (current version: <span id="legalCurrentVersion_<%= t.key %>">none</span>)</label>
-            <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="legalHtmlContent_<%= t.key %>"></textarea>
-            <button type="submit" class="admin-btn mt-3">Save new version</button>
+            <textarea class="admin-textarea admin-code-area min-h-[16rem] font-mono text-xs" id="legalHtmlContent_<%= t.key %>"></textarea>
+            <div class="admin-form-actions">
+              <button type="submit" class="admin-btn">Save new version</button>
+              <p id="legalStatus_<%= t.key %>" class="admin-msg" style="display:none;"></p>
+            </div>
           </form>
-          <p id="legalStatus_<%= t.key %>" class="admin-msg" style="display:none;"></p>
         </div>
-        <div class="admin-table-wrap mt-6">
-          <table class="admin-table is-responsive-stack">
-            <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
-            <tbody id="legalHistoryTableBody_<%= t.key %>"></tbody>
-          </table>
+        <div class="admin-card admin-ed-narrow mt-6">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">History</p><h2>Version history</h2></div></div>
+          <div class="admin-table-wrap admin-table-wrap-inner">
+            <table class="admin-table is-responsive-stack">
+              <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+              <tbody id="legalHistoryTableBody_<%= t.key %>"></tbody>
+            </table>
+          </div>
         </div>
       </section>
     <% }); %>

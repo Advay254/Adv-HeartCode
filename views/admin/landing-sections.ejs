@@ -8,38 +8,49 @@
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'landing-sections' }) %>
   <main class="admin-main">
-    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Landing Sections</h1>
-    <p class="mb-6 max-w-2xl text-sm text-gray-500">
-      Controls the sections shown on the selected page below, top to bottom. Reorder with the arrows, toggle a
-      section off without deleting it, or edit its text. Images aren't editable here: every image is a fixed asset
-      from the current design, and a section you add fresh has no image available to it. The stats counter is the
-      only section not managed here. It's a separate, always-on section, set from the Site Settings page instead.
-    </p>
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Content</p>
+        <h1>Landing Sections</h1>
+        <p>Controls the sections shown on the selected page below, top to bottom. Reorder with the arrows, toggle a section off without deleting it, or edit its text.</p>
+      </div>
+    </section>
 
-    <div class="admin-card max-w-xl">
-      <label class="admin-label" for="pageSelector">Page</label>
-      <select class="admin-select" id="pageSelector">
-        <option value="home">Home (/)</option>
-      </select>
-      <p class="mt-1 text-xs text-gray-500">
-        SEO pages (created on the <a href="/<%= slug %>/seo-pages" class="underline">SEO Pages</a> page) each have their own single content block instead of a section list — edit them there directly.
-      </p>
+    <div class="admin-callout">
+      Images aren't editable here: every image is a fixed asset from the current design, and a section you add fresh has no image available to it.
+      The stats counter is the only section not managed here. It's a separate, always-on section, set from the Site Settings page instead.
     </div>
 
-    <div class="admin-card mt-6 max-w-xl">
-      <h2 class="text-sm font-semibold text-hc-ink">Add section</h2>
-      <form id="addSectionForm" class="mt-2">
-        <label class="admin-label" for="newSectionType">Section type</label>
-        <select class="admin-select" id="newSectionType">
-          <% landingSectionTypes.forEach(function (t) { %>
-            <option value="<%= t %>"><%= t %></option>
-          <% }); %>
+    <section class="admin-two-col">
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Page</p><h2>Select page</h2></div></div>
+        <label class="admin-label" for="pageSelector">Page</label>
+        <select class="admin-select" id="pageSelector">
+          <option value="home">Home (/)</option>
         </select>
-        <button type="submit" class="admin-btn mt-3">Add section</button>
-      </form>
-    </div>
+        <p class="admin-form-hint mt-2">
+          SEO pages (created on the <a href="/<%= slug %>/seo-pages" class="underline">SEO Pages</a> page) each have their own single content block instead of a section list — edit them there directly.
+        </p>
+      </div>
 
-    <div id="sectionsList" class="mt-6 flex flex-col gap-4"></div>
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Create</p><h2>Add section</h2></div></div>
+        <form id="addSectionForm">
+          <label class="admin-label" for="newSectionType">Section type</label>
+          <select class="admin-select" id="newSectionType">
+            <% landingSectionTypes.forEach(function (t) { %>
+              <option value="<%= t %>"><%= t %></option>
+            <% }); %>
+          </select>
+          <div class="admin-form-actions"><button type="submit" class="admin-btn">Add section</button></div>
+        </form>
+      </div>
+    </section>
+
+    <div class="admin-list-panel mt-6">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Top to bottom</p><h2>Sections</h2></div></div>
+      <div id="sectionsList" class="flex flex-col gap-4"></div>
+    </div>
   </main>
 </div>
 
