@@ -8,90 +8,34 @@
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'payments' }) %>
   <main class="admin-main">
-    <div class="mb-6 flex items-center gap-3">
-      <h1 class="font-display text-2xl uppercase tracking-wide text-hc-ink">Payments</h1>
-      <span id="modeBadge" class="admin-badge admin-badge-brand">…</span>
-    </div>
+    <section class="admin-page-intro">
+      <div><p class="admin-eyebrow">Commerce &amp; currency</p><h1>Payments <span id="modeBadge" class="admin-badge admin-badge-brand">…</span></h1><p>Manage Paystack credentials, checkout currency behavior, and payment diagnostics.</p></div>
+    </section>
 
-    <div class="admin-card max-w-xl">
-      <form id="paystackForm">
-        <label class="admin-label" for="modeSelect">Mode</label>
-        <select class="admin-select" name="mode" id="modeSelect">
-          <option value="test">Test</option>
-          <option value="live">Live</option>
-        </select>
-
-        <h2 class="mt-5 text-sm font-semibold text-hc-ink">Test keys</h2>
-        <label class="admin-label" for="publicKeyTest">Public key (test)</label>
-        <input class="admin-input" type="text" id="publicKeyTest">
-        <label class="admin-label" for="secretKeyTest">Secret key (test)</label>
-        <input class="admin-input" type="password" id="secretKeyTest" placeholder="Leave blank to keep current key">
-        <p id="secretTestMasked" class="admin-msg" style="display:none;"></p>
-
-        <h2 class="mt-5 text-sm font-semibold text-hc-ink">Live keys</h2>
-        <label class="admin-label" for="publicKeyLive">Public key (live)</label>
-        <input class="admin-input" type="text" id="publicKeyLive">
-        <label class="admin-label" for="secretKeyLive">Secret key (live)</label>
-        <input class="admin-input" type="password" id="secretKeyLive" placeholder="Leave blank to keep current key">
-        <p id="secretLiveMasked" class="admin-msg" style="display:none;"></p>
-
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button type="submit" class="admin-btn">Save</button>
-          <button type="button" id="clearTestBtn" class="admin-btn-outline">Clear test secret</button>
-          <button type="button" id="clearLiveBtn" class="admin-btn-outline">Clear live secret</button>
-        </div>
-      </form>
-      <p id="statusMsg" class="admin-msg" style="display:none;"></p>
-    </div>
-
-    <!-- v1.1.9 hotfix Part 3: master on/off switch for the DISPLAY-only
-         local-currency estimate shown while browsing (home/explore/build
-         pages). Deliberately separate from the Kenyan charge-currency
-         card below -- this never changes what a visitor is actually
-         charged at checkout, only what price they see beforehand. -->
-    <div class="admin-card mt-6 max-w-xl">
-      <div class="flex flex-wrap items-center gap-3">
-        <h2 class="text-sm font-semibold text-hc-ink">Currency display conversion</h2>
-        <span id="currencyConversionBadge" class="admin-badge admin-badge-error">…</span>
+    <section class="admin-split-grid admin-payments-grid">
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Gateway</p><h2>Paystack configuration</h2></div></div>
+        <form id="paystackForm">
+          <label class="admin-label" for="modeSelect">Mode</label><select class="admin-select" name="mode" id="modeSelect"><option value="test">Test</option><option value="live">Live</option></select>
+          <div class="admin-subsection"><h3>Test keys</h3><label class="admin-label" for="publicKeyTest">Public key (test)</label><input class="admin-input" type="text" id="publicKeyTest"><label class="admin-label" for="secretKeyTest">Secret key (test)</label><input class="admin-input" type="password" id="secretKeyTest" placeholder="Leave blank to keep current key"><p id="secretTestMasked" class="admin-msg" style="display:none;"></p></div>
+          <div class="admin-subsection"><h3>Live keys</h3><label class="admin-label" for="publicKeyLive">Public key (live)</label><input class="admin-input" type="text" id="publicKeyLive"><label class="admin-label" for="secretKeyLive">Secret key (live)</label><input class="admin-input" type="password" id="secretKeyLive" placeholder="Leave blank to keep current key"><p id="secretLiveMasked" class="admin-msg" style="display:none;"></p></div>
+          <div class="mt-4 flex flex-wrap gap-2"><button type="submit" class="admin-btn">Save payment settings</button><button type="button" id="clearTestBtn" class="admin-btn-outline">Clear test secret</button><button type="button" id="clearLiveBtn" class="admin-btn-outline">Clear live secret</button></div>
+        </form><p id="statusMsg" class="admin-msg" style="display:none;"></p>
       </div>
-      <p class="mt-1 text-sm text-gray-500">
-        Off by default: every visitor sees prices in plain USD, everywhere on the site, no matter where they're browsing from. Turn this on to show visitors an estimated price in their own local currency instead, based on their IP. Either way, the amount actually charged at checkout is decided separately (see the Kenyan visitor setting below) — this only affects what's shown before checkout.
-      </p>
-      <button type="button" id="toggleCurrencyConversionBtn" class="admin-btn-outline mt-4">…</button>
-      <p id="currencyConversionStatus" class="admin-msg" style="display:none;"></p>
-    </div>
 
-    <div class="admin-card mt-6 max-w-xl">
-      <h2 class="text-sm font-semibold text-hc-ink">Kenyan visitor payment currency</h2>
-      <p class="mt-1 text-sm text-gray-500">
-        Controls what currency Kenyan visitors are actually charged in. Leave this on USD until M-Pesa is set up and enabled on your Paystack account. Until then, Kenyan visitors are charged in USD by card, exactly like everyone else.
-      </p>
-      <label class="admin-label" for="kenyanCurrencySelect">Charge Kenyan visitors in</label>
-      <select class="admin-select" id="kenyanCurrencySelect">
-        <option value="USD">USD (default, until M-Pesa is set up)</option>
-        <option value="KES">KES (M-Pesa is set up on Paystack)</option>
-      </select>
-      <button type="button" id="saveKenyanCurrencyBtn" class="admin-btn mt-4">Save</button>
-      <p id="kenyanCurrencyStatus" class="admin-msg" style="display:none;"></p>
-    </div>
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Currency</p><h2>Visitor pricing</h2></div></div>
+        <div class="admin-setting-block"><div class="admin-setting-title"><h3>Currency display conversion</h3><span id="currencyConversionBadge" class="admin-badge admin-badge-error">…</span></div><p>Off by default: every visitor sees plain USD prices. Turn this on to show an estimated price in the visitor's local currency (based on their IP) before checkout. This never changes the amount actually charged.</p><button type="button" id="toggleCurrencyConversionBtn" class="admin-btn-outline">…</button><p id="currencyConversionStatus" class="admin-msg" style="display:none;"></p></div>
+        <div class="admin-setting-block"><h3>Kenyan visitor payment currency</h3><p>Controls what currency Kenyan visitors are actually charged in. Leave this on USD until M-Pesa is set up and enabled on your Paystack account. Until then, Kenyan visitors are charged in USD by card, exactly like everyone else.</p><label class="admin-label" for="kenyanCurrencySelect">Charge Kenyan visitors in</label><select class="admin-select" id="kenyanCurrencySelect"><option value="USD">USD (default, until M-Pesa is set up)</option><option value="KES">KES (M-Pesa is set up on Paystack)</option></select><button type="button" id="saveKenyanCurrencyBtn" class="admin-btn mt-4">Save currency</button><p id="kenyanCurrencyStatus" class="admin-msg" style="display:none;"></p></div>
+      </div>
+    </section>
 
-    <!-- v1.1.1 Part D, updated v1.1.9 Part D: lets you get real, live
-         evidence of whether the geolocation lookup (used to decide which
-         currency a visitor sees, including the Kenyan toggle above) is
-         actually working — straight from this dashboard, no terminal
-         needed. As of v1.1.9 this checks the local GeoLite2-Country
-         database file rather than a third-party network service; every
-         click is still a fresh, uncached lookup. -->
-    <div class="admin-card mt-6 max-w-xl">
-      <h2 class="text-sm font-semibold text-hc-ink">Geolocation health check</h2>
-      <p class="mt-1 text-sm text-gray-500">
-        Runs a live geolocation lookup against the local database (bypassing the normal 1-hour cache) and shows exactly what happened: whether it succeeded or failed, and why. Defaults to testing your own connection; for a real answer to "why did a Kenyan visitor see USD", paste in a real visitor's IP address from your logs instead.
-      </p>
-      <label class="admin-label" for="geoDiagnosticIp">IP address to test (optional)</label>
-      <input class="admin-input" id="geoDiagnosticIp" type="text" placeholder="Leave blank to test your own connection">
-      <button type="button" id="runGeoDiagnosticBtn" class="admin-btn mt-4">Run diagnostic</button>
+    <section class="admin-card mt-6">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Diagnostics</p><h2>Geolocation health check</h2></div></div>
+      <p class="admin-card-description">Runs a live lookup against the local geolocation database (bypassing the 1-hour cache) and shows exactly what happened. Defaults to testing your own connection; to find out why a Kenyan visitor saw USD, paste a real visitor IP from your logs instead.</p>
+      <div class="admin-form-grid-2 admin-diagnostic-row"><div><label class="admin-label" for="geoDiagnosticIp">IP address to test <span>(optional)</span></label><input class="admin-input" id="geoDiagnosticIp" type="text" placeholder="Leave blank to test your own connection"></div><div class="admin-form-align-end"><button type="button" id="runGeoDiagnosticBtn" class="admin-btn">Run diagnostic</button></div></div>
       <div id="geoDiagnosticResult" class="mt-4" style="display:none;"></div>
-    </div>
+    </section>
   </main>
 </div>
 </body>

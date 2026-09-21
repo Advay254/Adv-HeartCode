@@ -2,50 +2,23 @@
 <html lang="en">
 <head>
 <%- include('../partials/head') %>
-<title>Submissions | HeartCode Admin</title>
+<title>Deployments &amp; Subscribers | HeartCode Admin</title>
 </head>
 <body data-page="submissions">
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'submissions' }) %>
   <main class="admin-main">
-    <h1 class="mb-4 font-display text-2xl uppercase tracking-wide text-hc-ink">Deployments</h1>
-    <div class="admin-card mb-4 max-w-md">
-      <label class="admin-label" for="deploymentSearch">Search</label>
-      <input class="admin-input" type="text" id="deploymentSearch" placeholder="Email, reference, or site URL">
-    </div>
-    <div class="admin-table-wrap">
-      <table class="admin-table is-responsive-stack">
-        <thead><tr><th>Client</th><th>Type</th><th>Site</th><th>Amount</th><th>Deployed</th></tr></thead>
-        <tbody id="deploymentsTableBody"></tbody>
-      </table>
-    </div>
-    <div class="mt-2 flex items-center justify-between">
-      <p id="deploymentsPageInfo" class="text-xs text-gray-400"></p>
-      <div class="flex gap-2">
-        <button type="button" id="deploymentsPrev" class="admin-btn-outline admin-btn-sm">← Prev</button>
-        <button type="button" id="deploymentsNext" class="admin-btn-outline admin-btn-sm">Next →</button>
-      </div>
-    </div>
-
-    <h1 class="mb-4 mt-10 font-display text-2xl uppercase tracking-wide text-hc-ink">Subscribers</h1>
-    <div class="admin-card mb-4 max-w-md">
-      <label class="admin-label" for="subscriberSearch">Search</label>
-      <input class="admin-input" type="text" id="subscriberSearch" placeholder="Email">
-      <a href="/api/admin/dashboard/subscribers/export" class="admin-btn-outline mt-3 inline-flex">Export CSV</a>
-    </div>
-    <div class="admin-table-wrap">
-      <table class="admin-table is-responsive-stack">
-        <thead><tr><th>Email</th><th>First seen</th><th>Status</th><th></th></tr></thead>
-        <tbody id="subscribersTableBody"></tbody>
-      </table>
-    </div>
-    <div class="mt-2 flex items-center justify-between">
-      <p id="subscribersPageInfo" class="text-xs text-gray-400"></p>
-      <div class="flex gap-2">
-        <button type="button" id="subscribersPrev" class="admin-btn-outline admin-btn-sm">← Prev</button>
-        <button type="button" id="subscribersNext" class="admin-btn-outline admin-btn-sm">Next →</button>
-      </div>
-    </div>
+    <section class="admin-page-intro"><div><p class="admin-eyebrow">Commerce</p><h1>Deployments &amp; Subscribers</h1><p>Search completed deployments and manage the people who have subscribed to HeartCode updates.</p></div></section>
+    <section class="admin-card admin-data-section">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Orders</p><h2>Deployments</h2></div><div class="admin-search"><input type="text" id="deploymentSearch" placeholder="Search email, reference, or site URL" aria-label="Search deployments"></div></div>
+      <div class="admin-table-wrap admin-table-wrap-inner"><table class="admin-table is-responsive-stack"><thead><tr><th>Client</th><th>Type</th><th>Site</th><th>Amount</th><th>Deployed</th></tr></thead><tbody id="deploymentsTableBody"></tbody></table></div>
+      <div class="admin-pagination"><p id="deploymentsPageInfo"></p><div><button type="button" id="deploymentsPrev" class="admin-btn-outline admin-btn-sm">← Prev</button><button type="button" id="deploymentsNext" class="admin-btn-outline admin-btn-sm">Next →</button></div></div>
+    </section>
+    <section class="admin-card admin-data-section mt-6">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Audience</p><h2>Subscribers</h2></div><div class="admin-section-actions"><div class="admin-search"><input type="text" id="subscriberSearch" placeholder="Search email" aria-label="Search subscribers"></div><a href="/api/admin/dashboard/subscribers/export" class="admin-btn-outline">Export CSV</a></div></div>
+      <div class="admin-table-wrap admin-table-wrap-inner"><table class="admin-table is-responsive-stack"><thead><tr><th>Email</th><th>First seen</th><th>Status</th><th></th></tr></thead><tbody id="subscribersTableBody"></tbody></table></div>
+      <div class="admin-pagination"><p id="subscribersPageInfo"></p><div><button type="button" id="subscribersPrev" class="admin-btn-outline admin-btn-sm">← Prev</button><button type="button" id="subscribersNext" class="admin-btn-outline admin-btn-sm">Next →</button></div></div>
+    </section>
   </main>
 </div>
 </body>

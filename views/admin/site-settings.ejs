@@ -8,12 +8,10 @@
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'site-settings' }) %>
   <main class="admin-main">
-    <h1 class="mb-2 font-display text-2xl uppercase tracking-wide text-hc-ink">Site Settings</h1>
-    <p class="mb-6 max-w-2xl text-sm text-gray-500">
-      Feeds the landing page's stats section and every public page's favicon/meta tags. Admin dashboard's own look is unaffected.
-    </p>
+    <section class="admin-page-intro"><div><p class="admin-eyebrow">Public site</p><h1>Site Settings</h1><p>Manage the public metadata, social identity, pricing display, and footer links used across HeartCode. These settings feed the landing page's stats section and every public page's favicon and meta tags.</p></div></section>
+    <div class="admin-settings-grid">
 
-    <div class="admin-card max-w-xl">
+    <div class="admin-card admin-settings-card">
       <form id="siteSettingsForm">
         <h2 class="text-sm font-semibold text-hc-ink">Landing page stats</h2>
         <label class="admin-label" for="manualStatsNumber">Stats number</label>
@@ -67,7 +65,7 @@
          single standalone setting, not part of the bulk site-settings
          form above (which is scoped to the public <head>/landing-page
          values in lib/siteSettings.js's DEFAULTS). -->
-    <div class="admin-card mt-6 max-w-xl">
+    <div class="admin-card admin-settings-card mt-6">
       <h2 class="text-sm font-semibold text-hc-ink">Resend site details: daily limit</h2>
       <p class="mt-1 text-sm text-gray-500">
         Caps how many times a single visitor (by IP) can use the public <a href="/resend-details" class="text-brand-500">/resend-details</a> lookup per day. Kept low by default since this endpoint's job is looking up deployment history by email address.
@@ -87,7 +85,7 @@
          footer links card (views/admin/landing-page.ejs) -- deliberately
          a separate list/table from that one, see lib/footerExtras.js's
          comment for why. -->
-    <div class="admin-card mt-6 max-w-xl">
+    <div class="admin-card admin-settings-card mt-6">
       <h2 class="text-sm font-semibold text-hc-ink">Footer custom links</h2>
       <p class="mt-1 text-sm text-gray-500">Extra links shown in the site-wide public footer, alongside the contact/social links above.</p>
       <form id="addCustomLinkForm" class="mt-2">
@@ -98,6 +96,7 @@
         <button type="submit" class="admin-btn admin-btn-sm mt-2">Add link</button>
       </form>
       <div id="customLinksList" class="mt-4 space-y-2"></div>
+    </div>
     </div>
   </main>
 </div>
