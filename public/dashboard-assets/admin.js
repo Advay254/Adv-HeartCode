@@ -109,7 +109,11 @@
     document.querySelectorAll('[data-nav-toggle]').forEach(function (toggle) {
       toggle.addEventListener('click', function () {
         const panel = document.getElementById(toggle.getAttribute('aria-controls'));
-        const isOpen = toggle.classList.toggle('is-open');
+        // aria-expanded is the single source of truth (rendered
+        // server-side for the active group). Toggling a class on the
+        // button itself meant the first tap on the already-open active
+        // group did nothing.
+        const isOpen = toggle.getAttribute('aria-expanded') !== 'true';
         if (panel) panel.classList.toggle('is-open', isOpen);
         toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       });
