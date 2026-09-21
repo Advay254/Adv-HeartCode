@@ -1665,47 +1665,490 @@
 
   // ---- submissions page (deployments + subscribers) ----
   function initSubmissionsPage() {
-    let deploymentsPage = 1;
-    let deploymentsSearch = '';
-    let subscribersPage = 1;
-    let subscribersSearch = '';
-    let searchDebounceTimer = null;
+    // ======================================================================
+    // Deployments -- "Deployment Center" (v1.2.3)
+    //
+    // Keyset (cursor) pagination: the server hands back an opaque
+    // `nextCursor`, never a page number, so this page can't jump to "page
+    // 40" -- it keeps a stack of the cursors it has seen instead, which is
+    // what makes Previous work without re-deriving anything. The exact
+    // total/revenue comes back only with the FIRST page of a given filter
+    // set (see routes/adminDashboard.js), so it's remembered here rather
+    // than expected on every response.
+    //
+    // Everything user-derived (client_email is typed by the public at
+    // checkout) is rendered with textContent/DOM nodes, never innerHTML.
+    // ======================================================================
+    const API = '/api/admin/dashboard/deployments';
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      search: $('deploymentSearch'), type: $('deploymentTypeFilter'), range: $('deploymentRangeFilter'),
+      sort: $('deploymentSortFilter'), exportLink: $('deploymentExportLink'),
+      customBox: $('deploymentCustomRange'), from: $('deploymentFrom'), to: $('deploymentTo'),
+      activeBox: $('deploymentActiveFilters'), chips: $('deploymentActiveChips'), clear: $('deploymentClearFilters'),
+      body: $('deploymentsTableBody'), summary: $('deploymentsSummary'), info: $('deploymentsPageInfo'),
+      prev: $('deploymentsPrev'), next: $('deploymentsNext'), refresh: $('deploymentsRefresh'), pageSize: $('deploymentPageSize'),
+      drawer: $('deploymentDrawer'), overlay: $('deploymentDrawerOverlay'), drawerTitle: $('deploymentDrawerTitle'),
+      drawerStatus: $('deploymentDrawerStatus'), drawerBody: $('deploymentDrawerBody'), drawerClose: $('deploymentDrawerClose')
+    };
+
+    const RANGE_LABELS = { today: 'Today', yesterday: 'Yesterday', '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', year: 'This year' };
+    const state = { search: '', typeId: '', range: '', from: '', to: '', sort: 'newest', limit: 25 };
+    let cursors = [null];   // cursors[i] is the cursor that fetches page i
+    let pageIndex = 0;
+    let summary = null;
+    let rows = [];
+    let requestSeq = 0;     // ignore responses from superseded requests
+    let searchTimer = null;
+    let typeNames = {};
+    let drawerRef = null;
 
     function formatDate(iso) {
       return new Date(iso).toLocaleString();
     }
-
-    async function loadDeployments() {
-      const url = '/api/admin/dashboard/deployments?page=' + deploymentsPage + '&search=' + encodeURIComponent(deploymentsSearch);
-      const res = await window.adminFetch(url);
-      const data = await res.json();
-
-      function formatDeploymentAmount(d) {
-        // v1.0.6: chargeCurrency/chargeAmount hold the REAL amount actually
-        // charged for deployments from this version onward. Pre-1.0.6 rows
-        // only have the legacy amountUsd figure (from amount_kes, which was
-        // already effectively USD — see routes/adminDashboard.js) with no
-        // real currency on record, shown with an "(est.)" hint instead of
-        // asserting a currency that was never actually recorded.
-        if (d.chargeCurrency && d.chargeAmount !== null) {
-          return `${escapeHtml(d.chargeCurrency)} ${Number(d.chargeAmount).toFixed(2)}`;
-        }
-        return d.amountUsd !== null ? `~$${Number(d.amountUsd).toFixed(2)} (est.)` : 'n/a';
-      }
-
-      document.getElementById('deploymentsTableBody').innerHTML = data.deployments.map(d => `
-        <tr>
-          <td data-label="Client">${escapeHtml(d.clientEmail)}</td>
-          <td data-label="Type">${escapeHtml(d.websiteTypeName || 'n/a')}</td>
-          <td data-label="Site"><a href="${escapeHtml(d.siteUrl)}" target="_blank" rel="noopener" class="text-brand-500 underline">${escapeHtml(d.siteUrl)}</a></td>
-          <td data-label="Amount">${formatDeploymentAmount(d)}</td>
-          <td data-label="Deployed">${formatDate(d.deployedAt)}</td>
-        </tr>`).join('') || '<tr><td colspan="5" data-label="">No deployments yet.</td></tr>';
-
-      document.getElementById('deploymentsPageInfo').textContent = `Page ${data.page} of ${data.totalPages} (${data.total} total)`;
-      document.getElementById('deploymentsPrev').disabled = data.page <= 1;
-      document.getElementById('deploymentsNext').disabled = data.page >= data.totalPages;
+    function formatMoney(n) {
+      return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    function formatDeploymentAmount(d) {
+      // v1.0.6: chargeCurrency/chargeAmount hold the REAL amount actually
+      // charged for deployments from that version onward. Older rows only
+      // have the legacy amountUsd figure (from amount_kes, already
+      // effectively USD -- see routes/adminDashboard.js), shown with an
+      // "(est.)" hint rather than asserting a currency that was never
+      // actually recorded.
+      if (d.chargeCurrency && d.chargeAmount !== null) {
+        return d.chargeCurrency + ' ' + Number(d.chargeAmount).toFixed(2);
+      }
+      return d.amountUsd !== null ? '~' + formatMoney(d.amountUsd) + ' (est.)' : 'n/a';
+    }
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+    function safeHttpUrl(url) {
+      return /^https?:\/\//i.test(url || '') ? url : null;
+    }
+
+    // ---- date range -> the [from, to) instants the API expects ----
+    // Computed in the ADMIN'S OWN timezone, so "Today" means the admin's
+    // today, not UTC's. `to` is exclusive.
+    function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+    function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+    function parseDay(value) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+      if (!m) return null;
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    function rangeBounds() {
+      const today = startOfDay(new Date());
+      switch (state.range) {
+        case 'today': return { from: today, to: addDays(today, 1) };
+        case 'yesterday': return { from: addDays(today, -1), to: today };
+        case '7d': return { from: addDays(today, -6), to: null };
+        case '30d': return { from: addDays(today, -29), to: null };
+        case '90d': return { from: addDays(today, -89), to: null };
+        case 'year': return { from: new Date(today.getFullYear(), 0, 1), to: null };
+        case 'custom': {
+          const f = parseDay(state.from);
+          const t = parseDay(state.to);
+          return { from: f, to: t ? addDays(t, 1) : null };
+        }
+        default: return { from: null, to: null };
+      }
+    }
+    function filterParams() {
+      const p = new URLSearchParams();
+      if (state.search) p.set('search', state.search);
+      if (state.typeId) p.set('typeId', state.typeId);
+      const b = rangeBounds();
+      if (b.from) p.set('from', b.from.toISOString());
+      if (b.to) p.set('to', b.to.toISOString());
+      p.set('sort', state.sort);
+      return p;
+    }
+    function hasActiveFilters() {
+      return !!(state.search || state.typeId || state.range);
+    }
+    function customRangeInvalid() {
+      if (state.range !== 'custom') return false;
+      const f = parseDay(state.from);
+      const t = parseDay(state.to);
+      return !!(f && t && f > t);
+    }
+
+    // ---- URL <-> state (so a filtered view survives a refresh / can be shared) ----
+    function syncUrl() {
+      const p = new URLSearchParams();
+      if (state.search) p.set('q', state.search);
+      if (state.typeId) p.set('type', state.typeId);
+      if (state.range) p.set('range', state.range);
+      if (state.range === 'custom') { if (state.from) p.set('from', state.from); if (state.to) p.set('to', state.to); }
+      if (state.sort !== 'newest') p.set('sort', state.sort);
+      if (state.limit !== 25) p.set('limit', String(state.limit));
+      if (drawerRef) p.set('ref', drawerRef);
+      const qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+    function readUrl() {
+      const p = new URLSearchParams(location.search);
+      state.search = (p.get('q') || '').slice(0, 200);
+      state.typeId = /^\d+$/.test(p.get('type') || '') ? p.get('type') : '';
+      const range = p.get('range') || '';
+      state.range = (range === 'custom' || RANGE_LABELS[range]) ? range : '';
+      state.from = parseDay(p.get('from')) ? p.get('from') : '';
+      state.to = parseDay(p.get('to')) ? p.get('to') : '';
+      state.sort = p.get('sort') === 'oldest' ? 'oldest' : 'newest';
+      state.limit = ['25', '50', '100'].includes(p.get('limit')) ? Number(p.get('limit')) : 25;
+      return p.get('ref');
+    }
+    function applyStateToControls() {
+      els.search.value = state.search;
+      els.type.value = state.typeId;
+      els.range.value = state.range;
+      els.sort.value = state.sort;
+      els.from.value = state.from;
+      els.to.value = state.to;
+      els.pageSize.value = String(state.limit);
+      els.customBox.hidden = state.range !== 'custom';
+    }
+
+    // ---- rendering ----
+    function renderActiveFilters() {
+      els.chips.textContent = '';
+      const add = (label, clearFn) => {
+        const chip = el('button', 'admin-chip', label + ' ✕');
+        chip.type = 'button';
+        chip.setAttribute('aria-label', 'Remove filter: ' + label);
+        chip.addEventListener('click', () => { clearFn(); applyStateToControls(); reload(); });
+        els.chips.appendChild(chip);
+      };
+      if (state.search) add('“' + state.search + '”', () => { state.search = ''; });
+      if (state.typeId) add(typeNames[state.typeId] || 'Type #' + state.typeId, () => { state.typeId = ''; });
+      if (state.range) {
+        const label = state.range === 'custom'
+          ? (state.from || '…') + ' → ' + (state.to || 'now')
+          : RANGE_LABELS[state.range];
+        add(label, () => { state.range = ''; state.from = ''; state.to = ''; });
+      }
+      els.activeBox.hidden = !hasActiveFilters();
+    }
+
+    function renderSummary() {
+      els.summary.textContent = '';
+      if (customRangeInvalid()) { els.summary.textContent = 'The From date must be on or before the To date.'; return; }
+      if (!summary) return;
+      const strong = el('strong', null, summary.total.toLocaleString('en-US'));
+      els.summary.appendChild(strong);
+      els.summary.appendChild(document.createTextNode(
+        (hasActiveFilters() ? ' matching' : ' total') + ' \u00b7 ' + formatMoney(summary.revenueUsd) + ' revenue'
+      ));
+    }
+
+    function renderPagination() {
+      const total = summary ? summary.total : null;
+      if (rows.length === 0) {
+        els.info.textContent = '';
+      } else {
+        const start = pageIndex * state.limit + 1;
+        const end = start + rows.length - 1;
+        els.info.textContent = total !== null
+          ? 'Showing ' + start.toLocaleString('en-US') + '\u2013' + end.toLocaleString('en-US') + ' of ' + total.toLocaleString('en-US')
+          : 'Showing ' + start + '\u2013' + end;
+      }
+      els.prev.disabled = pageIndex === 0;
+      els.next.disabled = !cursors[pageIndex + 1];
+    }
+
+    function messageRow(text) {
+      els.body.textContent = '';
+      const tr = el('tr');
+      const td = el('td', null, text);
+      td.colSpan = 4;
+      td.setAttribute('data-label', '');
+      tr.appendChild(td);
+      els.body.appendChild(tr);
+    }
+
+    function renderRows() {
+      if (rows.length === 0) {
+        messageRow(hasActiveFilters() ? 'No deployments match these filters.' : 'No deployments yet.');
+        return;
+      }
+      els.body.textContent = '';
+      rows.forEach((d) => {
+        const tr = el('tr');
+        tr.dataset.ref = d.reference;
+
+        const customer = el('td'); customer.setAttribute('data-label', 'Customer');
+        const link = el('button', 'admin-row-link', d.clientEmail);
+        link.type = 'button';
+        link.setAttribute('aria-label', 'View deployment for ' + d.clientEmail);
+        customer.appendChild(link);
+
+        const site = el('td', null, d.websiteTypeName || 'n/a'); site.setAttribute('data-label', 'Website');
+        const amount = el('td', null, formatDeploymentAmount(d)); amount.setAttribute('data-label', 'Amount');
+        const when = el('td', null, formatDate(d.deployedAt)); when.setAttribute('data-label', 'Deployed');
+
+        tr.append(customer, site, amount, when);
+        els.body.appendChild(tr);
+      });
+    }
+
+    function updateExportLink() {
+      const p = filterParams();
+      els.exportLink.href = API + '/export?' + p.toString();
+    }
+
+    // ---- loading ----
+    async function loadDeployments() {
+      const seq = ++requestSeq;
+      els.body.classList.add('is-loading');
+      if (customRangeInvalid()) {
+        rows = []; summary = null;
+        cursors = [null];
+        renderSummary(); renderPagination();
+        messageRow('Choose a valid date range.');
+        els.body.classList.remove('is-loading');
+        return;
+      }
+      const p = filterParams();
+      p.set('limit', String(state.limit));
+      if (cursors[pageIndex]) p.set('cursor', cursors[pageIndex]);
+      try {
+        const res = await window.adminFetch(API + '?' + p.toString());
+        if (seq !== requestSeq) return;
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (seq !== requestSeq) return;
+        if (data.summary) summary = data.summary;
+        cursors[pageIndex + 1] = data.nextCursor || null;
+        rows = data.deployments;
+        renderRows(); renderSummary(); renderPagination();
+      } catch (err) {
+        if (seq !== requestSeq) return;
+        rows = [];
+        messageRow('Could not load deployments (' + err.message + '). Reload the page or sign in again.');
+        els.info.textContent = '';
+        els.prev.disabled = pageIndex === 0;
+        els.next.disabled = true;
+      } finally {
+        if (seq === requestSeq) els.body.classList.remove('is-loading');
+      }
+    }
+
+    // Any change to the filter set starts over from the first page.
+    function reload() {
+      cursors = [null];
+      pageIndex = 0;
+      summary = null;
+      updateExportLink();
+      renderActiveFilters();
+      renderSummary();
+      syncUrl();
+      loadDeployments();
+    }
+
+    // ---- filter controls ----
+    els.search.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { state.search = els.search.value.trim(); reload(); }, 300);
+    });
+    els.search.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { clearTimeout(searchTimer); state.search = els.search.value.trim(); reload(); }
+    });
+    els.type.addEventListener('change', () => { state.typeId = els.type.value; reload(); });
+    els.range.addEventListener('change', () => {
+      state.range = els.range.value;
+      els.customBox.hidden = state.range !== 'custom';
+      if (state.range !== 'custom') { state.from = ''; state.to = ''; els.from.value = ''; els.to.value = ''; }
+      reload();
+    });
+    els.from.addEventListener('change', () => { state.from = els.from.value; reload(); });
+    els.to.addEventListener('change', () => { state.to = els.to.value; reload(); });
+    els.sort.addEventListener('change', () => { state.sort = els.sort.value; reload(); });
+    els.pageSize.addEventListener('change', () => { state.limit = Number(els.pageSize.value); reload(); });
+    els.clear.addEventListener('click', () => {
+      state.search = ''; state.typeId = ''; state.range = ''; state.from = ''; state.to = '';
+      applyStateToControls();
+      reload();
+    });
+    els.refresh.addEventListener('click', reload);
+    els.prev.addEventListener('click', () => { if (pageIndex > 0) { pageIndex--; loadDeployments(); } });
+    els.next.addEventListener('click', () => { if (cursors[pageIndex + 1]) { pageIndex++; loadDeployments(); } });
+
+    // ---- detail drawer ----
+    let drawerTrigger = null;
+    let drawerSeq = 0;
+
+    function copyButton(value, label) {
+      const btn = el('button', 'admin-btn-outline admin-btn-sm', 'Copy');
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Copy ' + label);
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          btn.textContent = 'Copied';
+        } catch (_err) {
+          btn.textContent = 'Copy failed';
+        }
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      });
+      return btn;
+    }
+
+    function detailGroup(label, ...content) {
+      const group = el('div', 'admin-detail-group');
+      group.appendChild(el('dt', null, label));
+      const dd = el('dd');
+      content.forEach((c) => dd.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+      group.appendChild(dd);
+      return group;
+    }
+
+    function renderDrawer(d) {
+      els.drawerTitle.textContent = d.websiteTypeName || 'Unknown website type';
+      els.drawerStatus.hidden = false;
+      els.drawerBody.textContent = '';
+      const dl = el('dl', 'admin-detail-list');
+
+      dl.appendChild(detailGroup('Payment reference', el('span', 'admin-detail-mono', d.reference)));
+      dl.lastChild.querySelector('dd').appendChild(el('div', 'admin-drawer-actions')).appendChild(copyButton(d.reference, 'payment reference'));
+
+      const customer = detailGroup('Customer', d.clientEmail);
+      customer.querySelector('dd').appendChild(el('div', 'admin-drawer-actions')).appendChild(copyButton(d.clientEmail, 'customer email'));
+      dl.appendChild(customer);
+
+      const wt = detailGroup('Website type', d.websiteTypeName || 'Unknown (type no longer exists)');
+      if (d.websiteTypeSlug) wt.querySelector('dd').appendChild(el('div', 'admin-detail-sub', '/build/' + d.websiteTypeSlug));
+      dl.appendChild(wt);
+
+      const pay = detailGroup('Payment', formatDeploymentAmount(d));
+      if (d.chargeCurrency && d.chargeCurrency !== 'USD' && d.amountUsd !== null) {
+        pay.querySelector('dd').appendChild(el('div', 'admin-detail-sub', '\u2248 ' + formatMoney(d.amountUsd) + ' USD'));
+      }
+      dl.appendChild(pay);
+
+      const when = detailGroup('Deployed', new Date(d.deployedAt).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'medium' }));
+      when.querySelector('dd').appendChild(el('div', 'admin-detail-sub', new Date(d.deployedAt).toISOString()));
+      dl.appendChild(when);
+
+      const url = safeHttpUrl(d.siteUrl);
+      const site = detailGroup('Site', el('span', 'admin-detail-mono', d.siteUrl));
+      if (d.deployedSlug) site.querySelector('dd').appendChild(el('div', 'admin-detail-sub', 'Slug: ' + d.deployedSlug));
+      if (url) {
+        const actions = el('div', 'admin-drawer-actions');
+        const open = el('a', 'admin-btn admin-btn-sm', 'Open site');
+        open.href = url; open.target = '_blank'; open.rel = 'noopener noreferrer';
+        actions.append(open, copyButton(d.siteUrl, 'site URL'));
+        site.querySelector('dd').appendChild(actions);
+      }
+      dl.appendChild(site);
+
+      dl.appendChild(detailGroup('Access', d.hasPassword ? 'Password protected' : 'Public (no password)'));
+      els.drawerBody.appendChild(dl);
+    }
+
+    function drawerMessage(text) {
+      els.drawerTitle.textContent = 'Deployment';
+      els.drawerStatus.hidden = true;
+      els.drawerBody.textContent = '';
+      els.drawerBody.appendChild(el('p', 'admin-detail-sub', text));
+    }
+
+    function focusables() {
+      return Array.from(els.drawer.querySelectorAll('a[href], button:not([disabled])')).filter(n => !n.hidden);
+    }
+    function onDrawerKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); closeDrawer(); return; }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) { e.preventDefault(); els.drawer.focus(); return; }
+      const first = items[0]; const last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === els.drawer)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    async function openDrawer(reference, trigger) {
+      const seq = ++drawerSeq;
+      drawerRef = reference;
+      drawerTrigger = trigger || drawerTrigger;
+      els.drawer.hidden = false;
+      els.overlay.hidden = false;
+      document.body.classList.add('admin-drawer-open');
+      requestAnimationFrame(() => { els.drawer.classList.add('is-open'); els.overlay.classList.add('is-open'); });
+      document.addEventListener('keydown', onDrawerKey);
+      els.drawerTitle.textContent = 'Loading\u2026';
+      els.drawerStatus.hidden = true;
+      els.drawerBody.textContent = '';
+      els.drawerClose.focus();
+      syncUrl();
+      try {
+        const res = await window.adminFetch(API + '/' + encodeURIComponent(reference));
+        if (seq !== drawerSeq) return;
+        if (res.status === 404) { drawerMessage('This deployment could not be found.'); return; }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (seq !== drawerSeq) return;
+        renderDrawer(data.deployment);
+      } catch (err) {
+        if (seq === drawerSeq) drawerMessage('Could not load this deployment (' + err.message + ').');
+      }
+    }
+
+    function closeDrawer() {
+      if (els.drawer.hidden) return;
+      drawerSeq++;
+      drawerRef = null;
+      els.drawer.classList.remove('is-open');
+      els.overlay.classList.remove('is-open');
+      document.body.classList.remove('admin-drawer-open');
+      document.removeEventListener('keydown', onDrawerKey);
+      syncUrl();
+      const trigger = drawerTrigger;
+      drawerTrigger = null;
+      setTimeout(() => {
+        if (drawerRef) return; // reopened during the close animation
+        els.drawer.hidden = true;
+        els.overlay.hidden = true;
+        if (trigger && document.body.contains(trigger)) trigger.focus();
+      }, 220);
+    }
+
+    els.body.addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-ref]');
+      if (!tr) return;
+      openDrawer(tr.dataset.ref, tr.querySelector('.admin-row-link') || tr);
+    });
+    els.drawerClose.addEventListener('click', closeDrawer);
+    els.overlay.addEventListener('click', closeDrawer);
+
+    // ---- website-type filter options ----
+    async function loadTypeFilter() {
+      try {
+        const res = await window.adminFetch(API + '/facets');
+        if (!res.ok) return;
+        const data = await res.json();
+        data.websiteTypes.forEach((t) => {
+          typeNames[String(t.id)] = t.name;
+          const opt = el('option', null, t.name);
+          opt.value = String(t.id);
+          els.type.appendChild(opt);
+        });
+        els.type.value = state.typeId;
+        renderActiveFilters();
+      } catch (_err) { /* the filter simply stays at "All types" */ }
+    }
+
+    // ======================================================================
+    // Subscribers (unchanged behaviour; still simple page/OFFSET paging,
+    // which is fine for a list that grows far more slowly than deployments)
+    // ======================================================================
+    let subscribersPage = 1;
+    let subscribersSearch = '';
+    let subscribersTimer = null;
 
     async function loadSubscribers() {
       const url = '/api/admin/dashboard/subscribers?page=' + subscribersPage + '&search=' + encodeURIComponent(subscribersSearch);
@@ -1737,29 +2180,13 @@
       });
     }
 
-    document.getElementById('deploymentSearch').addEventListener('input', (e) => {
-      clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => {
-        deploymentsSearch = e.target.value;
-        deploymentsPage = 1;
-        loadDeployments();
-      }, 300);
-    });
-
     document.getElementById('subscriberSearch').addEventListener('input', (e) => {
-      clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => {
+      clearTimeout(subscribersTimer);
+      subscribersTimer = setTimeout(() => {
         subscribersSearch = e.target.value;
         subscribersPage = 1;
         loadSubscribers();
       }, 300);
-    });
-
-    document.getElementById('deploymentsPrev').addEventListener('click', () => {
-      if (deploymentsPage > 1) { deploymentsPage--; loadDeployments(); }
-    });
-    document.getElementById('deploymentsNext').addEventListener('click', () => {
-      deploymentsPage++; loadDeployments();
     });
     document.getElementById('subscribersPrev').addEventListener('click', () => {
       if (subscribersPage > 1) { subscribersPage--; loadSubscribers(); }
@@ -1768,8 +2195,15 @@
       subscribersPage++; loadSubscribers();
     });
 
+    // ---- boot ----
+    const initialRef = readUrl();
+    applyStateToControls();
+    updateExportLink();
+    renderActiveFilters();
+    loadTypeFilter();
     loadDeployments();
     loadSubscribers();
+    if (initialRef) openDrawer(initialRef, null);
   }
 
   // ---- recovery page (v1.1.0 Part A) ----
