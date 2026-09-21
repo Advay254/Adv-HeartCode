@@ -8,34 +8,28 @@
 <div class="admin-shell">
   <%- include('../../partials/nav', { activePage: 'website-types' }) %>
   <main class="admin-main">
-    <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink">Website Types</h1>
-
-    <div class="admin-card max-w-xl">
-      <h2 class="text-sm font-semibold text-hc-ink">Add website type</h2>
-      <form id="addTypeForm">
-        <label class="admin-label" for="typeName">Name</label>
-        <input class="admin-input" type="text" name="name" id="typeName" required>
-        <label class="admin-label" for="typeSlug">Slug (optional, auto-generated from name if left blank)</label>
-        <input class="admin-input" type="text" name="slug" id="typeSlug">
-        <label class="admin-label" for="typeDescription">Description</label>
-        <textarea class="admin-textarea" name="description" id="typeDescription"></textarea>
-        <label class="admin-label" for="typePriceUsd">Price (USD)</label>
-        <input class="admin-input" type="number" name="priceUsd" id="typePriceUsd" value="0" min="0" step="0.01">
-        <label class="admin-label" for="typeIconName">Icon</label>
-        <select class="admin-select" name="iconName" id="typeIconName">
-          <% iconNames.forEach(function (name) { %><option value="<%= name %>"><%= name %></option><% }); %>
-        </select>
-        <button type="submit" class="admin-btn mt-3">Add website type</button>
-      </form>
-      <p id="addStatus" class="admin-msg" style="display:none;"></p>
-    </div>
-
-    <div class="admin-table-wrap mt-6">
-      <table class="admin-table is-responsive-stack">
-        <thead><tr><th>Name</th><th>Status</th><th>Fields</th><th>Template</th><th>Price</th><th></th></tr></thead>
-        <tbody id="typesTableBody"></tbody>
-      </table>
-    </div>
+    <section class="admin-page-intro">
+      <div><p class="admin-eyebrow">Content catalog</p><h1>Website Types</h1><p>Control the website types customers can choose when they build a HeartCode site.</p></div>
+    </section>
+    <section class="admin-split-grid">
+      <div class="admin-card admin-sticky-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Create</p><h2>Add website type</h2></div></div>
+        <form id="addTypeForm">
+          <label class="admin-label" for="typeName">Name</label><input class="admin-input" type="text" name="name" id="typeName" required>
+          <label class="admin-label" for="typeSlug">Slug <span>(optional)</span></label><input class="admin-input" type="text" name="slug" id="typeSlug">
+          <label class="admin-label" for="typeDescription">Description</label><textarea class="admin-textarea" name="description" id="typeDescription"></textarea>
+          <div class="admin-form-grid-2"><div><label class="admin-label" for="typePriceUsd">Price (USD)</label><input class="admin-input" type="number" name="priceUsd" id="typePriceUsd" value="0" min="0" step="0.01"></div><div><label class="admin-label" for="typeIconName">Icon</label><select class="admin-select" name="iconName" id="typeIconName"><% iconNames.forEach(function (name) { %><option value="<%= name %>"><%= name %></option><% }); %></select></div></div>
+          <button type="submit" class="admin-btn mt-4">Add website type</button>
+        </form>
+        <p id="addStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Catalog</p><h2>Existing types</h2></div></div>
+        <div class="admin-table-wrap admin-table-wrap-inner">
+          <table class="admin-table is-responsive-stack"><thead><tr><th>Name</th><th>Status</th><th>Fields</th><th>Template</th><th>Price</th><th></th></tr></thead><tbody id="typesTableBody"></tbody></table>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 </body>
