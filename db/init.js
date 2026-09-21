@@ -1241,9 +1241,73 @@ CREATE TABLE IF NOT EXISTS custom_footer_links (
   url TEXT NOT NULL,
   display_order INTEGER DEFAULT 0
 );
+
+-- v1.2.3 (Deployment Center): deployed_sites was created with only its
+-- primary key and the UNIQUE(reference) constraint -- fine at a few dozen
+-- rows, but the admin's Deployments page is a chronological feed with
+-- keyset (cursor) pagination now, and that only stays cheap if the exact
+-- ordering it walks is indexed. Both indexes end in (deployed_at DESC,
+-- id DESC) because that is precisely the sort the feed uses (id is the
+-- tie-breaker for rows sharing a timestamp -- see lib/deploymentQueries.js).
+-- A btree can also be scanned backwards, so these serve the "oldest first"
+-- sort too. The (website_type_id, ...) one serves the type filter without
+-- re-sorting. IF NOT EXISTS keeps this idempotent on every boot.
+CREATE INDEX IF NOT EXISTS idx_deployed_sites_deployed_at_id
+  ON deployed_sites (deployed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_deployed_sites_type_deployed_at_id
+  ON deployed_sites (website_type_id, deployed_at DESC, id DESC);
+
+-- deployed_at has always had a DEFAULT NOW() and every insert path relies
+-- on it, so no NULL should exist -- but the column was never declared NOT
+-- NULL, and keyset pagination compares (deployed_at, id) row values, which
+-- silently drops a row whose deployed_at is NULL. Tighten it ONLY if that
+-- is provably safe right now; if any NULL exists, leave the column alone
+-- rather than failing boot (the same "never let a new constraint turn a
+-- successful init into a failed one" rule as the NOT VALID note on
+-- landing_sections_section_type_check above).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM deployed_sites WHERE deployed_at IS NULL) THEN
+    ALTER TABLE deployed_sites ALTER COLUMN deployed_at SET NOT NULL;
+  END IF;
+END $$;
 `;
 
-const CURRENT_VERSION = '1.2.2';
+const CURRENT_VERSION = '1.2.3';
+
+/**
+ * v1.2.3: trigram indexes for the Deployments page's partial-match search
+ * (client_email / reference / site_url ILIKE '%term%'), which a plain btree
+ * can never serve. Deliberately NOT part of the MIGRATIONS string above:
+ * MIGRATIONS runs as one multi-statement query, so a failing statement in
+ * it aborts boot entirely -- and CREATE EXTENSION can legitimately fail on
+ * a managed Postgres whose role isn't allowed to install extensions.
+ * Search still works without these indexes (it just scans the table, which
+ * is fine at small scale), so failure here is logged and swallowed; the
+ * indexes appear automatically on the first boot where the extension is
+ * installable. Every statement is IF NOT EXISTS, so this is idempotent.
+ */
+async function ensureSearchIndexes(db) {
+  try {
+    await db.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+  } catch (err) {
+    console.warn(
+      '[DB] pg_trgm extension unavailable -- Deployments search will still work but scans the table instead of using a trigram index (non-fatal):',
+      err.message
+    );
+    return;
+  }
+  try {
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS idx_deployed_sites_client_email_trgm ON deployed_sites USING gin (client_email gin_trgm_ops);
+       CREATE INDEX IF NOT EXISTS idx_deployed_sites_reference_trgm ON deployed_sites USING gin (reference gin_trgm_ops);
+       CREATE INDEX IF NOT EXISTS idx_deployed_sites_site_url_trgm ON deployed_sites USING gin (site_url gin_trgm_ops)`
+    );
+    console.log('[DB] Deployment search indexes ready.');
+  } catch (err) {
+    console.warn('[DB] Could not create trigram search indexes (non-fatal):', err.message);
+  }
+}
 
 /**
  * Runs schema + migrations, then records the current schema_version once.
@@ -1265,6 +1329,8 @@ async function initDB() {
     console.log('[DB] Running migrations...');
     await db.query(MIGRATIONS);
     console.log('[DB] Migrations ready.');
+
+    await ensureSearchIndexes(db);
 
     // v1.1.6 INCIDENT DIAGNOSTIC: purely informational, never blocks boot
     // (see db/init.js's NOT VALID comment on landing_sections_section_type_check
