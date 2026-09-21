@@ -8,8 +8,17 @@
 <div class="admin-shell">
   <%- include('../../partials/nav', { activePage: 'website-types' }) %>
   <main class="admin-main">
-    <p class="mb-2"><a href="/<%= slug %>/website-types" class="text-sm text-brand-500">← All website types</a></p>
-    <h1 class="mb-6 font-display text-2xl uppercase tracking-wide text-hc-ink"><%= websiteType.name %></h1>
+    <a href="/<%= slug %>/website-types" class="admin-backlink"><%- getIconSvg('chevron-right') %> All website types</a>
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Website type</p>
+        <h1><%= websiteType.name %></h1>
+        <div class="admin-meta-row"><span class="admin-meta-chip"><code>/build/<%= websiteType.slug %></code></span></div>
+      </div>
+      <div class="admin-page-actions">
+        <a href="/build/<%= websiteType.slug %>" target="_blank" rel="noopener" class="admin-btn-outline" title="Only reachable while this type is active">Open public page</a>
+      </div>
+    </section>
 
     <div class="admin-tabs">
       <button type="button" class="admin-tab-btn active" data-tab="details">Details</button>
@@ -20,221 +29,303 @@
       <button type="button" class="admin-tab-btn" data-tab="password-page">Password Page</button>
     </div>
 
+    <!-- ============ Details ============ -->
     <section id="tab-details" class="tab-panel">
-      <div class="admin-card max-w-xl">
+      <div class="admin-card admin-ed-narrow">
         <form id="detailsForm">
-          <label class="admin-label" for="detailsName">Name</label>
-          <input class="admin-input" type="text" name="name" id="detailsName" value="<%= websiteType.name %>" required>
-          <label class="admin-label" for="detailsDescription">Description</label>
-          <textarea class="admin-textarea" name="description" id="detailsDescription"><%= websiteType.description %></textarea>
-          <label class="admin-label" for="detailsPriceUsd">Price (USD)</label>
-          <input class="admin-input" type="number" name="priceUsd" id="detailsPriceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01">
-          <label class="admin-label" for="detailsDemoUrl">Live demo link <span class="font-normal text-gray-400">(optional)</span></label>
-          <input class="admin-input" type="text" name="demoUrl" id="detailsDemoUrl" value="<%= websiteType.demo_url || '' %>" placeholder="e.g. https://example.com/portfolio-demo">
-          <p class="mt-1 text-xs text-gray-500">
-            If set, a "Preview" button appears next to "Build this" on this type's /explore card, linking here in a new tab. Leave blank to show just "Build this" as before.
-          </p>
-          <label class="admin-label" for="detailsIconName">Icon</label>
-          <select class="admin-select" name="iconName" id="detailsIconName">
-            <% iconNames.forEach(function (name) { %><option value="<%= name %>" <%= websiteType.icon_name === name ? 'selected' : '' %>><%= name %></option><% }); %>
-          </select>
-          <label class="admin-label" for="detailsDisplayOrder">Display order</label>
-          <input class="admin-input" type="number" name="displayOrder" id="detailsDisplayOrder" value="<%= websiteType.display_order %>">
-          <label class="admin-label" for="detailsCategoryId">Category</label>
-          <select class="admin-select" name="categoryId" id="detailsCategoryId">
-            <option value="">None</option>
-            <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= websiteType.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }); %>
-          </select>
-          <label class="admin-checkbox-label"><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
+          <div class="admin-form-section">
+            <h3>Basics</h3>
+            <label class="admin-label" for="detailsName">Name</label>
+            <input class="admin-input" type="text" name="name" id="detailsName" value="<%= websiteType.name %>" required>
+            <label class="admin-label" for="detailsDescription">Description</label>
+            <textarea class="admin-textarea" name="description" id="detailsDescription"><%= websiteType.description %></textarea>
+            <div class="admin-form-grid-2">
+              <div>
+                <label class="admin-label" for="detailsPriceUsd">Price (USD)</label>
+                <input class="admin-input" type="number" name="priceUsd" id="detailsPriceUsd" value="<%= websiteType.price_usd %>" min="0" step="0.01">
+              </div>
+              <div>
+                <label class="admin-label" for="detailsDisplayOrder">Display order</label>
+                <input class="admin-input" type="number" name="displayOrder" id="detailsDisplayOrder" value="<%= websiteType.display_order %>">
+              </div>
+              <div>
+                <label class="admin-label" for="detailsIconName">Icon</label>
+                <select class="admin-select" name="iconName" id="detailsIconName">
+                  <% iconNames.forEach(function (name) { %><option value="<%= name %>" <%= websiteType.icon_name === name ? 'selected' : '' %>><%= name %></option><% }); %>
+                </select>
+              </div>
+              <div>
+                <label class="admin-label" for="detailsCategoryId">Category</label>
+                <select class="admin-select" name="categoryId" id="detailsCategoryId">
+                  <option value="">None</option>
+                  <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= websiteType.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }); %>
+                </select>
+              </div>
+            </div>
+            <label class="admin-checkbox-label"><input type="checkbox" name="isActive" <%= websiteType.is_active ? 'checked' : '' %>> Active (visible on public site)</label>
+          </div>
 
-          <h2 class="mt-5 text-sm font-semibold text-hc-ink">Custom deploy slug</h2>
-          <p class="mt-1 text-xs text-gray-500">
-            Optional. Leave blank to keep the default random slug. Use <code>{{field_key}}</code> for a raw field's submitted value,
-            <code>{{random}}</code> / <code>{{random:N}}</code> for N random letters+digits, <code>{{random:numbers:N}}</code> for N digits,
-            <code>{{random:letters:N}}</code> for N letters. Example: <code>happybirthday-from{{user_name}}-to{{recepient_name}}</code>.
-          </p>
-          <label class="admin-label" for="detailsDeploySlugPattern">Pattern</label>
-          <input class="admin-input font-mono" type="text" name="deploySlugPattern" id="detailsDeploySlugPattern" value="<%= websiteType.deploy_slug_pattern || '' %>" placeholder="e.g. happybirthday-from{{user_name}}-to{{recepient_name}}">
+          <div class="admin-form-section">
+            <h3>Live demo</h3>
+            <p class="admin-form-hint">
+              If set, a "Preview" button appears next to "Build this" on this type's /explore card, linking here in a new tab. Leave blank to show just "Build this" as before.
+            </p>
+            <label class="admin-label" for="detailsDemoUrl">Live demo link <span class="font-normal text-gray-400">(optional)</span></label>
+            <input class="admin-input" type="text" name="demoUrl" id="detailsDemoUrl" value="<%= websiteType.demo_url || '' %>" placeholder="e.g. https://example.com/portfolio-demo">
+          </div>
 
-          <h2 class="mt-5 text-sm font-semibold text-hc-ink">SEO overrides <span class="font-normal text-gray-400">(optional)</span></h2>
-          <p class="mt-1 text-xs text-gray-500">
-            Lets this type's <code>/build/<%= websiteType.slug %></code> page target its own specific search intent, e.g. "Birthday Website Generator", instead of your site's generic title. Leave blank to keep using your site-wide title/description (Site Settings page) for this type.
-          </p>
-          <label class="admin-label" for="detailsSeoTitle">Page title override</label>
-          <input class="admin-input" type="text" name="seoTitle" id="detailsSeoTitle" value="<%= websiteType.seo_title || '' %>" placeholder="e.g. Birthday Website Generator">
-          <label class="admin-label" for="detailsSeoDescription">Meta description override</label>
-          <textarea class="admin-textarea" name="seoDescription" id="detailsSeoDescription" placeholder="e.g. Build a custom birthday website in minutes: pick a style, add your details, and share a link."><%= websiteType.seo_description || '' %></textarea>
+          <div class="admin-form-section">
+            <h3>Custom deploy slug</h3>
+            <p class="admin-form-hint">
+              Optional. Leave blank to keep the default random slug. Use <code>{{field_key}}</code> for a raw field's submitted value,
+              <code>{{random}}</code> / <code>{{random:N}}</code> for N random letters+digits, <code>{{random:numbers:N}}</code> for N digits,
+              <code>{{random:letters:N}}</code> for N letters. Example: <code>happybirthday-from{{user_name}}-to{{recepient_name}}</code>.
+            </p>
+            <label class="admin-label" for="detailsDeploySlugPattern">Pattern</label>
+            <input class="admin-input font-mono" type="text" name="deploySlugPattern" id="detailsDeploySlugPattern" value="<%= websiteType.deploy_slug_pattern || '' %>" placeholder="e.g. happybirthday-from{{user_name}}-to{{recepient_name}}">
+          </div>
 
-          <button type="submit" class="admin-btn mt-4">Save details</button>
-        </form>
-        <p id="detailsStatus" class="admin-msg" style="display:none;"></p>
-      </div>
-    </section>
+          <div class="admin-form-section">
+            <h3>SEO overrides <span class="font-normal text-gray-400">(optional)</span></h3>
+            <p class="admin-form-hint">
+              Lets this type's <code>/build/<%= websiteType.slug %></code> page target its own specific search intent, e.g. "Birthday Website Generator", instead of your site's generic title. Leave blank to keep using your site-wide title/description (Site Settings page) for this type.
+            </p>
+            <label class="admin-label" for="detailsSeoTitle">Page title override</label>
+            <input class="admin-input" type="text" name="seoTitle" id="detailsSeoTitle" value="<%= websiteType.seo_title || '' %>" placeholder="e.g. Birthday Website Generator">
+            <label class="admin-label" for="detailsSeoDescription">Meta description override</label>
+            <textarea class="admin-textarea" name="seoDescription" id="detailsSeoDescription" placeholder="e.g. Build a custom birthday website in minutes: pick a style, add your details, and share a link."><%= websiteType.seo_description || '' %></textarea>
+          </div>
 
-    <section id="tab-fields" class="tab-panel" style="display:none;">
-      <div class="admin-card max-w-xl">
-        <h2 id="fieldFormHeading" class="text-sm font-semibold text-hc-ink">Add field</h2>
-        <form id="addFieldForm">
-          <label class="admin-label" for="fieldKeyInput">Field key (letters, numbers, underscore only)</label>
-          <input class="admin-input" type="text" name="fieldKey" id="fieldKeyInput" required pattern="[a-z0-9_]+">
-          <p class="mt-1 text-xs text-gray-500">
-            Used as <code>{{field_key}}</code> in the Template/AI/Email tabs. Changing this on an existing field won't update any place that already references the old key. You'll be asked to confirm.
-          </p>
-          <label class="admin-label" for="fieldLabelInput">Label</label>
-          <input class="admin-input" type="text" name="fieldLabel" id="fieldLabelInput" required>
-          <label class="admin-label" for="fieldTypeSelect">Type</label>
-          <select class="admin-select" name="fieldType" id="fieldTypeSelect">
-            <option value="text">Text</option>
-            <option value="textarea">Textarea</option>
-            <option value="email">Email</option>
-            <option value="password">Password</option>
-            <option value="number">Number</option>
-            <option value="date">Date</option>
-            <option value="dropdown">Dropdown (pick one)</option>
-            <option value="radio">Radio buttons (pick one)</option>
-            <option value="checkboxes">Checkboxes (pick multiple)</option>
-          </select>
-          <label class="admin-label" for="fieldPlaceholderInput">Placeholder text</label>
-          <input class="admin-input" type="text" name="placeholderText" id="fieldPlaceholderInput">
-          <label class="admin-label" id="dropdownOptionsRow" for="fieldDropdownOptions" style="display:none;">Options (comma-separated)</label>
-          <input class="admin-input" type="text" name="dropdownOptions" id="fieldDropdownOptions" style="display:none;">
-          <label class="admin-checkbox-label"><input type="checkbox" name="isRequired" checked> Required</label>
-          <div class="mt-3 flex gap-2">
-            <button type="submit" id="fieldSubmitBtn" class="admin-btn">Add field</button>
-            <button type="button" id="cancelFieldEditBtn" class="admin-btn-outline" style="display:none;">Cancel</button>
+          <div class="admin-form-actions is-sticky">
+            <button type="submit" class="admin-btn">Save details</button>
+            <p id="detailsStatus" class="admin-msg" style="display:none;"></p>
           </div>
         </form>
-        <p id="fieldFormStatus" class="admin-msg" style="display:none;"></p>
-      </div>
-      <div class="admin-table-wrap mt-6">
-        <table class="admin-table is-responsive-stack">
-          <thead><tr><th>Order</th><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
-          <tbody id="fieldsTableBody"></tbody>
-        </table>
       </div>
     </section>
 
+    <!-- ============ Fields ============ -->
+    <section id="tab-fields" class="tab-panel" style="display:none;">
+      <div class="admin-split-grid">
+        <div class="admin-card admin-sticky-card">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Form builder</p><h2 id="fieldFormHeading">Add field</h2></div></div>
+          <form id="addFieldForm">
+            <label class="admin-label" for="fieldKeyInput">Field key (letters, numbers, underscore only)</label>
+            <input class="admin-input" type="text" name="fieldKey" id="fieldKeyInput" required pattern="[a-z0-9_]+">
+            <p class="mt-1 text-xs text-gray-500">
+              Used as <code>{{field_key}}</code> in the Template/AI/Email tabs. Changing this on an existing field won't update any place that already references the old key. You'll be asked to confirm.
+            </p>
+            <label class="admin-label" for="fieldLabelInput">Label</label>
+            <input class="admin-input" type="text" name="fieldLabel" id="fieldLabelInput" required>
+            <label class="admin-label" for="fieldTypeSelect">Type</label>
+            <select class="admin-select" name="fieldType" id="fieldTypeSelect">
+              <option value="text">Text</option>
+              <option value="textarea">Textarea</option>
+              <option value="email">Email</option>
+              <option value="password">Password</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="dropdown">Dropdown (pick one)</option>
+              <option value="radio">Radio buttons (pick one)</option>
+              <option value="checkboxes">Checkboxes (pick multiple)</option>
+            </select>
+            <label class="admin-label" for="fieldPlaceholderInput">Placeholder text</label>
+            <input class="admin-input" type="text" name="placeholderText" id="fieldPlaceholderInput">
+            <label class="admin-label" id="dropdownOptionsRow" for="fieldDropdownOptions" style="display:none;">Options (comma-separated)</label>
+            <input class="admin-input" type="text" name="dropdownOptions" id="fieldDropdownOptions" style="display:none;">
+            <label class="admin-checkbox-label"><input type="checkbox" name="isRequired" checked> Required</label>
+            <div class="admin-form-actions">
+              <button type="submit" id="fieldSubmitBtn" class="admin-btn">Add field</button>
+              <button type="button" id="cancelFieldEditBtn" class="admin-btn-outline" style="display:none;">Cancel</button>
+              <p id="fieldFormStatus" class="admin-msg" style="display:none;"></p>
+            </div>
+          </form>
+        </div>
+        <div class="admin-card">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Client form</p><h2>Fields</h2></div></div>
+          <div class="admin-table-wrap admin-table-wrap-inner">
+            <table class="admin-table is-responsive-stack">
+              <thead><tr><th>Order</th><th>Key</th><th>Label</th><th>Type</th><th>Required</th><th></th></tr></thead>
+              <tbody id="fieldsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ AI ============ -->
     <section id="tab-ai" class="tab-panel" style="display:none;">
-      <div class="admin-card max-w-xl">
+      <div class="admin-card admin-ed-narrow">
         <label class="admin-checkbox-label"><input type="checkbox" id="aiEnabledToggle"> Use AI for this website type</label>
-        <p class="mt-2 text-xs text-gray-500">
+        <p class="admin-form-hint mt-2">
           Off (default): form submissions go straight to the template using the raw values a client typed. No AI call, no cost.
           On: the raw values are sent to your configured AI provider first, using the prompt and output fields below, and the AI's response fills the template instead.
         </p>
       </div>
 
       <div id="aiConfigSection" style="display:none;">
-        <div class="admin-card mt-6 max-w-xl">
-          <p class="text-sm text-gray-500">Available raw field tokens: <span id="aiAvailableFields" class="font-mono text-xs">none</span></p>
-          <label class="admin-label" for="aiSystemPrompt">System prompt</label>
-          <textarea class="admin-textarea" id="aiSystemPrompt" placeholder="You are a copywriting engine for a bakery's website..."></textarea>
-          <label class="admin-label" for="aiUserPromptTemplate">User prompt template</label>
-          <textarea class="admin-textarea" id="aiUserPromptTemplate" placeholder="Client's raw input, vibe: {{vibe_description}}, business name: {{business_name}}"></textarea>
-          <button type="button" id="saveAiConfigBtn" class="admin-btn mt-3">Save AI configuration</button>
-          <p id="aiConfigStatus" class="admin-msg" style="display:none;"></p>
+        <div class="admin-split-grid mt-6">
+          <div class="admin-card">
+            <div class="admin-section-heading"><div><p class="admin-eyebrow">Prompt</p><h2>AI configuration</h2></div></div>
+            <p class="admin-form-hint">Available raw field tokens: <span id="aiAvailableFields" class="font-mono text-xs">none</span></p>
+            <label class="admin-label" for="aiSystemPrompt">System prompt</label>
+            <textarea class="admin-textarea" id="aiSystemPrompt" placeholder="You are a copywriting engine for a bakery's website..."></textarea>
+            <label class="admin-label" for="aiUserPromptTemplate">User prompt template</label>
+            <textarea class="admin-textarea" id="aiUserPromptTemplate" placeholder="Client's raw input, vibe: {{vibe_description}}, business name: {{business_name}}"></textarea>
+            <div class="admin-form-actions">
+              <button type="button" id="saveAiConfigBtn" class="admin-btn">Save AI configuration</button>
+              <p id="aiConfigStatus" class="admin-msg" style="display:none;"></p>
+            </div>
+          </div>
+
+          <div class="admin-card">
+            <div class="admin-section-heading"><div><p class="admin-eyebrow">Structured output</p><h2>Add output field</h2></div></div>
+            <p class="admin-form-hint">These describe exactly what structured JSON to request from the AI. Each becomes a placeholder usable in the Template tab.</p>
+            <form id="addOutputFieldForm">
+              <label class="admin-label" for="outputKeyInput">Output key (letters, numbers, underscore only)</label>
+              <input class="admin-input" type="text" name="outputKey" id="outputKeyInput" required pattern="[a-z0-9_]+">
+              <label class="admin-label" for="outputTypeSelect">Type</label>
+              <select class="admin-select" name="outputType" id="outputTypeSelect">
+                <option value="string">Text (single value)</option>
+                <option value="array_of_strings">List of texts</option>
+                <option value="array_of_objects">List of objects</option>
+              </select>
+              <label class="admin-label" for="outputDescriptionInput">Description (guidance for the AI on what to generate)</label>
+              <input class="admin-input" type="text" name="description" id="outputDescriptionInput">
+              <label class="admin-label" id="objectShapeRow" for="objectShapeKeysInput" style="display:none;">Object shape keys (comma-separated, e.g. title, caption)</label>
+              <input class="admin-input" type="text" name="objectShapeKeys" id="objectShapeKeysInput" style="display:none;">
+              <div class="admin-form-actions"><button type="submit" class="admin-btn">Add output field</button></div>
+            </form>
+          </div>
         </div>
 
-        <div class="admin-card mt-6 max-w-xl">
-          <h2 class="text-sm font-semibold text-hc-ink">Add output field</h2>
-          <p class="mt-1 text-xs text-gray-500">These describe exactly what structured JSON to request from the AI. Each becomes a placeholder usable in the Template tab.</p>
-          <form id="addOutputFieldForm">
-            <label class="admin-label" for="outputKeyInput">Output key (letters, numbers, underscore only)</label>
-            <input class="admin-input" type="text" name="outputKey" id="outputKeyInput" required pattern="[a-z0-9_]+">
-            <label class="admin-label" for="outputTypeSelect">Type</label>
-            <select class="admin-select" name="outputType" id="outputTypeSelect">
-              <option value="string">Text (single value)</option>
-              <option value="array_of_strings">List of texts</option>
-              <option value="array_of_objects">List of objects</option>
-            </select>
-            <label class="admin-label" for="outputDescriptionInput">Description (guidance for the AI on what to generate)</label>
-            <input class="admin-input" type="text" name="description" id="outputDescriptionInput">
-            <label class="admin-label" id="objectShapeRow" for="objectShapeKeysInput" style="display:none;">Object shape keys (comma-separated, e.g. title, caption)</label>
-            <input class="admin-input" type="text" name="objectShapeKeys" id="objectShapeKeysInput" style="display:none;">
-            <button type="submit" class="admin-btn mt-3">Add output field</button>
+        <div class="admin-card mt-6">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Structured output</p><h2>Output fields</h2></div></div>
+          <div class="admin-table-wrap admin-table-wrap-inner">
+            <table class="admin-table is-responsive-stack">
+              <thead><tr><th>Placeholder</th><th>Type</th><th>Description</th><th></th></tr></thead>
+              <tbody id="outputFieldsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Template ============ -->
+    <section id="tab-template" class="tab-panel" style="display:none;">
+      <div class="admin-ed-grid">
+        <div class="admin-card">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Site markup</p><h2>Template</h2></div></div>
+          <form id="templateForm">
+            <label class="admin-label" for="templateFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
+            <input class="admin-input" type="file" id="templateFileInput" accept=".txt,.html,text/plain,text/html">
+            <label class="admin-label" for="htmlContent">HTML content (current version: <span id="currentVersion">none</span>)</label>
+            <textarea class="admin-textarea admin-code-area min-h-[16rem] font-mono text-xs" id="htmlContent"></textarea>
+            <div class="admin-form-actions">
+              <button type="submit" class="admin-btn">Save new version</button>
+              <p id="templateStatus" class="admin-msg" style="display:none;"></p>
+            </div>
           </form>
         </div>
-        <div class="admin-table-wrap mt-6">
+        <aside class="admin-card admin-ed-aside">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Reference</p><h2>Placeholders</h2></div></div>
+          <div class="admin-ref"><p>Available placeholders: <span id="availablePlaceholders" class="font-mono text-xs">none</span></p></div>
+        </aside>
+      </div>
+
+      <div class="admin-card mt-6">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">History</p><h2>Version history</h2></div></div>
+        <div class="admin-table-wrap admin-table-wrap-inner">
           <table class="admin-table is-responsive-stack">
-            <thead><tr><th>Placeholder</th><th>Type</th><th>Description</th><th></th></tr></thead>
-            <tbody id="outputFieldsTableBody"></tbody>
+            <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+            <tbody id="historyTableBody"></tbody>
           </table>
         </div>
       </div>
     </section>
 
-    <section id="tab-template" class="tab-panel" style="display:none;">
-      <div class="admin-card max-w-2xl">
-        <p class="text-sm text-gray-500">Available placeholders: <span id="availablePlaceholders" class="font-mono text-xs">none</span></p>
-        <form id="templateForm">
-          <label class="admin-label" for="templateFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
-          <input class="admin-input" type="file" id="templateFileInput" accept=".txt,.html,text/plain,text/html">
-          <label class="admin-label" for="htmlContent">HTML content (current version: <span id="currentVersion">none</span>)</label>
-          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="htmlContent"></textarea>
-          <button type="submit" class="admin-btn mt-3">Save new version</button>
-        </form>
-        <p id="templateStatus" class="admin-msg" style="display:none;"></p>
-      </div>
-      <div class="admin-table-wrap mt-6">
-        <table class="admin-table is-responsive-stack">
-          <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
-          <tbody id="historyTableBody"></tbody>
-        </table>
-      </div>
-    </section>
-
+    <!-- ============ Email ============ -->
     <section id="tab-email" class="tab-panel" style="display:none;">
-      <div class="admin-card max-w-2xl">
-        <p class="text-sm text-gray-500">Available variables: <span id="availableEmailPlaceholders" class="font-mono text-xs">none</span></p>
-        <p class="mt-2 text-xs text-gray-500">
-          <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>, and <code>site_password</code>
-          are always available (a field or AI output with the same name can't override them). There's no conditional syntax yet. A template that
-          always prints <code>Password: {{site_password}}</code> will show a blank password line for sites with no password set.
-          Loop syntax (<code>{{#each field}}...{{/each}}</code>) only works in the HTML body, not the subject line.
-          Leave this tab untouched to keep sending the original generic "your site is ready" email.
-        </p>
-        <form id="emailTemplateForm">
-          <label class="admin-label" for="emailSubject">Subject (current version: <span id="currentEmailVersion">none</span>)</label>
-          <input class="admin-input" type="text" id="emailSubject" required>
-          <label class="admin-label" for="emailBodyFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
-          <input class="admin-input" type="file" id="emailBodyFileInput" accept=".txt,.html,text/plain,text/html">
-          <label class="admin-label" for="emailHtmlBody">HTML body</label>
-          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="emailHtmlBody"></textarea>
-          <button type="submit" class="admin-btn mt-3">Save new version</button>
-        </form>
-        <p id="emailTemplateStatus" class="admin-msg" style="display:none;"></p>
+      <div class="admin-ed-grid">
+        <div class="admin-card">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Delivery email</p><h2>Email template</h2></div></div>
+          <form id="emailTemplateForm">
+            <label class="admin-label" for="emailSubject">Subject (current version: <span id="currentEmailVersion">none</span>)</label>
+            <input class="admin-input" type="text" id="emailSubject" required>
+            <label class="admin-label" for="emailBodyFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
+            <input class="admin-input" type="file" id="emailBodyFileInput" accept=".txt,.html,text/plain,text/html">
+            <label class="admin-label" for="emailHtmlBody">HTML body</label>
+            <textarea class="admin-textarea admin-code-area min-h-[16rem] font-mono text-xs" id="emailHtmlBody"></textarea>
+            <div class="admin-form-actions">
+              <button type="submit" class="admin-btn">Save new version</button>
+              <p id="emailTemplateStatus" class="admin-msg" style="display:none;"></p>
+            </div>
+          </form>
+        </div>
+        <aside class="admin-card admin-ed-aside">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Reference</p><h2>Variables</h2></div></div>
+          <div class="admin-ref">
+            <p>Available variables: <span id="availableEmailPlaceholders" class="font-mono text-xs">none</span></p>
+            <p>
+              <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>, and <code>site_password</code>
+              are always available (a field or AI output with the same name can't override them). There's no conditional syntax yet. A template that
+              always prints <code>Password: {{site_password}}</code> will show a blank password line for sites with no password set.
+            </p>
+            <p>Loop syntax (<code>{{#each field}}...{{/each}}</code>) only works in the HTML body, not the subject line.</p>
+            <p>Leave this tab untouched to keep sending the original generic "your site is ready" email.</p>
+          </div>
+        </aside>
       </div>
-      <div class="admin-table-wrap mt-6">
-        <table class="admin-table is-responsive-stack">
-          <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
-          <tbody id="emailHistoryTableBody"></tbody>
-        </table>
+
+      <div class="admin-card mt-6">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">History</p><h2>Version history</h2></div></div>
+        <div class="admin-table-wrap admin-table-wrap-inner">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+            <tbody id="emailHistoryTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
+    <!-- ============ Password page ============ -->
     <section id="tab-password-page" class="tab-panel" style="display:none;">
-      <div class="admin-card max-w-2xl">
-        <p class="text-sm text-gray-500">
-          Available placeholders: <span class="font-mono text-xs">{{website_type_name}}, {{password_input_and_button}}</span>
-        </p>
-        <p class="mt-2 text-xs text-gray-500">
-          This page renders BEFORE any site content unlocks, so it only has these two tokens, not the full field/AI set the Template tab has.
-          <code>{{password_input_and_button}}</code> is a fixed functional element (the actual password input, submit button, and check logic are
-          always code-controlled for correctness): design everything else around it. Leave this tab untouched to keep using the original generic gate design.
-        </p>
-        <form id="passwordPageForm">
-          <label class="admin-label" for="passwordPageFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
-          <input class="admin-input" type="file" id="passwordPageFileInput" accept=".txt,.html,text/plain,text/html">
-          <label class="admin-label" for="passwordPageHtmlContent">HTML content (current version: <span id="currentPasswordPageVersion">none</span>)</label>
-          <textarea class="admin-textarea min-h-[16rem] font-mono text-xs" id="passwordPageHtmlContent" placeholder="e.g. <div style=&quot;text-align:center;padding:2rem;&quot;><h2>{{website_type_name}} is locked</h2>{{password_input_and_button}}</div>"></textarea>
-          <button type="submit" class="admin-btn mt-3">Save new version</button>
-        </form>
-        <p id="passwordPageStatus" class="admin-msg" style="display:none;"></p>
+      <div class="admin-ed-grid">
+        <div class="admin-card">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Locked-site gate</p><h2>Password page</h2></div></div>
+          <form id="passwordPageForm">
+            <label class="admin-label" for="passwordPageFileInput">Or upload a .txt/.html file (fills the box below, nothing is saved until you click "Save new version")</label>
+            <input class="admin-input" type="file" id="passwordPageFileInput" accept=".txt,.html,text/plain,text/html">
+            <label class="admin-label" for="passwordPageHtmlContent">HTML content (current version: <span id="currentPasswordPageVersion">none</span>)</label>
+            <textarea class="admin-textarea admin-code-area min-h-[16rem] font-mono text-xs" id="passwordPageHtmlContent" placeholder="e.g. <div style=&quot;text-align:center;padding:2rem;&quot;><h2>{{website_type_name}} is locked</h2>{{password_input_and_button}}</div>"></textarea>
+            <div class="admin-form-actions">
+              <button type="submit" class="admin-btn">Save new version</button>
+              <p id="passwordPageStatus" class="admin-msg" style="display:none;"></p>
+            </div>
+          </form>
+        </div>
+        <aside class="admin-card admin-ed-aside">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Reference</p><h2>Placeholders</h2></div></div>
+          <div class="admin-ref">
+            <p>Available placeholders: <span class="font-mono text-xs">{{website_type_name}}, {{password_input_and_button}}</span></p>
+            <p>
+              This page renders BEFORE any site content unlocks, so it only has these two tokens, not the full field/AI set the Template tab has.
+              <code>{{password_input_and_button}}</code> is a fixed functional element (the actual password input, submit button, and check logic are
+              always code-controlled for correctness): design everything else around it.
+            </p>
+            <p>Leave this tab untouched to keep using the original generic gate design.</p>
+          </div>
+        </aside>
       </div>
-      <div class="admin-table-wrap mt-6">
-        <table class="admin-table is-responsive-stack">
-          <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
-          <tbody id="passwordPageHistoryTableBody"></tbody>
-        </table>
+
+      <div class="admin-card mt-6">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">History</p><h2>Version history</h2></div></div>
+        <div class="admin-table-wrap admin-table-wrap-inner">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+            <tbody id="passwordPageHistoryTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
