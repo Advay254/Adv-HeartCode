@@ -8,12 +8,68 @@
 <div class="admin-shell">
   <%- include('../partials/nav', { activePage: 'submissions' }) %>
   <main class="admin-main">
-    <section class="admin-page-intro"><div><p class="admin-eyebrow">Commerce</p><h1>Deployments &amp; Subscribers</h1><p>Search completed deployments and manage the people who have subscribed to HeartCode updates.</p></div></section>
-    <section class="admin-card admin-data-section">
-      <div class="admin-section-heading"><div><p class="admin-eyebrow">Orders</p><h2>Deployments</h2></div><div class="admin-search"><input type="text" id="deploymentSearch" placeholder="Search email, reference, or site URL" aria-label="Search deployments"></div></div>
-      <div class="admin-table-wrap admin-table-wrap-inner"><table class="admin-table is-responsive-stack"><thead><tr><th>Client</th><th>Type</th><th>Site</th><th>Amount</th><th>Deployed</th></tr></thead><tbody id="deploymentsTableBody"></tbody></table></div>
-      <div class="admin-pagination"><p id="deploymentsPageInfo"></p><div><button type="button" id="deploymentsPrev" class="admin-btn-outline admin-btn-sm">← Prev</button><button type="button" id="deploymentsNext" class="admin-btn-outline admin-btn-sm">Next →</button></div></div>
+    <section class="admin-page-intro"><div><p class="admin-eyebrow">Commerce</p><h1>Deployments &amp; Subscribers</h1><p>Search, filter and inspect completed deployments, and manage the people who have subscribed to HeartCode updates.</p></div></section>
+    <section class="admin-card admin-data-section" id="deploymentsSection">
+      <div class="admin-section-heading">
+        <div><p class="admin-eyebrow">Orders</p><h2>Deployments</h2></div>
+        <div class="admin-summary" id="deploymentsSummary" aria-live="polite"></div>
+      </div>
+
+      <div class="admin-filter-bar" role="search">
+        <div class="admin-search"><input type="search" id="deploymentSearch" placeholder="Search email, reference, or site URL" aria-label="Search deployments" autocomplete="off"></div>
+        <select class="admin-select" id="deploymentTypeFilter" aria-label="Filter by website type"><option value="">All types</option></select>
+        <select class="admin-select" id="deploymentRangeFilter" aria-label="Filter by date">
+          <option value="">Any time</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+          <option value="year">This year</option>
+          <option value="custom">Custom range…</option>
+        </select>
+        <select class="admin-select" id="deploymentSortFilter" aria-label="Sort order">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+        </select>
+        <a href="/api/admin/dashboard/deployments/export" class="admin-btn-outline" id="deploymentExportLink" download>Export CSV</a>
+      </div>
+
+      <div class="admin-filter-custom" id="deploymentCustomRange" hidden>
+        <label>From <input type="date" id="deploymentFrom" class="admin-input"></label>
+        <label>To <input type="date" id="deploymentTo" class="admin-input"></label>
+      </div>
+
+      <div class="admin-active-filters" id="deploymentActiveFilters" hidden>
+        <span>Filtered by</span>
+        <span id="deploymentActiveChips" class="admin-chip-row"></span>
+        <button type="button" class="admin-link-btn" id="deploymentClearFilters">Clear filters</button>
+      </div>
+
+      <div class="admin-table-wrap admin-table-wrap-inner"><table class="admin-table is-responsive-stack"><thead><tr><th>Customer</th><th>Website</th><th>Amount</th><th>Deployed</th></tr></thead><tbody id="deploymentsTableBody"></tbody></table></div>
+      <div class="admin-pagination">
+        <p id="deploymentsPageInfo"></p>
+        <div class="admin-pagination-controls">
+          <label class="admin-page-size">Rows <select class="admin-select" id="deploymentPageSize" aria-label="Rows per page"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
+          <button type="button" id="deploymentsRefresh" class="admin-btn-outline admin-btn-sm" aria-label="Refresh deployments">Refresh</button>
+          <button type="button" id="deploymentsPrev" class="admin-btn-outline admin-btn-sm">← Previous</button>
+          <button type="button" id="deploymentsNext" class="admin-btn-outline admin-btn-sm">Next →</button>
+        </div>
+      </div>
     </section>
+
+    <div class="admin-drawer-overlay" id="deploymentDrawerOverlay" hidden></div>
+    <aside class="admin-drawer" id="deploymentDrawer" role="dialog" aria-modal="true" aria-labelledby="deploymentDrawerTitle" tabindex="-1" hidden>
+      <div class="admin-drawer-head">
+        <div>
+          <p class="admin-eyebrow">Deployment</p>
+          <h2 id="deploymentDrawerTitle">Loading…</h2>
+          <span class="admin-badge admin-badge-active" id="deploymentDrawerStatus" hidden>Deployed</span>
+        </div>
+        <button type="button" class="admin-btn-outline admin-btn-sm" id="deploymentDrawerClose" aria-label="Close deployment details">Close ✕</button>
+      </div>
+      <div class="admin-drawer-body" id="deploymentDrawerBody"></div>
+    </aside>
     <section class="admin-card admin-data-section mt-6">
       <div class="admin-section-heading"><div><p class="admin-eyebrow">Audience</p><h2>Subscribers</h2></div><div class="admin-section-actions"><div class="admin-search"><input type="text" id="subscriberSearch" placeholder="Search email" aria-label="Search subscribers"></div><a href="/api/admin/dashboard/subscribers/export" class="admin-btn-outline">Export CSV</a></div></div>
       <div class="admin-table-wrap admin-table-wrap-inner"><table class="admin-table is-responsive-stack"><thead><tr><th>Email</th><th>First seen</th><th>Status</th><th></th></tr></thead><tbody id="subscribersTableBody"></tbody></table></div>
