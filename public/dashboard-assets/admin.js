@@ -3043,7 +3043,7 @@
           <button type="button" class="admin-btn admin-btn-sm save-edit">Save changes</button>
           <button type="button" class="admin-btn-outline admin-btn-sm cancel-edit">Cancel</button>
         </div>`;
-      attachCharCounter(row.querySelector('[data-field="metaDescription"]'));
+      attachCharCounter(row.querySelector('[data-field="metaDescription"]'), 160);
       const typeSelect = row.querySelector('[data-field="targetWebsiteTypeId"]');
       const noneOpt = document.createElement('option');
       noneOpt.value = '';
@@ -3238,7 +3238,7 @@
     window.HC_SEO_PAGE_WEBSITE_TYPES = Array.from(document.getElementById('seoPageTargetType').options)
       .filter(o => o.value)
       .map(o => ({ id: o.value, name: o.textContent }));
-    attachCharCounter(document.getElementById('seoPageMetaDescription'));
+    attachCharCounter(document.getElementById('seoPageMetaDescription'), 160);
 
     load();
   }
