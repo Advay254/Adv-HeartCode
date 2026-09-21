@@ -1152,3 +1152,99 @@
 @media (max-width: 480px) {
   .admin-stat-grid { grid-template-columns:1fr; }
 }
+
+/* ==========================================================================
+   Admin editor system (v1.2.3)
+   One shared vocabulary for every management page (Website Type detail,
+   FAQ, SEO Pages, Explore Footer, Categories, Legal Pages, ...): page
+   intro -> optional callout/help -> create-or-edit card + content panel.
+   No element ids, form names, or JS hooks are affected by anything below;
+   these are layout/visual classes only.
+   ========================================================================== */
+.admin-card { --admin-card-pad: 20px; }
+@media (min-width: 768px) { .admin-card { --admin-card-pad: 24px; } }
+
+.admin-backlink { display:inline-flex; align-items:center; gap:6px; margin-bottom:12px; color:#667085; font-size:13px; font-weight:650; text-decoration:none; }
+.admin-backlink:hover { color:#183fad; }
+.admin-backlink svg { width:14px; height:14px; transform:rotate(180deg); }
+
+.admin-meta-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
+.admin-meta-chip { display:inline-flex; align-items:center; padding:3px 9px; border:1px solid #e4e7ec; border-radius:999px; background:#fff; color:#475467; font-size:12px; font-weight:600; }
+.admin-meta-chip code { background:none; padding:0; font-size:12px; color:inherit; }
+
+.admin-callout { display:block; margin-bottom:22px; padding:12px 16px; border:1px solid #d6e4f7; border-radius:12px; background:#f3f8fe; color:#1d3f7a; font-size:13px; line-height:1.6; }
+.admin-callout a { color:#183fad; font-weight:650; text-decoration:underline; }
+.admin-callout.is-warn { border-color:#fedf89; background:#fffaeb; color:#93370d; }
+.admin-callout code, .admin-help code, .admin-form-hint code, .admin-ref code { padding:1px 5px; border-radius:5px; background:rgba(16,24,40,.06); color:inherit; font-size:12px; }
+
+.admin-help { margin-bottom:22px; border:1px solid #e4e7ec; border-radius:12px; background:#fff; }
+.admin-help > summary { display:flex; align-items:center; gap:8px; padding:12px 16px; color:#344054; font-size:13px; font-weight:650; cursor:pointer; list-style:none; }
+.admin-help > summary::-webkit-details-marker { display:none; }
+.admin-help > summary::after { content:'Show'; margin-left:auto; color:#667085; font-size:12px; font-weight:600; }
+.admin-help[open] > summary::after { content:'Hide'; }
+.admin-help-body { padding:0 16px 14px; color:#667085; font-size:13px; line-height:1.7; }
+.admin-help-body p { margin:0 0 8px; }
+.admin-help-body p:last-child { margin-bottom:0; }
+.admin-help-body a { color:#183fad; text-decoration:underline; }
+
+.admin-list-panel > .admin-section-heading { margin-bottom:12px; }
+.admin-entry-list { display:grid; gap:12px; }
+.admin-entry-list > .admin-card { padding:16px 18px; transition:border-color .15s ease; }
+.admin-entry-list > .admin-card:hover { border-color:#d0d5dd; }
+.admin-entry-list > p:only-child { margin:0; padding:32px 20px; border:1px dashed #d0d5dd; border-radius:14px; background:#fff; color:#98a2b3; font-size:13px; text-align:center; }
+.admin-entry-list [id^="editRow-"], .admin-entry-list [id^="contentRow-"] { padding-top:14px; border-top:1px dashed #e4e7ec; }
+
+.admin-form-section { padding:22px 0; border-top:1px solid #eef0f3; }
+.admin-form-section:first-child { padding-top:0; border-top:0; }
+.admin-form-section > h3 { margin:0 0 4px; color:#101828; font-size:14px; font-weight:750; }
+.admin-form-hint { margin:0 0 14px; color:#667085; font-size:12.5px; line-height:1.65; }
+.admin-form-hint + .admin-label, .admin-form-section > h3 + .admin-label { margin-top:0; }
+.admin-form-grid-2 + .admin-form-grid-2, .admin-form-section > .admin-form-grid-2 { margin-top:0; }
+.admin-form-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px 12px; margin-top:20px; }
+.admin-form-actions .admin-msg { margin:0; }
+.admin-form-actions.is-sticky { position:sticky; bottom:0; z-index:5; margin:24px calc(var(--admin-card-pad) * -1) calc(var(--admin-card-pad) * -1); padding:14px var(--admin-card-pad); border-top:1px solid #eef0f3; border-radius:0 0 16px 16px; background:rgba(255,255,255,.96); backdrop-filter:blur(8px); }
+.admin-form-legacy { margin-top:16px; border:1px dashed #d0d5dd; border-radius:12px; }
+.admin-form-legacy > summary { padding:10px 14px; color:#667085; font-size:12.5px; font-weight:650; cursor:pointer; }
+.admin-form-legacy > div { padding:0 14px 14px; }
+
+.admin-code-area { min-height:26rem; }
+.admin-ed-narrow { max-width:920px; }
+.admin-ed-grid { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,.75fr); gap:24px; align-items:start; }
+.admin-ed-aside { position:sticky; top:96px; }
+.admin-ref { color:#475467; font-size:13px; line-height:1.7; }
+.admin-ref p { margin:0 0 10px; }
+.admin-ref p:last-child { margin-bottom:0; }
+.admin-ref .font-mono { display:block; margin-top:6px; padding:8px 10px; border-radius:8px; background:#f9fafb; color:#344054; overflow-wrap:anywhere; }
+.admin-two-col { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start; }
+.admin-sticky-card { max-height:calc(100vh - 116px); overflow-y:auto; }
+
+.admin-tabs { display:flex; gap:4px; margin:0 0 22px; padding:0; border-bottom:1px solid #e4e7ec; overflow-x:auto; scrollbar-width:none; }
+.admin-tabs::-webkit-scrollbar { display:none; }
+.admin-tab-btn { flex:none; margin-bottom:-1px; padding:11px 14px; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:#667085; font-size:13px; font-weight:650; white-space:nowrap; }
+.admin-tab-btn:hover { color:#101828; }
+.admin-tab-btn.active { border-bottom-color:#183fad; background:transparent; color:#183fad; }
+
+@media (max-width: 1100px) {
+  .admin-ed-grid, .admin-two-col { grid-template-columns:1fr; }
+  .admin-ed-aside { position:static; order:-1; }
+  .admin-sticky-card { max-height:none; overflow-y:visible; }
+}
+@media (max-width: 700px) {
+  .admin-form-actions.is-sticky { margin-bottom:calc(var(--admin-card-pad) * -1); }
+  .admin-tab-btn { padding:10px 12px; }
+}
+
+/* Entry cards (FAQ / Categories / SEO Pages): the inline Edit and Content
+   editors that admin.js opens inside a card used to be squeezed into the
+   narrow text column beside the action buttons. From 640px up, lay each
+   card out as a grid so the text sits beside the buttons but any open
+   editor row spans the card's full width. (admin.js markup is unchanged;
+   `display: contents` lifts the text column's children into the grid.) */
+@media (min-width: 640px) {
+  .admin-entry-list > .admin-card > .flex { display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:16px; row-gap:0; align-items:start; }
+  #faqList > .admin-card > .flex, #categoriesList > .admin-card > .flex { grid-template-columns:auto minmax(0,1fr) auto; }
+  .admin-entry-list > .admin-card > .flex > .min-w-0 { display:contents; }
+  .admin-entry-list > .admin-card > .flex > .shrink-0:last-child { grid-column:-2 / -1; grid-row:1 / span 2; }
+  .admin-entry-list > .admin-card > .flex > .shrink-0:first-child:not(:last-child) { grid-column:1; grid-row:1 / span 2; }
+  .admin-entry-list [id^="editRow-"], .admin-entry-list [id^="contentRow-"] { grid-column:1 / -1; margin-top:14px; }
+}
