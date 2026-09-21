@@ -4,6 +4,8 @@ const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
+const { createRateLimiter } = require('../lib/rateLimit');
+const dq = require('../lib/deploymentQueries');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -73,58 +75,126 @@ router.get('/stats', asyncHandler(async (req, res) => {
   });
 }));
 
+// ---- Deployments (v1.2.3: Deployment Center) ----
+//
+// Replaces the old page/OFFSET endpoint. The list is keyset-paginated (see
+// lib/deploymentQueries.js for why), filterable by search / website type /
+// date range, and returns the exact count + revenue for the current filter
+// only on the FIRST page (no cursor) -- paging through the same result set
+// doesn't re-count it every time.
+//
+// Route order matters here: '/deployments/export' and '/deployments/facets'
+// MUST be registered before '/deployments/:reference', or Express would
+// treat the literal words "export"/"facets" as a reference (the same shadowing class of bug the reorder
+// routes elsewhere in this app were fixed for).
+
 router.get('/deployments', asyncHandler(async (req, res) => {
-  const parsed = paginationSchema.safeParse(req.query);
+  const parsed = dq.listQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid query parameters' });
   }
-  const { page, search } = parsed.data;
-
-  const pool = getPool();
-  const params = [];
-  let whereClause = '';
-  if (search) {
-    params.push(`%${search}%`);
-    whereClause = 'WHERE ds.client_email ILIKE $1 OR ds.reference ILIKE $1 OR ds.site_url ILIKE $1';
+  const { limit, cursor: cursorToken, ...filters } = parsed.data;
+  const rangeError = dq.validateRange(filters);
+  if (rangeError) {
+    return res.status(400).json({ error: rangeError });
   }
 
-  const countResult = await pool.query(`SELECT COUNT(*) FROM deployed_sites ds ${whereClause}`, params);
-  const total = Number(countResult.rows[0].count);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const offset = (page - 1) * PAGE_SIZE;
+  let cursor = null;
+  if (cursorToken) {
+    cursor = dq.decodeCursor(cursorToken, filters.sort);
+    if (!cursor) {
+      return res.status(400).json({ error: 'Invalid cursor' });
+    }
+  }
 
-  const dataResult = await pool.query(
-    `SELECT ds.reference, ds.client_email, ds.site_url, ds.amount_kes,
-            ds.charge_currency, ds.charge_amount, ds.charge_amount_usd,
-            ds.deployed_at, wt.name AS website_type_name
-     FROM deployed_sites ds
-     LEFT JOIN website_types wt ON wt.id = ds.website_type_id
-     ${whereClause}
-     ORDER BY ds.deployed_at DESC
-     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-    [...params, PAGE_SIZE, offset]
-  );
+  const pool = getPool();
+  const [page, summary] = await Promise.all([
+    dq.fetchPage(pool, filters, { limit, cursor }),
+    cursor ? Promise.resolve(null) : dq.fetchSummary(pool, filters)
+  ]);
 
   res.json({
-    deployments: dataResult.rows.map(d => ({
-      reference: d.reference,
-      clientEmail: d.client_email,
-      siteUrl: d.site_url,
-      websiteTypeName: d.website_type_name,
-      // v1.0.6: chargeCurrency/chargeAmount are the REAL amount actually
-      // charged (null for pre-1.0.6 rows, which only have the legacy
-      // amount_kes figure). amountUsd is the unified USD-equivalent figure
-      // used for revenue totals regardless of which era the row is from —
-      // see the /stats route above for the same COALESCE reasoning.
-      chargeCurrency: d.charge_currency,
-      chargeAmount: d.charge_amount !== null ? Number(d.charge_amount) : null,
-      amountUsd: d.charge_amount_usd !== null ? Number(d.charge_amount_usd) : (d.amount_kes !== null ? Number(d.amount_kes) : null),
-      deployedAt: d.deployed_at
-    })),
-    page,
-    totalPages,
-    total
+    deployments: page.rows.map(dq.mapDeployment),
+    nextCursor: page.nextCursor,
+    limit,
+    summary
   });
+}));
+
+// Website types for the Deployments page's filter dropdown. Includes inactive
+// types on purpose: a deactivated type can still own past deployments.
+router.get('/deployments/facets', asyncHandler(async (req, res) => {
+  const result = await getPool().query(
+    'SELECT id, name FROM website_types ORDER BY display_order ASC, id ASC'
+  );
+  res.json({ websiteTypes: result.rows.map(t => ({ id: t.id, name: t.name })) });
+}));
+
+// A full export can be large, so it's rate limited harder than ordinary
+// admin GETs and streamed in keyset batches (never loaded into memory).
+const deploymentExportLimiter = createRateLimiter({ max: 6, windowMs: 60 * 1000 });
+
+router.get('/deployments/export', asyncHandler(async (req, res) => {
+  if (!deploymentExportLimiter.tryConsume(req.ip || 'unknown')) {
+    return res.status(429).json({ error: 'Too many exports. Wait a minute and try again.' });
+  }
+  const parsed = dq.filtersSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid query parameters' });
+  }
+  const filters = parsed.data;
+  const rangeError = dq.validateRange(filters);
+  if (rangeError) {
+    return res.status(400).json({ error: rangeError });
+  }
+
+  const pool = getPool();
+  let closed = false;
+  res.on('close', () => { closed = true; });
+
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="deployments-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+
+  try {
+    // UTF-8 BOM so Excel doesn't mangle non-ASCII characters in emails.
+    res.write('\uFEFF' + dq.CSV_HEADER + '\r\n');
+    for await (const rows of dq.iterateAll(pool, filters)) {
+      if (closed) return; // the admin cancelled the download; stop querying
+      const chunk = rows.map(r => dq.csvLine(dq.mapDeployment(r))).join('\r\n') + '\r\n';
+      if (!res.write(chunk)) {
+        // Respect backpressure, but never wait on a socket that has gone away.
+        await new Promise(resolve => {
+          res.once('drain', resolve);
+          res.once('close', resolve);
+        });
+      }
+    }
+    res.end();
+  } catch (err) {
+    // Headers are already on the wire, so the global JSON error handler
+    // can't respond any more. Cut the connection so the browser sees a
+    // failed download instead of a silently truncated file that looks whole.
+    console.error('[ADMIN] Deployment export failed mid-stream:', err.message);
+    res.destroy(err);
+  }
+}));
+
+const referenceParamSchema = z.object({
+  reference: z.string().trim().min(1).max(200)
+});
+
+router.get('/deployments/:reference', asyncHandler(async (req, res) => {
+  const parsed = referenceParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid reference' });
+  }
+  const row = await dq.fetchOne(getPool(), parsed.data.reference);
+  if (!row) {
+    return res.status(404).json({ error: 'Deployment not found' });
+  }
+  res.json({ deployment: dq.mapDeployment(row) });
 }));
 
 router.get('/subscribers', asyncHandler(async (req, res) => {
