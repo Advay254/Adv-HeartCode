@@ -1,122 +1,143 @@
-<!-- v1.0.8 Part D: mobile top bar (hamburger + brand), sidebar (desktop:
-     always visible, sticky; mobile: off-canvas drawer toggled by the
-     hamburger, see public/dashboard-assets/admin.js's initNav), and the
-     mobile backdrop overlay.
-
-     v1.1.7 (TailAdmin visual redesign): the top bar is now a persistent
-     header at every breakpoint (not just mobile) carrying a session
-     indicator + logout — see src/styles/admin.css's own comment on
-     .admin-topbar for why the right-hand side is scoped to just that
-     (no search bar, no notification bell, no multi-user profile menu:
-     none of that exists in this single-admin app). The sidebar's nav is
-     now grouped into collapsible accordion sections (Content / Revenue /
-     System) instead of a flat list under static group labels — same
-     three groupings as before, just collapsible now, plus a fourth page
-     (Landing Sections) that existed in the app already but had no nav
-     entry at all until now; it's filed under Content next to the two
-     pages that link to it. The group containing the current page starts
-     expanded (rendered server-side below, not computed by JS) so there's
-     no flash of a collapsed-then-expanding menu on load.
-
-     v1.1.8 (redo, exact structures): every nav link/toggle below now uses
-     TailAdmin's own literal .menu-item / .menu-item-active / .menu-item-
-     inactive / .menu-item-icon-active / .menu-item-icon-inactive /
-     .menu-item-arrow-active / .menu-item-arrow-inactive class names
-     (defined in src/styles/admin.css, ported verbatim from TailAdmin's
-     src/index.css) in place of v1.1.7's own admin-nav-link / admin-nav-
-     group-toggle / admin-nav-group-chevron names — same behavior, the
-     literal reference class names this redo's build brief specifically
-     asks for. Sub-items use TailAdmin's separate .menu-dropdown-item
-     family, also verbatim. -->
 <%
   const navGroups = [
     {
       label: 'Content',
+      icon: 'layout-template',
       items: [
-        { page: 'website-types', href: `/${slug}/website-types`, icon: 'layout-template', label: 'Website Types' },
-        { page: 'landing-sections', href: `/${slug}/landing-sections`, icon: 'sparkles', label: 'Landing Sections' },
-        { page: 'landing-page', href: `/${slug}/landing-page`, icon: 'globe', label: 'Landing Page' },
-        { page: 'seo-pages', href: `/${slug}/seo-pages`, icon: 'rocket', label: 'SEO Pages' },
-        { page: 'faq', href: `/${slug}/faq`, icon: 'book-open', label: 'FAQ' },
-        { page: 'categories', href: `/${slug}/categories`, icon: 'gift', label: 'Categories' },
-        { page: 'site-settings', href: `/${slug}/site-settings`, icon: 'wrench', label: 'Site Settings' },
-        { page: 'scripts', href: `/${slug}/scripts`, icon: 'palette', label: 'Scripts' },
-        { page: 'legal-pages', href: `/${slug}/legal-pages`, icon: 'lock', label: 'Legal Pages' }
+        { page: 'website-types', href: `/${slug}/website-types`, label: 'Website Types' },
+        { page: 'categories', href: `/${slug}/categories`, label: 'Categories' },
+        { page: 'landing-page', href: `/${slug}/landing-page`, label: 'Landing Page' },
+        { page: 'landing-sections', href: `/${slug}/landing-sections`, label: 'Landing Sections' },
+        { page: 'seo-pages', href: `/${slug}/seo-pages`, label: 'SEO Pages' },
+        { page: 'faq', href: `/${slug}/faq`, label: 'FAQ' },
+        { page: 'legal-pages', href: `/${slug}/legal-pages`, label: 'Legal Pages' },
+        { page: 'site-settings', href: `/${slug}/site-settings`, label: 'Site Settings' },
+        { page: 'scripts', href: `/${slug}/scripts`, label: 'Scripts' }
       ]
     },
     {
-      label: 'Revenue',
+      label: 'Commerce',
+      icon: 'credit-card',
       items: [
-        { page: 'submissions', href: `/${slug}/submissions`, icon: 'circle-check', label: 'Submissions' },
-        { page: 'payments', href: `/${slug}/payments`, icon: 'credit-card', label: 'Payments' },
-        { page: 'recovery', href: `/${slug}/recovery`, icon: 'shield-check', label: 'Recovery' },
-        { page: 'funnel', href: `/${slug}/funnel`, icon: 'users', label: 'Funnel' }
+        { page: 'submissions', href: `/${slug}/submissions`, label: 'Deployments & Subscribers' },
+        { page: 'payments', href: `/${slug}/payments`, label: 'Payments' },
+        { page: 'recovery', href: `/${slug}/recovery`, label: 'Recovery' },
+        { page: 'funnel', href: `/${slug}/funnel`, label: 'Funnel' }
       ]
     },
     {
       label: 'System',
+      icon: 'wrench',
       items: [
-        { page: 'ai-provider', href: `/${slug}/ai-provider`, icon: 'zap', label: 'AI Provider' },
-        { page: 'hosting', href: `/${slug}/hosting`, icon: 'globe', label: 'Hosting' },
-        { page: 'email-providers', href: `/${slug}/email-providers`, icon: 'mail', label: 'Email Providers' },
-        { page: 'notifications', href: `/${slug}/notifications`, icon: 'bell', label: 'Notifications' }
+        { page: 'ai-provider', href: `/${slug}/ai-provider`, label: 'AI Provider' },
+        { page: 'hosting', href: `/${slug}/hosting`, label: 'Hosting' },
+        { page: 'email-providers', href: `/${slug}/email-providers`, label: 'Email Providers' },
+        { page: 'notifications', href: `/${slug}/notifications`, label: 'Notifications' }
       ]
     }
   ];
+
+  const pageTitles = {
+    overview: 'Dashboard',
+    'website-types': 'Website Types',
+    categories: 'Categories',
+    'landing-page': 'Landing Page',
+    'landing-sections': 'Landing Sections',
+    'seo-pages': 'SEO Pages',
+    faq: 'FAQ',
+    'legal-pages': 'Legal Pages',
+    'site-settings': 'Site Settings',
+    scripts: 'Scripts',
+    submissions: 'Deployments & Subscribers',
+    payments: 'Payments',
+    recovery: 'Recovery',
+    funnel: 'Funnel',
+    'ai-provider': 'AI Provider',
+    hosting: 'Hosting',
+    'email-providers': 'Email Providers',
+    notifications: 'Notifications'
+  };
+  const currentPageTitle = pageTitles[activePage] || 'Admin';
 %>
-<div class="admin-topbar">
+<header class="admin-topbar">
   <div class="admin-topbar-left">
-    <button type="button" id="sidebarToggle" class="admin-topbar-menu-btn" aria-label="Open menu" aria-expanded="false">
+    <button type="button" id="sidebarToggle" class="admin-topbar-menu-btn" aria-label="Open navigation" aria-expanded="false">
       <%- getIconSvg('menu') %>
     </button>
-    <span class="admin-topbar-brand">HeartCode</span>
+    <a href="/<%= slug %>/" class="admin-topbar-brand">HeartCode</a>
+    <div class="admin-breadcrumb" aria-label="Current page">
+      <span class="admin-breadcrumb-muted">Admin</span>
+      <%- getIconSvg('chevron-right') %>
+      <strong><%= currentPageTitle %></strong>
+    </div>
   </div>
-  <div class="admin-topbar-identity">
-    <span data-avatar><%- getIconSvg('circle-user') %></span>
-    Admin
-    <button type="button" id="logoutBtn" class="admin-btn-outline admin-btn-sm ml-2">Logout</button>
+
+  <div class="admin-topbar-actions">
+    <a href="/" class="admin-topbar-site-link" target="_blank" rel="noopener" aria-label="View site (opens in a new tab)" title="View site">
+      <%- getIconSvg('external-link') %>
+      <span>View site</span>
+    </a>
+    <span class="admin-session">
+      <span data-avatar><%- getIconSvg('circle-user') %></span>
+      <span class="admin-session-name">Admin</span>
+    </span>
+    <button type="button" id="logoutBtn" class="admin-btn-outline admin-btn-sm">Logout</button>
   </div>
-</div>
+</header>
 
 <div class="admin-sidebar-overlay" id="sidebarOverlay"></div>
 
 <aside class="admin-sidebar" id="adminSidebar">
   <div class="admin-sidebar-header">
-    <span class="admin-sidebar-brand">HeartCode Admin</span>
-    <button type="button" id="sidebarClose" class="admin-sidebar-close" aria-label="Close menu">
+    <a href="/<%= slug %>/" class="admin-sidebar-brand">
+      <span class="admin-logo-mark"><%- getIconSvg('heart') %></span>
+      <span>HeartCode <small>Admin</small></span>
+    </a>
+    <button type="button" id="sidebarClose" class="admin-sidebar-close" aria-label="Close navigation">
       <%- getIconSvg('x') %>
     </button>
   </div>
 
-  <nav class="admin-sidebar-nav">
-    <% const overviewActive = activePage === 'overview'; %>
-    <a href="/<%= slug %>/" class="menu-item <%= overviewActive ? 'menu-item-active' : 'menu-item-inactive' %>">
-      <span data-menu-icon class="<%= overviewActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' %>"><%- getIconSvg('house') %></span>
-      Overview
+  <nav class="admin-sidebar-nav" aria-label="Admin navigation">
+    <a href="/<%= slug %>/" class="admin-dashboard-link <%= activePage === 'overview' ? 'is-active' : '' %>">
+      <span class="admin-nav-icon"><%- getIconSvg('house') %></span>
+      <span>Dashboard</span>
     </a>
 
     <% navGroups.forEach(function (group, groupIndex) { %>
       <% const isGroupActive = group.items.some(function (item) { return item.page === activePage; }); %>
-      <p class="admin-nav-group-label"><%= group.label %></p>
-      <button
-        type="button"
-        class="menu-item <%= isGroupActive ? 'menu-item-active' : 'menu-item-inactive' %>"
-        data-nav-toggle
-        aria-expanded="<%= isGroupActive ? 'true' : 'false' %>"
-        aria-controls="navGroup<%= groupIndex %>"
-      >
-        <span data-menu-icon class="<%= isGroupActive ? 'menu-item-icon-active' : 'menu-item-icon-inactive' %>"><%- getIconSvg(group.items[0].icon) %></span>
-        <%= group.label %>
-        <span class="menu-item-arrow <%= isGroupActive ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive' %>"><%- getIconSvg('chevron-down') %></span>
-      </button>
-      <div class="admin-nav-group-children <%= isGroupActive ? 'is-open' : '' %>" id="navGroup<%= groupIndex %>">
-        <% group.items.forEach(function (item) { %>
-          <% const itemActive = activePage === item.page; %>
-          <a href="<%= item.href %>" class="menu-dropdown-item <%= itemActive ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive' %>">
-            <%= item.label %>
-          </a>
-        <% }); %>
+      <div class="admin-nav-group">
+        <button
+          type="button"
+          class="admin-nav-group-toggle <%= isGroupActive ? 'is-active' : '' %>"
+          data-nav-toggle
+          aria-expanded="<%= isGroupActive ? 'true' : 'false' %>"
+          aria-controls="navGroup<%= groupIndex %>"
+        >
+          <span class="admin-nav-icon"><%- getIconSvg(group.icon) %></span>
+          <span><%= group.label %></span>
+          <span class="admin-nav-chevron"><%- getIconSvg('chevron-down') %></span>
+        </button>
+        <div class="admin-nav-group-children <%= isGroupActive ? 'is-open' : '' %>" id="navGroup<%= groupIndex %>">
+          <% group.items.forEach(function (item) { %>
+            <% const itemActive = activePage === item.page; %>
+            <a href="<%= item.href %>" class="admin-nav-child <%= itemActive ? 'is-active' : '' %>">
+              <span class="admin-nav-child-dot"></span>
+              <span><%= item.label %></span>
+            </a>
+          <% }); %>
+        </div>
       </div>
     <% }); %>
   </nav>
+
+  <div class="admin-sidebar-footer">
+    <div class="admin-sidebar-footer-card">
+      <span class="admin-status-dot"></span>
+      <div>
+        <strong>Signed in</strong>
+        <span>Admin session active</span>
+      </div>
+    </div>
+  </div>
 </aside>
