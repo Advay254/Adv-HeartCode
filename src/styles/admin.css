@@ -1313,3 +1313,53 @@ body.admin-drawer-open { overflow:hidden; }
 @media (prefers-reduced-motion: reduce) {
   .admin-drawer, .admin-drawer-overlay, .admin-table tbody.is-loading { transition:none; }
 }
+
+/* ==========================================================================
+   Dashboard analytics (v1.2.4, Chunk B)
+   ========================================================================== */
+.admin-stat-grid-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+
+.admin-range-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.admin-range-controls .admin-select { width:auto; height:34px; margin:0; padding-top:0; padding-bottom:0; font-size:12px; }
+.admin-range-controls .admin-btn-outline { height:34px; display:inline-flex; align-items:center; }
+
+.admin-metric-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:18px 0 22px; }
+.admin-metric-card { padding:14px 16px; border:1px solid #eef0f3; border-radius:12px; background:#f9fafb; }
+.admin-metric-label { margin:0 0 4px; color:#667085; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.admin-metric-value { margin:0; color:#101828; font-size:21px; font-weight:750; overflow-wrap:anywhere; }
+.admin-metric-change { margin:6px 0 0; min-height:15px; color:#667085; font-size:12px; font-weight:650; }
+.admin-metric-change.is-up { color:#0a7c4a; }
+.admin-metric-change.is-down { color:#b42318; }
+.admin-metric-change.is-flat { color:#667085; }
+
+.admin-chart-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-bottom:22px; }
+.admin-chart-card { padding:14px 16px 8px; border:1px solid #eef0f3; border-radius:12px; }
+.admin-chart-title { margin:0 0 8px; color:#344054; font-size:12.5px; font-weight:700; }
+.admin-chart-wrap { width:100%; }
+.admin-chart { display:block; width:100%; height:auto; overflow:visible; }
+.admin-chart-grid-line, .admin-chart-grid { stroke:#eef0f3; stroke-width:1; }
+.admin-chart-axis { fill:#98a2b3; font-size:9px; font-family:inherit; }
+.admin-chart-empty { fill:#98a2b3; font-size:12px; font-family:inherit; }
+.admin-chart-area { fill:rgba(24,63,173,.08); }
+.admin-chart-line { stroke:#183fad; stroke-width:2; vector-effect:non-scaling-stroke; }
+.admin-chart-dot { fill:#183fad; }
+.admin-chart-dot:hover { fill:#101828; }
+
+.admin-breakdown-heading { margin-top:6px; }
+.admin-breakdown-list { display:grid; gap:10px; }
+.admin-breakdown-row { display:grid; grid-template-columns:minmax(120px,.9fr) minmax(0,1.4fr) auto; align-items:center; gap:12px; }
+.admin-breakdown-row.is-inactive { opacity:.6; }
+.admin-breakdown-label { display:flex; align-items:center; gap:8px; min-width:0; }
+.admin-breakdown-name { overflow:hidden; color:#101828; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.admin-breakdown-track { height:10px; border-radius:999px; background:#f2f4f7; overflow:hidden; }
+.admin-breakdown-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#183fad,#3b5fe0); }
+.admin-breakdown-value { min-width:64px; color:#344054; font-size:12.5px; font-weight:650; text-align:right; }
+
+@media (max-width: 900px) {
+  .admin-metric-grid, .admin-chart-grid { grid-template-columns:1fr; }
+  .admin-breakdown-row { grid-template-columns:1fr; gap:6px; }
+  .admin-breakdown-value { text-align:left; }
+}
+@media (max-width: 640px) {
+  .admin-stat-grid-3 { grid-template-columns:1fr; }
+}
