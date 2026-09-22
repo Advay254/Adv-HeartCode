@@ -17,10 +17,16 @@ const paginationSchema = z.object({
   search: z.string().trim().max(200).optional().default('')
 });
 
+// v1.2.4: this route used to also compute total deployments/revenue, the
+// subscriber count, and the per-type breakdown -- all of it time-bound
+// data that now lives in routes/adminAnalytics.js (GET /overview and
+// GET /website-types), which can answer "as of last 7 days" instead of
+// only "of all time". What's left here is purely current CONFIGURATION
+// state, which has no date range to speak of.
 router.get('/stats', asyncHandler(async (req, res) => {
   const pool = getPool();
 
-  const [paystackResult, providerResult, typeCountsResult, deploymentStatsResult, breakdownResult, subscriberCountResult] = await Promise.all([
+  const [paystackResult, providerResult, typeCountsResult] = await Promise.all([
     pool.query('SELECT mode FROM paystack_config WHERE id = 1'),
     pool.query('SELECT label, selected_model FROM ai_providers WHERE is_active = true LIMIT 1'),
     pool.query(`
@@ -28,31 +34,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
         COUNT(*) FILTER (WHERE is_active) AS active_count,
         COUNT(*) FILTER (WHERE NOT is_active) AS inactive_count
       FROM website_types
-    `),
-    // v1.0.6: COALESCE(charge_amount_usd, amount_kes) unifies pre- and
-    // post-1.0.6 rows into one USD-equivalent figure. For rows written
-    // before this version, amount_kes was never really KES to begin with —
-    // it was the same raw, mislabeled number website_types.price_kes used
-    // to hold — so it's numerically already the correct USD-equivalent
-    // value, same reasoning as the price_usd backfill in db/init.js. For
-    // rows written by this version onward, amount_kes is left NULL and
-    // charge_amount_usd (back-calculated from the real charge in
-    // lib/finalizeDeployment.js) is the real figure. Summing raw
-    // charge_amount directly here would be wrong once even one deployment
-    // has been charged in KES — it would add USD and KES numbers together
-    // as if they were the same currency.
-    pool.query(
-      "SELECT COUNT(*) AS total, COALESCE(SUM(COALESCE(charge_amount_usd, amount_kes)), 0) AS revenue FROM deployed_sites"
-    ),
-    pool.query(`
-      SELECT wt.name, wt.slug, COUNT(ds.id) AS deployment_count,
-             COALESCE(SUM(COALESCE(ds.charge_amount_usd, ds.amount_kes)), 0) AS revenue_usd
-      FROM website_types wt
-      LEFT JOIN deployed_sites ds ON ds.website_type_id = wt.id
-      GROUP BY wt.id, wt.name, wt.slug
-      ORDER BY deployment_count DESC, wt.name ASC
-    `),
-    pool.query('SELECT COUNT(*) FROM subscriber_emails WHERE opted_out = false')
+    `)
   ]);
 
   res.json({
@@ -62,16 +44,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
       ? { label: providerResult.rows[0].label, selectedModel: providerResult.rows[0].selected_model }
       : null,
     activeTypeCount: Number(typeCountsResult.rows[0].active_count),
-    inactiveTypeCount: Number(typeCountsResult.rows[0].inactive_count),
-    totalDeployments: Number(deploymentStatsResult.rows[0].total),
-    totalRevenueUsd: Number(deploymentStatsResult.rows[0].revenue),
-    subscriberCount: Number(subscriberCountResult.rows[0].count),
-    breakdown: breakdownResult.rows.map(r => ({
-      name: r.name,
-      slug: r.slug,
-      deploymentCount: Number(r.deployment_count),
-      revenueUsd: Number(r.revenue_usd)
-    }))
+    inactiveTypeCount: Number(typeCountsResult.rows[0].inactive_count)
   });
 }));
 
