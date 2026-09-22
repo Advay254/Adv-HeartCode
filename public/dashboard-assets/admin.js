@@ -1614,15 +1614,13 @@
   // per this version's own build brief naming that exact badge as the
   // brand-color example -- it no longer changes color between live/test.
   function initOverviewPage() {
+    // ---- configuration cards (unchanged: /api/admin/dashboard/stats) ----
     const paymentsValue = document.getElementById('statPaymentsValue');
     const paymentsBadge = document.getElementById('statPaymentsBadge');
     const aiProviderValue = document.getElementById('statAiProviderValue');
     const aiProviderCaption = document.getElementById('statAiProviderCaption');
     const websiteTypesValue = document.getElementById('statWebsiteTypesValue');
     const websiteTypesBadge = document.getElementById('statWebsiteTypesBadge');
-    const deploymentsValue = document.getElementById('statDeploymentsValue');
-    const deploymentsCaption = document.getElementById('statDeploymentsCaption');
-    const breakdownBody = document.getElementById('statsBreakdownBody');
     const errorEl = document.getElementById('statsError');
 
     window.adminFetch('/api/admin/dashboard/stats')
@@ -1635,7 +1633,6 @@
           paymentsValue.textContent = 'Not set up';
           paymentsBadge.innerHTML = '';
         }
-
         if (stats.activeProvider) {
           aiProviderValue.textContent = stats.activeProvider.label;
           aiProviderCaption.textContent = stats.activeProvider.selectedModel || 'No model selected';
@@ -1643,24 +1640,268 @@
           aiProviderValue.textContent = 'None active';
           aiProviderCaption.textContent = 'Set one up on the AI Provider page';
         }
-
         websiteTypesValue.textContent = String(stats.activeTypeCount);
         websiteTypesBadge.innerHTML = `<span class="admin-badge admin-badge-brand">${stats.inactiveTypeCount} inactive</span>`;
-
-        deploymentsValue.textContent = String(stats.totalDeployments);
-        deploymentsCaption.textContent = `$${stats.totalRevenueUsd.toFixed(2)} revenue, ${stats.subscriberCount} subscriber(s)`;
-
-        breakdownBody.innerHTML = stats.breakdown.map(b => `
-          <tr>
-            <td data-label="Type">${escapeHtml(b.name)}</td>
-            <td data-label="Deployments">${b.deploymentCount}</td>
-            <td data-label="Revenue">$${b.revenueUsd.toFixed(2)}</td>
-          </tr>`).join('') || '<tr><td colspan="3" data-label="">No website types yet.</td></tr>';
       })
       .catch(() => {
         errorEl.style.display = 'block';
-        [paymentsValue, aiProviderValue, websiteTypesValue, deploymentsValue].forEach(el => { el.textContent = 'Unavailable'; });
+        [paymentsValue, aiProviderValue, websiteTypesValue].forEach(el => { el.textContent = 'Unavailable'; });
       });
+
+    // ======================================================================
+    // Analytics (v1.2.4, Chunk B) -- date-ranged overview metrics, two
+    // zero-dependency inline-SVG time series charts, and a sortable
+    // website-type breakdown. All three read from /api/admin/analytics/*,
+    // which aggregates in Postgres (see lib/analyticsQueries.js) rather
+    // than shipping rows to the browser to add up.
+    // ======================================================================
+    const API = '/api/admin/analytics';
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      range: $('analyticsRange'), refresh: $('analyticsRefresh'),
+      customBox: $('analyticsCustomRange'), from: $('analyticsFrom'), to: $('analyticsTo'),
+      error: $('analyticsError'), metrics: $('analyticsMetrics'),
+      depValue: $('metricDeploymentsValue'), depChange: $('metricDeploymentsChange'),
+      revValue: $('metricRevenueValue'), revChange: $('metricRevenueChange'),
+      subValue: $('metricSubscribersValue'), subChange: $('metricSubscribersChange'),
+      depChart: $('deploymentsChart'), revChart: $('revenueChart'),
+      breakdownSort: $('breakdownSort'), breakdownList: $('breakdownList')
+    };
+
+    const state = { range: '30d', from: '', to: '', sort: 'deployments' };
+    let requestSeq = 0;
+
+    function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+    function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+    function parseDay(value) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+      if (!m) return null;
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // Unlike the Deployments page's range filter (which leaves `to` open
+    // for "last N days" so it always includes anything up to right now),
+    // every preset here resolves to a CONCRETE [from, to) pair -- the
+    // previous-period comparison needs an exact duration to mirror.
+    function rangeBounds() {
+      const now = new Date();
+      const today = startOfDay(now);
+      switch (state.range) {
+        case 'today': return { from: today, to: addDays(today, 1) };
+        case 'yesterday': return { from: addDays(today, -1), to: today };
+        case '7d': return { from: addDays(today, -6), to: addDays(today, 1) };
+        case '30d': return { from: addDays(today, -29), to: addDays(today, 1) };
+        case '90d': return { from: addDays(today, -89), to: addDays(today, 1) };
+        case 'year': return { from: new Date(today.getFullYear(), 0, 1), to: addDays(today, 1) };
+        case 'custom': {
+          const f = parseDay(state.from), t = parseDay(state.to);
+          return { from: f, to: t ? addDays(t, 1) : null };
+        }
+        default: return { from: null, to: null }; // 'all'
+      }
+    }
+    function customRangeInvalid() {
+      if (state.range !== 'custom') return false;
+      const f = parseDay(state.from), t = parseDay(state.to);
+      return !!(f && t && f > t);
+    }
+    function rangeParams() {
+      const p = new URLSearchParams();
+      const b = rangeBounds();
+      if (b.from) p.set('from', b.from.toISOString());
+      if (b.to) p.set('to', b.to.toISOString());
+      try { p.set('tz', Intl.DateTimeFormat().resolvedOptions().timeZone); } catch (_err) { /* default UTC server-side */ }
+      return p;
+    }
+
+    function formatMoney(n) {
+      return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function formatCompact(n) {
+      return Number(n).toLocaleString('en-US');
+    }
+    function renderChange(el, pct) {
+      if (pct === null || pct === undefined) { el.textContent = state.range === 'all' ? '' : 'New this period'; el.className = 'admin-metric-change'; return; }
+      const rounded = Math.abs(pct) < 0.05 ? 0 : pct;
+      const arrow = rounded > 0 ? '\u2191' : rounded < 0 ? '\u2193' : '\u2192';
+      el.textContent = `${arrow} ${Math.abs(rounded).toFixed(1)}% vs previous period`;
+      el.className = 'admin-metric-change ' + (rounded > 0 ? 'is-up' : rounded < 0 ? 'is-down' : 'is-flat');
+    }
+
+    // ---- inline SVG line chart (no external library; CSP allows only
+    // self-hosted script, so anything chart-shaped is either this or a
+    // <canvas> -- SVG is simpler to keep accessible and crisp at any size) ----
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    function svgEl(tag, attrs) {
+      const node = document.createElementNS(SVG_NS, tag);
+      Object.entries(attrs || {}).forEach(([k, v]) => node.setAttribute(k, v));
+      return node;
+    }
+    function renderLineChart(svg, points, { formatValue, formatBucket }) {
+      svg.textContent = '';
+      const W = 600, H = 220, padL = 46, padR = 12, padT = 14, padB = 26;
+      const innerW = W - padL - padR, innerH = H - padT - padB;
+      if (!points.length) {
+        const t = svgEl('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', class: 'admin-chart-empty' });
+        t.textContent = 'No data for this range';
+        svg.appendChild(t);
+        return;
+      }
+      const values = points.map(p => p.value);
+      const maxV = Math.max(...values, 0);
+      const minV = Math.min(...values, 0);
+      const span = maxV - minV || 1;
+      const x = (i) => padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW);
+      const y = (v) => padT + innerH - ((v - minV) / span) * innerH;
+
+      // gridlines + y-axis labels (0%, 50%, 100% of the value range)
+      [0, 0.5, 1].forEach((f) => {
+        const yy = padT + innerH * (1 - f);
+        svg.appendChild(svgEl('line', { x1: padL, x2: W - padR, y1: yy, y2: yy, class: 'admin-chart-grid' }));
+        const label = svgEl('text', { x: padL - 8, y: yy + 4, 'text-anchor': 'end', class: 'admin-chart-axis' });
+        label.textContent = formatValue(minV + span * f);
+        svg.appendChild(label);
+      });
+
+      // area fill + line
+      const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(' ');
+      const areaPath = `${linePath} L ${x(points.length - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L ${x(0).toFixed(1)} ${(padT + innerH).toFixed(1)} Z`;
+      svg.appendChild(svgEl('path', { d: areaPath, class: 'admin-chart-area' }));
+      svg.appendChild(svgEl('path', { d: linePath, class: 'admin-chart-line', fill: 'none' }));
+
+      // a dot + native <title> tooltip per point (keeps this dependency-free;
+      // native tooltips are enough at this stage rather than building a
+      // custom hover/tooltip component for a first analytics pass)
+      points.forEach((p, i) => {
+        const dot = svgEl('circle', { cx: x(i), cy: y(p.value), r: 2.6, class: 'admin-chart-dot' });
+        const title = document.createElementNS(SVG_NS, 'title');
+        title.textContent = `${formatBucket(p.bucket)}: ${formatValue(p.value)}`;
+        dot.appendChild(title);
+        svg.appendChild(dot);
+      });
+
+      // x-axis labels: first, middle, last bucket only (avoids overlap at any width)
+      [0, Math.floor((points.length - 1) / 2), points.length - 1].forEach((i, idx, arr) => {
+        if (idx > 0 && arr[idx] === arr[idx - 1]) return;
+        const label = svgEl('text', {
+          x: x(i), y: H - 6,
+          'text-anchor': i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle',
+          class: 'admin-chart-axis'
+        });
+        label.textContent = formatBucket(points[i].bucket);
+        svg.appendChild(label);
+      });
+    }
+    function bucketLabel(iso, granularity) {
+      const d = new Date(iso);
+      if (granularity === 'hour') return d.toLocaleTimeString(undefined, { hour: 'numeric' });
+      if (granularity === 'month') return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+    function renderBreakdown(types) {
+      els.breakdownList.textContent = '';
+      if (!types.length) { els.breakdownList.appendChild(el('p', 'admin-form-hint', 'No website types yet.')); return; }
+      const key = state.sort === 'revenue' ? 'revenueUsd' : 'deployments';
+      const max = Math.max(...types.map(t => t[key]), 1);
+      types.forEach((t) => {
+        const row = el('div', 'admin-breakdown-row' + (t.isActive ? '' : ' is-inactive'));
+        const label = el('div', 'admin-breakdown-label');
+        label.appendChild(el('span', 'admin-breakdown-name', t.name));
+        if (!t.isActive) label.appendChild(el('span', 'admin-badge admin-badge-inactive', 'inactive'));
+        const track = el('div', 'admin-breakdown-track');
+        const fill = el('div', 'admin-breakdown-fill');
+        fill.style.width = Math.max(2, Math.round((t[key] / max) * 100)) + '%';
+        track.appendChild(fill);
+        const value = el('div', 'admin-breakdown-value', state.sort === 'revenue' ? formatMoney(t.revenueUsd) : formatCompact(t.deployments));
+        row.append(label, track, value);
+        els.breakdownList.appendChild(row);
+      });
+    }
+
+    async function loadBreakdown() {
+      const p = rangeParams();
+      p.set('sort', state.sort);
+      try {
+        const res = await window.adminFetch(API + '/website-types?' + p.toString());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        renderBreakdown(data.types);
+      } catch (_err) {
+        els.breakdownList.textContent = '';
+        els.breakdownList.appendChild(el('p', 'admin-msg admin-msg-error', 'Could not load the website-type breakdown.'));
+      }
+    }
+
+    async function loadAnalytics() {
+      const seq = ++requestSeq;
+      if (customRangeInvalid()) {
+        els.error.style.display = 'block';
+        els.error.textContent = 'Choose a valid date range.';
+        return;
+      }
+      els.error.style.display = 'none';
+      const p = rangeParams();
+      try {
+        const [ovRes, depRes, revRes] = await Promise.all([
+          window.adminFetch(API + '/overview?' + p.toString()),
+          window.adminFetch(API + '/deployments?' + p.toString()),
+          window.adminFetch(API + '/revenue?' + p.toString())
+        ]);
+        if (seq !== requestSeq) return;
+        if (!ovRes.ok || !depRes.ok || !revRes.ok) throw new Error('HTTP error');
+        const overview = await ovRes.json();
+        const depSeries = await depRes.json();
+        const revSeries = await revRes.json();
+        if (seq !== requestSeq) return;
+
+        els.depValue.textContent = formatCompact(overview.current.deployments);
+        els.revValue.textContent = formatMoney(overview.current.revenueUsd);
+        els.subValue.textContent = formatCompact(overview.current.newSubscribers);
+        if (overview.change) {
+          renderChange(els.depChange, overview.change.deploymentsPct);
+          renderChange(els.revChange, overview.change.revenuePct);
+          renderChange(els.subChange, overview.change.newSubscribersPct);
+        } else {
+          [els.depChange, els.revChange, els.subChange].forEach(e => { e.textContent = ''; e.className = 'admin-metric-change'; });
+        }
+
+        renderLineChart(
+          els.depChart,
+          depSeries.series.map(p => ({ bucket: p.bucket, value: p.deployments })),
+          { formatValue: formatCompact, formatBucket: (b) => bucketLabel(b, depSeries.granularity) }
+        );
+        renderLineChart(
+          els.revChart,
+          revSeries.series.map(p => ({ bucket: p.bucket, value: p.revenueUsd })),
+          { formatValue: (v) => '$' + Math.round(v).toLocaleString('en-US'), formatBucket: (b) => bucketLabel(b, revSeries.granularity) }
+        );
+      } catch (_err) {
+        if (seq !== requestSeq) return;
+        els.error.style.display = 'block';
+        els.error.textContent = 'Could not load analytics. Reload the page or sign in again.';
+      }
+      loadBreakdown();
+    }
+
+    els.range.addEventListener('change', () => {
+      state.range = els.range.value;
+      els.customBox.hidden = state.range !== 'custom';
+      if (state.range !== 'custom') { state.from = ''; state.to = ''; els.from.value = ''; els.to.value = ''; }
+      loadAnalytics();
+    });
+    els.from.addEventListener('change', () => { state.from = els.from.value; loadAnalytics(); });
+    els.to.addEventListener('change', () => { state.to = els.to.value; loadAnalytics(); });
+    els.refresh.addEventListener('click', loadAnalytics);
+    els.breakdownSort.addEventListener('change', () => { state.sort = els.breakdownSort.value; loadBreakdown(); });
+
+    loadAnalytics();
   }
 
   // ---- submissions page (deployments + subscribers) ----
