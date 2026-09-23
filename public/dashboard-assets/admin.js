@@ -1613,6 +1613,136 @@
   // specifically always uses admin-badge-brand (neutral/informational),
   // per this version's own build brief naming that exact badge as the
   // brand-color example -- it no longer changes color between live/test.
+  // ==========================================================================
+  // Activity feed (v1.2.5, Chunk C) -- shared between the Dashboard's
+  // compact widget and the full Activity page.
+  // ==========================================================================
+  const ACTIVITY_LABELS = {
+    payment_received: { label: 'Payment received', dot: 'is-payment' },
+    deployment_completed: { label: 'Deployment completed', dot: 'is-deploy' },
+    email_sent: { label: 'Email sent', dot: 'is-email' },
+    recovery_completed: { label: 'Deployment recovered', dot: 'is-recovery' },
+    site_details_resent: { label: 'Site details resent', dot: 'is-email' },
+    admin_config_changed: { label: 'Configuration changed', dot: 'is-config' }
+  };
+  function formatRelativeTime(iso) {
+    const then = new Date(iso).getTime();
+    const diffSec = Math.round((Date.now() - then) / 1000);
+    if (diffSec < 5) return 'just now';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.round(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`;
+    const diffHr = Math.round(diffMin / 60);
+    if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`;
+    const diffDay = Math.round(diffHr / 24);
+    if (diffDay < 7) return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function renderActivityRows(container, events) {
+    container.textContent = '';
+    if (!events.length) {
+      const p = document.createElement('p');
+      p.className = 'admin-form-hint';
+      p.textContent = 'No activity yet.';
+      container.appendChild(p);
+      return;
+    }
+    events.forEach((e) => {
+      const meta = ACTIVITY_LABELS[e.eventType] || { label: e.eventType, dot: '' };
+      const row = document.createElement('div');
+      row.className = 'activity-row';
+      const dot = document.createElement('span');
+      dot.className = 'activity-dot ' + meta.dot;
+      const body = document.createElement('div');
+      body.className = 'activity-body';
+      const title = document.createElement('p');
+      title.className = 'activity-title';
+      title.textContent = e.title || meta.label;
+      body.appendChild(title);
+      if (e.detail) {
+        const detail = document.createElement('p');
+        detail.className = 'activity-detail';
+        detail.textContent = e.detail;
+        body.appendChild(detail);
+      }
+      const time = document.createElement('span');
+      time.className = 'activity-time';
+      time.textContent = formatRelativeTime(e.createdAt);
+      time.title = new Date(e.createdAt).toLocaleString();
+      row.append(dot, body, time);
+      container.appendChild(row);
+    });
+  }
+
+  function initActivityPage() {
+    const list = document.getElementById('activityList');
+    const typeFilter = document.getElementById('activityTypeFilter');
+    const pageInfo = document.getElementById('activityPageInfo');
+    const prevBtn = document.getElementById('activityPrev');
+    const nextBtn = document.getElementById('activityNext');
+    const refreshBtn = document.getElementById('activityRefresh');
+    const LIMIT = 20;
+
+    let cursors = [null];
+    let pageIndex = 0;
+    let eventType = '';
+    let requestSeq = 0;
+
+    async function loadTypeFilter() {
+      try {
+        const res = await window.adminFetch('/api/admin/activity?limit=1');
+        if (!res.ok) return;
+        const data = await res.json();
+        data.eventTypes.forEach((t) => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = (ACTIVITY_LABELS[t] || { label: t }).label;
+          typeFilter.appendChild(opt);
+        });
+      } catch (_err) { /* filter just stays at "All activity" */ }
+    }
+
+    async function load() {
+      const seq = ++requestSeq;
+      list.classList.add('is-loading');
+      const p = new URLSearchParams();
+      p.set('limit', String(LIMIT));
+      if (eventType) p.set('eventType', eventType);
+      if (cursors[pageIndex]) p.set('cursor', cursors[pageIndex]);
+      try {
+        const res = await window.adminFetch('/api/admin/activity?' + p.toString());
+        if (seq !== requestSeq) return;
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (seq !== requestSeq) return;
+        cursors[pageIndex + 1] = data.nextCursor || null;
+        renderActivityRows(list, data.events);
+        const start = pageIndex * LIMIT + 1;
+        pageInfo.textContent = data.events.length ? `Showing ${start}\u2013${start + data.events.length - 1}` : '';
+        prevBtn.disabled = pageIndex === 0;
+        nextBtn.disabled = !cursors[pageIndex + 1];
+      } catch (_err) {
+        if (seq !== requestSeq) return;
+        list.textContent = '';
+        const p2 = document.createElement('p');
+        p2.className = 'admin-msg admin-msg-error';
+        p2.textContent = 'Could not load activity. Reload the page or sign in again.';
+        list.appendChild(p2);
+      } finally {
+        if (seq === requestSeq) list.classList.remove('is-loading');
+      }
+    }
+    function reload() { cursors = [null]; pageIndex = 0; load(); }
+
+    typeFilter.addEventListener('change', () => { eventType = typeFilter.value; reload(); });
+    refreshBtn.addEventListener('click', reload);
+    prevBtn.addEventListener('click', () => { if (pageIndex > 0) { pageIndex--; load(); } });
+    nextBtn.addEventListener('click', () => { if (cursors[pageIndex + 1]) { pageIndex++; load(); } });
+
+    loadTypeFilter();
+    load();
+  }
+
   function initOverviewPage() {
     // ---- configuration cards (unchanged: /api/admin/dashboard/stats) ----
     const paymentsValue = document.getElementById('statPaymentsValue');
@@ -1902,6 +2032,24 @@
     els.breakdownSort.addEventListener('change', () => { state.sort = els.breakdownSort.value; loadBreakdown(); });
 
     loadAnalytics();
+
+    // ---- Recent Activity widget (compact, latest 8, no pagination here --
+    // see initActivityPage() for the full paginated/filterable feed) ----
+    (async () => {
+      const container = document.getElementById('recentActivityList');
+      try {
+        const res = await window.adminFetch('/api/admin/activity?limit=8');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        renderActivityRows(container, data.events);
+      } catch (_err) {
+        container.textContent = '';
+        const p = document.createElement('p');
+        p.className = 'admin-msg admin-msg-error';
+        p.textContent = 'Could not load recent activity.';
+        container.appendChild(p);
+      }
+    })();
   }
 
   // ---- submissions page (deployments + subscribers) ----
@@ -4157,6 +4305,7 @@
     if (page === 'website-types-detail') initWebsiteTypesDetailPage();
     if (page === 'overview') initOverviewPage();
     if (page === 'submissions') initSubmissionsPage();
+    if (page === 'activity') initActivityPage();
     if (page === 'recovery') initRecoveryPage();
     if (page === 'funnel') initFunnelPage();
     if (page === 'site-settings') initSiteSettingsPage();
