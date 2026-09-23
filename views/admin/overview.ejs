@@ -110,6 +110,14 @@
         <a href="/<%= slug %>/site-settings" class="admin-action-link"><span class="admin-action-icon"><%- getIconSvg('wrench') %></span><span><strong>Site settings</strong><small>SEO, social links, and public metadata</small></span><%- getIconSvg('chevron-right') %></a>
       </aside>
     </section>
+
+    <section class="admin-card mt-6" id="recentActivityCard">
+      <div class="admin-section-heading">
+        <div><p class="admin-eyebrow">Heartbeat</p><h2>Recent activity</h2></div>
+      </div>
+      <div id="recentActivityList" aria-live="polite"></div>
+      <div class="admin-widget-footer"><a href="/<%= slug %>/activity">View all activity &rarr;</a></div>
+    </section>
   </main>
 </div>
 </body>

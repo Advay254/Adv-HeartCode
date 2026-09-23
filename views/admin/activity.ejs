@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Activity | HeartCode Admin</title>
+</head>
+<body data-page="activity">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'activity' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Commerce</p>
+        <h1>Activity</h1>
+        <p>A running log of what's happened across HeartCode: payments, deployments, emails, admin recoveries, and configuration changes.</p>
+      </div>
+    </section>
+
+    <div class="admin-callout">
+      This only shows what the app can currently detect as a structured event — it isn't a complete audit log of every admin action, and a
+      deployment that never completed (an unpaid checkout, a failed Cloudflare/ClarityHeart call) won't appear here yet.
+    </div>
+
+    <section class="admin-card">
+      <div class="admin-section-heading">
+        <div><p class="admin-eyebrow">Feed</p><h2>Recent activity</h2></div>
+        <select class="admin-select" id="activityTypeFilter" aria-label="Filter by event type">
+          <option value="">All activity</option>
+        </select>
+      </div>
+
+      <div id="activityList" class="admin-entry-list" aria-live="polite"></div>
+
+      <div class="admin-pagination">
+        <p id="activityPageInfo"></p>
+        <div class="admin-pagination-controls">
+          <button type="button" id="activityRefresh" class="admin-btn-outline admin-btn-sm">Refresh</button>
+          <button type="button" id="activityPrev" class="admin-btn-outline admin-btn-sm">← Previous</button>
+          <button type="button" id="activityNext" class="admin-btn-outline admin-btn-sm">Next →</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
