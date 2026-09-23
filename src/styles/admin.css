@@ -1363,3 +1363,28 @@ body.admin-drawer-open { overflow:hidden; }
 @media (max-width: 640px) {
   .admin-stat-grid-3 { grid-template-columns:1fr; }
 }
+
+/* ==========================================================================
+   Activity feed (v1.2.5, Chunk C) -- shared between the full Activity page
+   (views/admin/activity.ejs) and the Dashboard's compact widget.
+   ========================================================================== */
+.activity-row { display:flex; align-items:flex-start; gap:12px; padding:13px 0; border-top:1px solid #f2f4f7; }
+.activity-row:first-child { padding-top:0; border-top:0; }
+.activity-dot { flex:none; width:9px; height:9px; margin-top:5px; border-radius:50%; background:#98a2b3; }
+.activity-dot.is-payment { background:#0a7c4a; }
+.activity-dot.is-deploy { background:#183fad; }
+.activity-dot.is-email { background:#6941c6; }
+.activity-dot.is-recovery { background:#b54708; }
+.activity-dot.is-config { background:#475467; }
+.activity-body { min-width:0; flex:1; }
+.activity-title { margin:0; color:#101828; font-size:13.5px; font-weight:650; overflow-wrap:anywhere; }
+.activity-detail { margin:2px 0 0; color:#667085; font-size:12.5px; overflow-wrap:anywhere; }
+.activity-time { flex:none; padding-top:1px; color:#98a2b3; font-size:12px; white-space:nowrap; }
+.admin-widget-footer { margin-top:14px; padding-top:12px; border-top:1px solid #eef0f3; text-align:center; }
+.admin-widget-footer a { color:#183fad; font-size:13px; font-weight:650; text-decoration:none; }
+.admin-widget-footer a:hover { text-decoration:underline; }
+
+@media (max-width: 480px) {
+  .activity-row { flex-wrap:wrap; }
+  .activity-time { margin-left:21px; }
+}
