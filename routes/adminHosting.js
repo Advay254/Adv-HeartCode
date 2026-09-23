@@ -5,6 +5,7 @@ const { getPool } = require('../db/init');
 const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
+const { logEvent } = require('../lib/activityEvents');
 const { deployToClarityHeart } = require('../lib/clarityheart');
 
 const router = express.Router();
@@ -105,6 +106,10 @@ router.put('/', requireCsrf, asyncHandler(async (req, res) => {
     );
 
     await client.query('COMMIT');
+    await logEvent(getPool(), {
+      eventType: 'admin_config_changed',
+      title: 'Hosting settings updated'
+    });
     res.json(serialize(result.rows[0]));
   } catch (err) {
     await client.query('ROLLBACK');

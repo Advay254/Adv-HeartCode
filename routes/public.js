@@ -21,6 +21,7 @@ const { sendResendDetailsEmail } = require('../lib/email');
 const { getRealClientIp } = require('../lib/clientIp');
 const { getActiveLegalPage } = require('../lib/legalPages');
 const { getFooterExtras } = require('../lib/footerExtras');
+const { logEvent } = require('../lib/activityEvents');
 const { marked } = require('marked');
 
 const router = express.Router();
@@ -1230,6 +1231,19 @@ router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler
     if (result.rowCount > 0) {
       try {
         await sendResendDetailsEmail(email, result.rows);
+        // v1.2.5: logged only on the "a match existed AND the email sent"
+        // path, same anti-enumeration boundary as the response itself —
+        // this event is only ever visible to an authenticated admin in
+        // the activity feed, not to the requester, so it carries no
+        // enumeration risk on its own; it just shouldn't exist for a
+        // lookup that found nothing to resend.
+        await logEvent(pool, {
+          eventType: 'site_details_resent',
+          title: 'Site details resent',
+          detail: `${email} (${result.rowCount} site${result.rowCount === 1 ? '' : 's'})`,
+          reference: result.rows[0].reference,
+          metadata: { siteCount: result.rowCount }
+        });
       } catch (err) {
         console.error('[RESEND-DETAILS] Failed to send resend-details email:', err.message);
         // Deliberately falls through to the SAME generic response below —

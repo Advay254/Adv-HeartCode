@@ -6,6 +6,7 @@ const { encrypt, decrypt, maskSecret } = require('../lib/crypto');
 const { normalizeProviderRow } = require('../lib/emailProvider');
 const { sendViaProviderConfig } = require('../lib/email');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
+const { logEvent } = require('../lib/activityEvents');
 const { requireCsrf } = require('../middleware/requireCsrf');
 
 const router = express.Router();
@@ -221,6 +222,12 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     );
 
     await client.query('COMMIT');
+    if (body.isActive === true) {
+      await logEvent(getPool(), {
+        eventType: 'admin_config_changed',
+        title: `Email provider activated: ${result.rows[0].label}`
+      });
+    }
     res.json(serializeProvider(result.rows[0]));
   } catch (err) {
     await client.query('ROLLBACK');

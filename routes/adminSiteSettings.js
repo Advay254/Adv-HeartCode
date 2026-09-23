@@ -4,6 +4,7 @@ const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
+const { logEvent } = require('../lib/activityEvents');
 const { getSiteSettings, refreshSiteSettingsCache, DEFAULTS } = require('../lib/siteSettings');
 const { moveItem } = require('../lib/reorder');
 const { refreshFooterExtrasCache } = require('../lib/footerExtras');
@@ -89,6 +90,11 @@ router.put('/', requireCsrf, asyncHandler(async (req, res) => {
   }
 
   const fresh = await refreshSiteSettingsCache();
+  await logEvent(pool, {
+    eventType: 'admin_config_changed',
+    title: 'Site settings updated',
+    detail: entries.map(([key]) => key).join(', ')
+  });
   res.json(fresh);
 }));
 

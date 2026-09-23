@@ -103,7 +103,7 @@ router.post('/:reference/retry', requireCsrf, asyncHandler(async (req, res) => {
   }
   const { reference } = parsed.data;
 
-  const result = await finalizeDeployment(reference, { skipExpiryCheck: true });
+  const result = await finalizeDeployment(reference, { skipExpiryCheck: true, source: 'recovery' });
 
   if (result.status === 'deployed' || result.status === 'already_deployed') {
     return res.json({ outcome: 'deployed', siteUrl: result.site.site_url });

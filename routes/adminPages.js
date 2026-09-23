@@ -109,6 +109,10 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {
   res.render('admin/submissions');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/activity`, (req, res) => {
+  res.render('admin/activity');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/recovery`, (req, res) => {
   res.render('admin/recovery');
 });
