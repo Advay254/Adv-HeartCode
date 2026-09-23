@@ -1271,9 +1271,36 @@ BEGIN
     ALTER TABLE deployed_sites ALTER COLUMN deployed_at SET NOT NULL;
   END IF;
 END $$;
+
+-- v1.2.5 (Chunk C: activity feed). An append-only event log -- see
+-- lib/activityEvents.js for the full reasoning on scope and event types.
+-- BIGSERIAL because this table only ever grows (nothing here is ever
+-- updated or deleted the way deployed_sites or website_types rows can
+-- be), so it's worth not worrying about the INTEGER id space at scale.
+-- metadata is a free-form JSONB bag for whatever a given event type wants
+-- to carry beyond the common columns (e.g. a provider's label, a site
+-- count) without a schema change every time a new event type needs one
+-- more field.
+CREATE TABLE IF NOT EXISTS activity_events (
+  id BIGSERIAL PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  reference TEXT,
+  amount_usd NUMERIC(12,2),
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- Same shape as deployed_sites' (deployed_at DESC, id DESC) indexes in
+-- v1.2.3, for the same reason: the activity feed is a keyset-paginated
+-- chronological feed, and this is exactly the sort it walks.
+CREATE INDEX IF NOT EXISTS idx_activity_events_created_at_id
+  ON activity_events (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_events_type_created_at_id
+  ON activity_events (event_type, created_at DESC, id DESC);
 `;
 
-const CURRENT_VERSION = '1.2.3';
+const CURRENT_VERSION = '1.2.5';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
