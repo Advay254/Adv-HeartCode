@@ -1,15 +1,74 @@
 const express = require('express');
+const multer = require('multer');
 const { asyncHandler } = require('../lib/asyncHandler');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { getActiveProviderConfig } = require('../lib/ai-provider');
 const { substitutePlaceholders, substitutePlainText } = require('../lib/template');
 const { createRateLimiter } = require('../lib/rateLimit');
-const { OPTION_BASED_FIELD_TYPES, MULTI_SELECT_FIELD_TYPES } = require('../lib/fieldTypes');
+const { OPTION_BASED_FIELD_TYPES, MULTI_SELECT_FIELD_TYPES, FILE_UPLOAD_FIELD_TYPES } = require('../lib/fieldTypes');
 const { addTargetBlankToExternalLinks } = require('../lib/externalLinks');
 const { getRealClientIp } = require('../lib/clientIp');
+const { getSiteSettings } = require('../lib/siteSettings');
+const { processUploadedImage, ALLOWED_MIME_TYPES, MAX_UPLOAD_BYTES } = require('../lib/imageProcessing');
 
 const router = express.Router();
+
+// v1.2.6 (image field type): memory storage — a buffer is exactly what
+// lib/imageProcessing.js's sharp pipeline needs, and nothing here is ever
+// written to disk (the final, processed form is a base64 string embedded
+// straight into the page, per Key Decision below). `limits.fileSize`
+// enforces the per-image cap BEFORE any processing happens — multer aborts
+// the upload stream mid-flight the moment a file exceeds it, so an
+// oversized upload never reaches this app's memory in full, let alone gets
+// decoded by sharp. `files`/`fields` are generous DoS-guard ceilings (well
+// beyond any real template's field count), not real constraints on normal
+// use — a website type with a genuine multi-image gallery-style form is
+// just several separate 'image' fields, each well under these caps.
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 20, fields: 100 },
+  fileFilter: (req, file, cb) => {
+    // Strict allow-list — SVG (can embed <script>, executes if ever opened
+    // directly rather than only inline-rendered) and anything else outside
+    // ALLOWED_MIME_TYPES is rejected outright, no sniffing, no exceptions.
+    // A rejected file is dropped silently by multer (never added to
+    // req.files) rather than raising an error here — recorded on the
+    // request instead so the route handler below can report it as an
+    // invalid field (distinct from "nothing was uploaded at all").
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      req.hcRejectedImageFields = req.hcRejectedImageFields || [];
+      req.hcRejectedImageFields.push(file.fieldname);
+      return cb(null, false);
+    }
+    cb(null, true);
+  }
+});
+
+/**
+ * Wraps multer so a request with no image fields (the common case — every
+ * website type except ones with an 'image' field) passes through
+ * untouched: multer only intercepts requests whose Content-Type is
+ * multipart/form-data, and calls next() immediately with the body stream
+ * still unread for anything else — express.json() right after this in the
+ * route's middleware chain then parses a plain JSON request exactly as it
+ * always has. A genuine multer failure (oversized file, too many parts) is
+ * translated into a clear 4xx here rather than falling through to the
+ * generic global error handler in server.js, which has no
+ * MulterError-specific messaging.
+ */
+function handleImageUpload(req, res, next) {
+  imageUpload.any()(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: `Each image must be ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))}MB or smaller.` });
+      }
+      return res.status(400).json({ error: 'Invalid image upload.' });
+    }
+    return next(err);
+  });
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -180,7 +239,7 @@ function validateAiOutput(parsed, outputFields) {
   return true;
 }
 
-router.post('/:slug/generate', express.json(), asyncHandler(async (req, res) => {
+router.post('/:slug/generate', handleImageUpload, express.json(), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   const ip = getRealClientIp(req);
@@ -216,17 +275,49 @@ router.post('/:slug/generate', express.json(), asyncHandler(async (req, res) => 
   );
   const fields = fieldsResult.rows;
 
-  const parsed = generateBodySchema.safeParse(req.body);
+  // v1.2.6 (image field type): a request carrying at least one image field
+  // arrives as multipart/form-data (see public/site.js) — the non-file
+  // values travel as a single JSON string under a "payload" field, in
+  // EXACTLY the same shape a plain JSON body would use directly, so the
+  // same schema below validates either path unchanged. A website type with
+  // no image fields is untouched — express.json() already parsed req.body
+  // directly here, exactly as before this feature existed.
+  let bodyToValidate = req.body;
+  if (req.is('multipart/form-data')) {
+    if (typeof req.body.payload !== 'string') {
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+    try {
+      bodyToValidate = JSON.parse(req.body.payload);
+    } catch (err) {
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+  }
+
+  const parsed = generateBodySchema.safeParse(bodyToValidate);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const submitted = parsed.data;
+
+  // Uploaded image files, keyed by field_key — multer's `fieldname` is
+  // whatever name the client's FormData used, which public/site.js sets to
+  // the field's own key (the same convention every other field type
+  // already uses for its JSON key).
+  const filesByFieldKey = {};
+  for (const file of (req.files || [])) {
+    filesByFieldKey[file.fieldname] = file;
+  }
 
   // ---- required-field presence + per-type shape validation — depends on
   // THIS website type's fields, which is runtime DB state, not something
   // a static schema can express ----
   const missingFields = [];
   const invalidFields = [];
+  // field_key -> base64 data URI, populated below for every 'image' field
+  // that had a file uploaded AND successfully processed — merged into
+  // rawFlatValues further down exactly like any other field's value.
+  const processedImageValues = {};
 
   if (!EMAIL_RE.test(submitted.client_email)) {
     // zod's .email() already validated this, but the existing stricter
@@ -235,7 +326,39 @@ router.post('/:slug/generate', express.json(), asyncHandler(async (req, res) => 
     missingFields.push('client_email');
   }
 
+  // Read once per request, fresh from the same 60s-cache-with-immediate-
+  // invalidation helper every other admin-editable Site Setting already
+  // uses (see lib/siteSettings.js) — never cached at module load, never
+  // hardcoded, and a change an admin saves is picked up within that same
+  // window every other setting already lives with.
+  const siteSettings = await getSiteSettings();
+
   for (const f of fields) {
+    if (FILE_UPLOAD_FIELD_TYPES.includes(f.field_type)) {
+      if ((req.hcRejectedImageFields || []).includes(f.field_key)) {
+        // Uploaded, but rejected outright by imageUpload's mimetype
+        // allow-list above (SVG, or any other non-image file) — "invalid",
+        // not "missing", so the visitor sees a clear reason.
+        invalidFields.push(f.field_key);
+        continue;
+      }
+      const file = filesByFieldKey[f.field_key];
+      if (!file) {
+        if (f.is_required) missingFields.push(f.field_key);
+        continue;
+      }
+      try {
+        processedImageValues[f.field_key] = await processUploadedImage(file.buffer, siteSettings.image_compression_quality);
+      } catch (err) {
+        // Passed the mimetype allow-list but sharp couldn't actually
+        // decode it (corrupt data, or a spoofed mimetype on non-image
+        // bytes) — same "invalid, not missing" bucket as above.
+        console.error(`[BUILD] Image processing failed for field "${f.field_key}" on "${req.params.slug}":`, err.message);
+        invalidFields.push(f.field_key);
+      }
+      continue;
+    }
+
     const val = submitted[f.field_key];
     const present = isValuePresent(f.field_type, val);
 
@@ -278,6 +401,22 @@ router.post('/:slug/generate', express.json(), asyncHandler(async (req, res) => 
   const rawFlatValues = {};
   const rawArrayValues = {};
   for (const f of fields) {
+    if (FILE_UPLOAD_FIELD_TYPES.includes(f.field_type)) {
+      // The processed base64 data URI substitutes into the template's
+      // {{field_key}} exactly like any other field's value (see
+      // lib/template.js's substitutePlaceholders) -- '' for an optional
+      // field with nothing uploaded, same as any other empty optional
+      // field. This value is only ever used HERE, to build the rendered
+      // `html` returned below -- it is a completely separate object from
+      // the raw_field_values checkout later submits (see routes/public.js
+      // and public/site.js's own draft-building logic), which never
+      // carries an image field's real value at all: a full data URI has no
+      // sensible use as a URL deploy-slug segment or as plain text inside
+      // a "site is ready" email body, and by the time checkout happens the
+      // image is already fully baked into this `html`.
+      rawFlatValues[f.field_key] = processedImageValues[f.field_key] || '';
+      continue;
+    }
     const val = submitted[f.field_key];
     if (f.field_type === 'checkboxes') {
       const arr = Array.isArray(val) ? val : [];

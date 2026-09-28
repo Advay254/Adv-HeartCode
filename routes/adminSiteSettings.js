@@ -45,7 +45,17 @@ const updateSchema = z.object({
   // this table's existing all-strings convention), not a JSON boolean,
   // so the enum here is deliberately stricter than every url/text field
   // above it.
-  show_type_prices_early: z.enum(['true', 'false']).optional()
+  show_type_prices_early: z.enum(['true', 'false']).optional(),
+  // v1.2.6: stored as a string like every other row in this table (the
+  // whole table is TEXT-valued), but constrained to a whole number 1-100
+  // -- the actual value the WebP encoder in lib/imageProcessing.js
+  // accepts. Read fresh per request by routes/apiBuild.js via
+  // getSiteSettings() (see lib/siteSettings.js), so a change here is live
+  // for the next form submission, not just the next page render.
+  image_compression_quality: z.string().trim().refine((v) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 1 && n <= 100;
+  }, { message: 'Must be a whole number between 1 and 100' }).optional()
 });
 
 router.get('/', asyncHandler(async (req, res) => {

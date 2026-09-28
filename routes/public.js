@@ -88,10 +88,20 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Gap this closes: renderedHtml/sitePassword previously had no length
 // bound at all beyond the router's blanket 2MB body limit, and sitePassword
-// had no type check before being hashed. 1MB leaves headroom under that
-// 2MB ceiling for JSON overhead around the actual string.
+// had no type check before being hashed.
+//
+// v1.2.6: raised from 1,000,000 to 15,000,000 chars (paired with this
+// route's own express.json() limit below, per this project's "paired
+// constants must change together" convention — see HANDOFF.md) now that a
+// rendered page can embed one or more base64 'image' field values (see
+// lib/imageProcessing.js). Sized generously above a real measured worst
+// case: a 1600px-max-side WebP at quality 85 against a genuinely busy
+// synthetic 4000x3000 test photo came out to ~950KB of base64 — even five
+// image fields on one website type (an explicit "several image fields for
+// a gallery" use case) stays well under half this ceiling alongside the
+// rest of a real page's markup.
 const checkoutBodySchema = z.object({
-  renderedHtml: z.string().min(1).max(1000000),
+  renderedHtml: z.string().min(1).max(15000000),
   clientEmail: z.string().trim().email().max(254),
   sitePassword: z.string().max(200).optional(),
   // v1.0.8 Part B: the raw form field values from the build page, kept
@@ -955,7 +965,10 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
 // asks Paystack to initialize a transaction; returns the URL to redirect
 // the browser to. Nothing is deployed yet — that only happens once
 // payment is confirmed, via the webhook or the callback page below.
-router.post('/build/:slug/checkout', express.json({ limit: '2mb' }), asyncHandler(async (req, res) => {
+// v1.2.6: raised from 2mb to 16mb alongside checkoutBodySchema's
+// renderedHtml max above -- the same paired-constant change, for the same
+// reason (embedded 'image' field values).
+router.post('/build/:slug/checkout', express.json({ limit: '16mb' }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   const ip = getRealClientIp(req);
