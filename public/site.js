@@ -31,6 +31,15 @@
     var submitBtn = document.getElementById('submitBtn');
 
     function getFieldValue(key, type) {
+      if (type === 'image') {
+        // v1.2.6: a file input's .value is only ever a fake OS path for
+        // security reasons -- never real bytes -- so there is nothing
+        // meaningful to read here. The submit handler below collects the
+        // actual File object separately (via input.files[0]) only at
+        // submit time; saveDraft()/draft restore never carry an image
+        // field's real value at all (see setFieldValue below).
+        return '';
+      }
       if (type === 'radio') {
         var checked = document.querySelector('input[name="field_' + key + '"]:checked');
         return checked ? checked.value : '';
@@ -44,6 +53,14 @@
     }
 
     function setFieldValue(key, type, value) {
+      if (type === 'image') {
+        // v1.2.6: a file input's value can never be set programmatically,
+        // by design, in any browser (a real security boundary, not a gap
+        // in this app) -- a restored draft simply leaves this field empty,
+        // same as if it were never filled in, and the visitor re-selects
+        // the file if they navigate back to this page.
+        return;
+      }
       if (type === 'radio') {
         var radio = document.querySelector('input[name="field_' + key + '"][value="' + CSS.escape(String(value)) + '"]');
         if (radio) radio.checked = true;
@@ -90,6 +107,48 @@
 
     form.addEventListener('input', saveDraft);
     form.addEventListener('change', saveDraft);
+
+    // v1.2.6: live local thumbnail for each image field. Deliberately NOT
+    // URL.createObjectURL: the site CSP is img-src 'self' data: https:
+    // (helmet, server.js), so a blob: URL is blocked and the thumbnail
+    // silently never renders -- found by driving the real form in a
+    // headless browser. Instead the file is downscaled to a small canvas
+    // and shown as a data: URL, which the CSP allows and which also avoids
+    // holding a full 10MB photo as an <img> source on a phone. Nothing is
+    // uploaded until Build is pressed. The preview is a convenience only:
+    // if createImageBitmap is unavailable or the file can't be decoded, it
+    // simply stays hidden and the form still works.
+    fieldMeta.forEach(function (f) {
+      if (f.type !== 'image') return;
+      var input = document.getElementById('field_' + f.key);
+      var preview = document.getElementById('preview_' + f.key);
+      if (!input || !preview) return;
+      var selectionToken = 0;
+      function hidePreview() {
+        preview.style.display = 'none';
+        preview.removeAttribute('src');
+      }
+      input.addEventListener('change', function () {
+        var token = ++selectionToken;
+        var file = input.files && input.files[0];
+        if (!file) { hidePreview(); return; }
+        if (typeof createImageBitmap !== 'function') { hidePreview(); return; }
+        createImageBitmap(file, { resizeWidth: 256, resizeQuality: 'medium' })
+          .then(function (bitmap) {
+            if (token !== selectionToken) { if (bitmap.close) bitmap.close(); return; }
+            var canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            canvas.getContext('2d').drawImage(bitmap, 0, 0);
+            if (bitmap.close) bitmap.close();
+            preview.src = canvas.toDataURL('image/jpeg', 0.7);
+            preview.style.display = 'block';
+          })
+          .catch(function () {
+            if (token === selectionToken) hidePreview();
+          });
+      });
+    });
 
     function showError(text) {
       errorEl.textContent = text;
@@ -160,8 +219,18 @@
       }
 
       var values = { client_email: email };
+      // v1.2.6: image fields are collected separately from `values` --
+      // they travel as real files, not JSON strings (see below).
+      var imageFiles = {};
       var missing = [];
       fieldMeta.forEach(function (f) {
+        if (f.type === 'image') {
+          var fileInput = document.getElementById('field_' + f.key);
+          var file = fileInput && fileInput.files && fileInput.files[0];
+          if (file) imageFiles[f.key] = file;
+          if (f.required && !file) missing.push(f.key);
+          return;
+        }
         var val = getFieldValue(f.key, f.type);
         values[f.key] = val;
         var isEmpty = f.type === 'checkboxes' ? val.length === 0 : !val;
@@ -177,11 +246,36 @@
       submitBtn.disabled = true;
       startBuildLoadingAnimation();
 
-      fetch('/api/build/' + encodeURIComponent(slug) + '/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values)
-      })
+      var imageKeys = Object.keys(imageFiles);
+      var fetchOptions;
+      if (imageKeys.length > 0) {
+        // v1.2.6: at least one image field on this type -- switch to a
+        // multipart request so real file bytes can travel to the server (a
+        // JSON body, used below for every other type, has no way to carry
+        // binary file data). Every non-file value travels as a single JSON
+        // string under the "payload" field, in EXACTLY the same shape the
+        // plain JSON body below would use directly -- routes/apiBuild.js
+        // parses whichever shape actually arrived through the same schema
+        // either way.
+        var formData = new FormData();
+        formData.append('payload', JSON.stringify(values));
+        imageKeys.forEach(function (key) {
+          formData.append(key, imageFiles[key]);
+        });
+        // Deliberately no Content-Type header here -- the browser only
+        // sets multipart/form-data with the correct boundary itself when
+        // this is left unset; setting it manually strips the boundary and
+        // breaks parsing server-side.
+        fetchOptions = { method: 'POST', body: formData };
+      } else {
+        fetchOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values)
+        };
+      }
+
+      fetch('/api/build/' + encodeURIComponent(slug) + '/generate', fetchOptions)
         .then(function (res) {
           return res.json().then(function (data) { return { ok: res.ok, data: data }; });
         })
