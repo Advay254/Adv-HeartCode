@@ -244,8 +244,15 @@ CREATE TABLE IF NOT EXISTS site_scripts (
 -- constraint from SCHEMA above anyway, so this is only ever doing real
 -- work on a pre-1.0.8 database.
 ALTER TABLE template_fields DROP CONSTRAINT IF EXISTS template_fields_field_type_check;
+-- v1.2.6: 'image' MUST also be listed here, not only in the later v1.2.6
+-- re-add near the end of this block. MIGRATIONS re-runs top to bottom on
+-- EVERY boot, so this earlier drop-and-re-add executes again each time --
+-- once any 'image' row exists, re-adding a constraint WITHOUT 'image'
+-- here fails ("violated by some row") and initDB() aborts boot. Found only
+-- by restarting the app after creating an image field; a fresh-DB first
+-- boot passes either way.
 ALTER TABLE template_fields ADD CONSTRAINT template_fields_field_type_check
-  CHECK (field_type IN ('text', 'textarea', 'email', 'password', 'dropdown', 'number', 'date', 'checkboxes', 'radio'));
+  CHECK (field_type IN ('text', 'textarea', 'email', 'password', 'dropdown', 'number', 'date', 'checkboxes', 'radio', 'image'));
 
 -- v1.0.8 Part B: optional per-website-type deploy slug pattern. NULL means
 -- "keep today's random-slug behavior" -- see lib/deploySlug.js.
@@ -1298,9 +1305,20 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_created_at_id
   ON activity_events (created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_events_type_created_at_id
   ON activity_events (event_type, created_at DESC, id DESC);
+
+-- v1.2.6: 'image' added to template_fields.field_type -- same
+-- drop-and-re-add pattern used in v1.0.8 (see that migration above) to
+-- extend an existing CHECK constraint idempotently. An 'image' field's
+-- value is a base64 data URI by the time it's stored anywhere (see
+-- lib/imageProcessing.js/routes/apiBuild.js); this constraint only governs
+-- what field_type itself is allowed to be, not the shape of a submitted
+-- value.
+ALTER TABLE template_fields DROP CONSTRAINT IF EXISTS template_fields_field_type_check;
+ALTER TABLE template_fields ADD CONSTRAINT template_fields_field_type_check
+  CHECK (field_type IN ('text', 'textarea', 'email', 'password', 'dropdown', 'number', 'date', 'checkboxes', 'radio', 'image'));
 `;
 
-const CURRENT_VERSION = '1.2.5';
+const CURRENT_VERSION = '1.2.6';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
