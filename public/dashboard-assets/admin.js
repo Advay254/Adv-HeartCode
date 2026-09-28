@@ -2826,7 +2826,9 @@
           // v1.1.9 Part B: checkbox -> 'true'/'false' string, matching
           // this table's existing all-strings convention (see
           // routes/adminSiteSettings.js's updateSchema).
-          show_type_prices_early: form.show_type_prices_early.checked ? 'true' : 'false'
+          show_type_prices_early: form.show_type_prices_early.checked ? 'true' : 'false',
+          // v1.2.6
+          image_compression_quality: form.image_compression_quality.value
         })
       });
       const statusEl = document.getElementById('siteSettingsStatus');
