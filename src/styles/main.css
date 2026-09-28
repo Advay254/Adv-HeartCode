@@ -165,6 +165,25 @@
            -translate-y-1/2 text-hc-ink/40 [&>svg]:h-4 [&>svg]:w-4;
   }
 
+  /* v1.2.6: image field type. A bare native file input styled via
+     Tailwind's file: variant (core since v3.0, no plugin needed) rather
+     than hidden-input-plus-fake-button trickery — the real control stays
+     directly clickable/keyboard-accessible, only its "Choose file" button
+     face is restyled. hc-image-preview is the optional local thumbnail
+     public/site.js shows via a client-side object URL (never uploaded
+     until Build is actually pressed) — hidden by default, shown once a
+     file is actually selected. */
+  .hc-file-input {
+    @apply block w-full text-sm text-hc-ink/70
+           file:mr-4 file:rounded-xl file:border-0 file:bg-hc-blue
+           file:px-4 file:py-2.5 file:text-sm file:font-semibold
+           file:text-white file:transition-colors file:duration-200
+           hover:file:bg-hc-blue/90;
+  }
+  .hc-image-preview {
+    @apply mt-3 h-32 w-32 rounded-xl border border-black/10 object-cover;
+  }
+
   /* Radio/checkbox option rows — a bordered "chip" per option rather than
      a bare native input, so every field type (including the two that
      previously had no styling at all) reads as one consistent system.
