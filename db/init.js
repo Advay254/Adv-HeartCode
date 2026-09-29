@@ -1316,9 +1316,21 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_type_created_at_id
 ALTER TABLE template_fields DROP CONSTRAINT IF EXISTS template_fields_field_type_check;
 ALTER TABLE template_fields ADD CONSTRAINT template_fields_field_type_check
   CHECK (field_type IN ('text', 'textarea', 'email', 'password', 'dropdown', 'number', 'date', 'checkboxes', 'radio', 'image'));
+
+-- v1.2.7 (Admin Test Deploy): flags a deployed_sites row as created by the
+-- admin-only test-deploy flow (routes/adminTestDeploy.js) rather than a
+-- real, paid deployment. NOT NULL DEFAULT false on purpose: every existing
+-- row (and every real deployment inserted by lib/finalizeDeployment.js,
+-- which never mentions this column) is correctly "not a test" with no
+-- backfill, and a NOT NULL boolean means every revenue/analytics filter
+-- can be the plain "is_test = false" -- there is no third NULL state that
+-- an "= false" comparison would silently drop from a real total. Adding a
+-- column with a constant default is a metadata-only change in Postgres 11+
+-- (no table rewrite), so this is safe at any table size.
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false;
 `;
 
-const CURRENT_VERSION = '1.2.6';
+const CURRENT_VERSION = '1.2.7';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
