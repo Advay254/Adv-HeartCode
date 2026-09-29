@@ -1236,7 +1236,7 @@ router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler
       `SELECT ds.*, wt.name AS website_type_name
        FROM deployed_sites ds
        LEFT JOIN website_types wt ON wt.id = ds.website_type_id
-       WHERE ds.client_email = $1
+       WHERE ds.client_email = $1 AND ds.is_test = false
        ORDER BY ds.deployed_at DESC`,
       [email]
     );

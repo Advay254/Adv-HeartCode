@@ -85,6 +85,44 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, asyncHandler(async (req
   });
 }));
 
+// v1.2.7: Test Deploy page. Looked up by slug (matches the "Test Deploy"
+// link on the types list, which already has the slug) rather than id, and
+// deliberately has NO is_active filter — testing an inactive/in-progress
+// type is a primary reason this page exists.
+router.get(`${INTERNAL_ADMIN_PREFIX}/test-deploy/:slug`, asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const typeResult = await pool.query('SELECT * FROM website_types WHERE slug = $1', [req.params.slug]);
+  if (typeResult.rowCount === 0) {
+    return res.status(404).send('Website type not found');
+  }
+  const websiteType = typeResult.rows[0];
+  const fieldsResult = await pool.query(
+    'SELECT * FROM template_fields WHERE website_type_id = $1 ORDER BY display_order ASC, id ASC',
+    [websiteType.id]
+  );
+  const activeTemplate = await pool.query(
+    'SELECT version FROM templates WHERE website_type_id = $1 AND is_active = true LIMIT 1',
+    [websiteType.id]
+  );
+  res.render('admin/test-deploy', {
+    websiteType: {
+      id: websiteType.id,
+      slug: websiteType.slug,
+      name: websiteType.name,
+      isActive: websiteType.is_active,
+      hasActiveTemplate: activeTemplate.rowCount > 0
+    },
+    fields: fieldsResult.rows.map(f => ({
+      fieldKey: f.field_key,
+      fieldLabel: f.field_label,
+      fieldType: f.field_type,
+      placeholderText: f.placeholder_text,
+      isRequired: f.is_required,
+      dropdownOptions: f.dropdown_options
+    }))
+  });
+}));
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/categories`, (req, res) => {
   res.render('admin/categories');
 });
