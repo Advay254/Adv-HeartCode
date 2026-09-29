@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Test Deploy: <%= websiteType.name %> | HeartCode Admin</title>
+</head>
+<body data-page="test-deploy" data-slug="<%= slug %>" data-type-slug="<%= websiteType.slug %>">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'website-types' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Website Types &middot; <%= websiteType.name %></p>
+        <h1>Test Deploy</h1>
+        <p>Runs a real deployment for this type &mdash; the same form validation, AI fill and template as a paying customer gets &mdash; with no payment involved. The deployed slug always ends in <code>-test</code>, the confirmation email is marked <code>[TEST]</code>, and nothing here counts toward revenue, subscribers, or sale notifications.</p>
+      </div>
+    </section>
+
+    <% if (!websiteType.isActive) { %>
+      <div class="admin-callout is-warn">This website type is not active yet &mdash; it isn't visible to visitors, but a test deploy works regardless.</div>
+    <% } %>
+    <% if (!websiteType.hasActiveTemplate) { %>
+      <div class="admin-callout is-warn">This website type has no active template yet &mdash; save one on the Template tab before test-deploying.</div>
+    <% } %>
+
+    <section class="admin-split-grid">
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Form</p><h2>Test values</h2></div></div>
+        <form id="testDeployForm">
+          <%- include('../partials/build-form-fields', { fields: fields, ui: {
+            label: 'admin-label', input: 'admin-input', textarea: 'admin-textarea', select: 'admin-select',
+            selectWrap: 'admin-select-wrap', optionList: 'admin-option-list', optionItem: 'admin-option-item',
+            file: 'admin-input', imagePreview: 'admin-image-preview', hint: 'admin-help',
+            required: '', icons: false, emailLabel: 'Client email'
+          } }) %>
+
+          <label class="admin-label" for="sitePassword">Site password <span>(optional)</span></label>
+          <input class="admin-input" type="text" name="sitePassword" id="sitePassword" placeholder="Leave blank for no password gate">
+          <p class="admin-help">If set, the deployed test site is gated exactly as a real password-protected deployment would be, using this type's Password Page template.</p>
+
+          <button type="submit" id="testDeploySubmit" class="admin-btn mt-4">Run test deployment</button>
+        </form>
+        <p id="testDeployError" class="admin-msg admin-msg-error" style="display:none;"></p>
+      </div>
+
+      <div class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Result</p><h2>Latest test deployment</h2></div></div>
+        <div id="testDeployResult">
+          <p class="admin-help">Run a test deployment to see the result here.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return { key: f.fieldKey, type: f.fieldType, required: f.isRequired }; })) %></script>
+</body>
+</html>
