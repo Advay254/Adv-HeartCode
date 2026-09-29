@@ -61,6 +61,14 @@ module.exports = {
     './views/public/**/*.ejs',
     './views/partials/public-*.ejs',
     './views/partials/landing-sections/**/*.ejs',
+    // v1.2.7: the public build form's field markup moved into this shared
+    // partial (also used by the admin Test Deploy page) -- it doesn't
+    // match the 'public-*' prefix above, so it needs its own explicit
+    // entry or any hc-* class referenced ONLY inside it (this build
+    // silently dropped .hc-select-chevron until this line was added,
+    // caught by diffing compiled output before/after the extraction, not
+    // by inspection) gets purged from the public CSS bundle.
+    './views/partials/build-form-fields.ejs',
     './public/site.js',
     './public/site-interactions.js'
   ],

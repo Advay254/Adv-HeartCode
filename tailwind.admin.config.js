@@ -68,6 +68,13 @@ module.exports = {
     './views/admin/**/*.ejs',
     './views/partials/nav.ejs',
     './views/partials/head.ejs',
+    // v1.2.7: the new admin Test Deploy page (views/admin/test-deploy.ejs)
+    // renders its fields through this shared partial (also used by the
+    // public build page) -- it lives under views/partials/, not
+    // views/admin/, so it needs its own explicit entry here too (see the
+    // matching comment in tailwind.config.js for the public-side bug this
+    // same omission caused).
+    './views/partials/build-form-fields.ejs',
     './public/dashboard-assets/admin.js'
   ],
   theme: {

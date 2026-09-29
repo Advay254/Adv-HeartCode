@@ -36,6 +36,7 @@ const adminLandingSectionsRouter = require('./routes/adminLandingSections');
 const adminRecoveryRouter = require('./routes/adminRecovery');
 const adminFunnelRouter = require('./routes/adminFunnel');
 const adminLegalRouter = require('./routes/adminLegal');
+const adminTestDeployRouter = require('./routes/adminTestDeploy');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
 const eventsRouter = require('./routes/events');
@@ -356,6 +357,10 @@ app.use('/api/admin/landing-sections', adminLandingSectionsRouter);
 app.use('/api/admin/pending-deployments', adminRecoveryRouter);
 app.use('/api/admin/funnel', adminFunnelRouter);
 app.use('/api/admin/legal-pages', adminLegalRouter);
+// v1.2.7: admin-only test deployment (no Paystack, forced -test slug, flagged
+// is_test). Session + CSRF gated INSIDE its router, session check first --
+// see routes/adminTestDeploy.js's header for why that order is load-bearing.
+app.use('/api/admin/test-deploy', adminTestDeployRouter);
 
 // v1.1.4 Part B: body-parser (express.json(), used above) forwards a
 // request whose body exceeds its configured limit — or whose body isn't
