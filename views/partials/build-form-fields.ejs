@@ -1,0 +1,90 @@
+<%#
+  v1.2.7: the build form's field markup, extracted VERBATIM from
+  views/public/build.ejs so the public build page and the admin Test Deploy
+  page (views/admin/test-deploy.ejs) render the SAME fields the SAME way --
+  one loop over template_fields, one place to add a new field type (see the
+  v1.2.6 'image' branch below for what that involves). Only the CSS class
+  names differ between the two pages, and they arrive via the `ui` local
+  rather than being duplicated markup:
+    ui.label / input / textarea / select / selectWrap / optionList /
+    optionItem / file / imagePreview / hint / required : class strings
+    ui.icons      : true on the public page (label pictograms + select chevron)
+    ui.emailLabel : the fixed email field's label text
+  Locals: fields (array as built by routes/public.js), ui.
+  EJS comments (not HTML ones) on purpose: an HTML comment inside this
+  per-field loop would ship in every rendered page.
+%>
+<%# v1.0.9 Part B: an icon per field TYPE, not per field — only where one
+    genuinely fits (email/date/password have an obvious pictogram; a
+    generic text/number/dropdown/radio/checkboxes field gets none rather
+    than a forced, meaningless icon). %>
+<% function iconForFieldType(type) {
+  if (type === 'email') return 'mail';
+  if (type === 'date') return 'calendar';
+  if (type === 'password') return 'lock';
+  if (type === 'image') return 'camera';
+  return null;
+} %>
+
+        <%# Fixed on every website type, regardless of template_fields:
+            this is how the client receives their site later, so it's a
+            permanent part of the form rather than a configurable field. %>
+        <label class="<%= ui.label %>" for="client_email">
+          <% if (ui.icons) { %><span class="hc-label-icon"><%- getIconSvg('mail') %></span><% } %>
+          <%= ui.emailLabel %> <span class="<%= ui.required %>">*</span>
+        </label>
+        <input class="<%= ui.input %>" type="email" name="client_email" id="client_email" required placeholder="you@example.com">
+
+        <% fields.forEach(function (f) { %>
+          <% var fieldIcon = iconForFieldType(f.fieldType); %>
+          <label class="<%= ui.label %>">
+            <% if (ui.icons && fieldIcon) { %><span class="hc-label-icon"><%- getIconSvg(fieldIcon) %></span><% } %>
+            <%= f.fieldLabel %><% if (f.isRequired) { %> <span class="<%= ui.required %>">*</span><% } %>
+          </label>
+
+          <% if (f.fieldType === 'textarea') { %>
+            <textarea class="<%= ui.textarea %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>"></textarea>
+          <% } else if (f.fieldType === 'dropdown') { %>
+            <div class="<%= ui.selectWrap %>">
+              <select class="<%= ui.select %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
+                <option value="">-- select --</option>
+                <% (f.dropdownOptions || []).forEach(function (opt) { %>
+                  <option value="<%= opt %>"><%= opt %></option>
+                <% }); %>
+              </select>
+              <% if (ui.icons) { %><span class="hc-select-chevron"><%- getIconSvg('chevron-down') %></span><% } %>
+            </div>
+          <% } else if (f.fieldType === 'radio') { %>
+            <div class="<%= ui.optionList %>" data-field="<%= f.fieldKey %>">
+              <% (f.dropdownOptions || []).forEach(function (opt, i) { %>
+                <label class="<%= ui.optionItem %>">
+                  <input type="radio" name="field_<%= f.fieldKey %>" value="<%= opt %>" <%= (f.isRequired && i === 0) ? 'required' : '' %>>
+                  <span><%= opt %></span>
+                </label>
+              <% }); %>
+            </div>
+          <% } else if (f.fieldType === 'checkboxes') { %>
+            <div class="<%= ui.optionList %>" data-field="<%= f.fieldKey %>">
+              <% (f.dropdownOptions || []).forEach(function (opt) { %>
+                <label class="<%= ui.optionItem %>">
+                  <input type="checkbox" name="field_<%= f.fieldKey %>" value="<%= opt %>">
+                  <span><%= opt %></span>
+                </label>
+              <% }); %>
+            </div>
+          <% } else if (f.fieldType === 'image') { %>
+            <%# v1.2.6: deliberately its own branch, not the generic one below --
+                that branch writes the field type straight into the input's type
+                attribute, and HTML's type "image" is a different thing entirely
+                (an image-shaped submit button), not a file picker. accept= is a
+                client-side hint only; routes/apiBuild.js enforces the real
+                mimetype allow-list independently. (EJS comment on purpose: an
+                HTML comment here would ship in every rendered page.) %>
+            <input class="<%= ui.file %>" type="file" accept="image/jpeg,image/png,image/webp" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
+            <img class="<%= ui.imagePreview %>" id="preview_<%= f.fieldKey %>" style="display:none;" alt="">
+            <p class="<%= ui.hint %>">JPEG, PNG, or WebP, up to 10MB — resized and compressed automatically.</p>
+          <% } else { %>
+            <input class="<%= ui.input %>" type="<%= f.fieldType %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>">
+          <% } %>
+        <% }); %>
+
