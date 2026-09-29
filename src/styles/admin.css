@@ -308,6 +308,31 @@
     @apply mt-3.5 flex items-center gap-2 text-sm text-gray-700;
   }
 
+  /* v1.2.7: dropdown/radio/checkboxes/image-field markup, shared with the
+     public build form via views/partials/build-form-fields.ejs (see that
+     file's header) — same structure as the public site's .hc-select-wrap
+     /.hc-option-list/.hc-option-item/.hc-image-preview
+     (src/styles/main.css), restyled with the admin's own tokens/Tailwind
+     utilities instead of duplicating hc-blue/hc-ink directly, since every
+     other admin form control on this page already goes through the
+     brand and gray Tailwind color scales rather than the public site's
+     tokens. */
+  .admin-select-wrap {
+    @apply relative;
+  }
+  .admin-option-list {
+    @apply mt-1.5 flex flex-wrap gap-2;
+  }
+  .admin-option-item {
+    @apply flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700;
+  }
+  .admin-option-item:has(:checked) {
+    @apply border-brand-300 bg-brand-50 text-brand-600;
+  }
+  .admin-image-preview {
+    @apply mt-2 h-24 w-24 rounded-lg border border-gray-200 object-cover;
+  }
+
   /* ---- badges / status ---- */
   /* The exact TailAdmin Badge.tsx "light" variant markup, verified
      directly against that file. v1.1.7 left an undifferentiated gray
@@ -1376,6 +1401,7 @@ body.admin-drawer-open { overflow:hidden; }
 .activity-dot.is-email { background:#6941c6; }
 .activity-dot.is-recovery { background:#b54708; }
 .activity-dot.is-config { background:#475467; }
+.activity-dot.is-test { background:#7a5af8; }
 .activity-body { min-width:0; flex:1; }
 .activity-title { margin:0; color:#101828; font-size:13.5px; font-weight:650; overflow-wrap:anywhere; }
 .activity-detail { margin:2px 0 0; color:#667085; font-size:12.5px; overflow-wrap:anywhere; }
