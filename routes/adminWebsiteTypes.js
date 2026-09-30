@@ -387,9 +387,42 @@ router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const { id } = parsed.data;
 
   const pool = getPool();
+
+  // v1.2.8 hotfix: deployed_sites.website_type_id has no ON DELETE clause
+  // (see db/init.js), so Postgres refuses to delete a website type at all
+  // while ANY deployed_sites row still references it -- and since v1.2.7's
+  // admin Test Deploy feature deliberately works on inactive types (the
+  // whole point is testing before switching a type on, or after editing
+  // one), test-deploying a type now silently makes it permanently
+  // undeletable, which is exactly the bug this fixes. A test deployment
+  // has zero business value once its type is gone, so those rows are
+  // cleared here first, automatically. A REAL deployed_sites row is
+  // deliberately left alone -- see the catch below, which still refuses
+  // the delete rather than silently orphaning paid deployment history, but
+  // now says so clearly instead of crashing.
+  await pool.query('DELETE FROM deployed_sites WHERE website_type_id = $1 AND is_test = true', [id]);
+
   // ON DELETE CASCADE on template_fields.website_type_id and
   // templates.website_type_id removes dependent rows automatically.
-  const result = await pool.query('DELETE FROM website_types WHERE id = $1 RETURNING id', [id]);
+  let result;
+  try {
+    result = await pool.query('DELETE FROM website_types WHERE id = $1 RETURNING id', [id]);
+  } catch (err) {
+    // Postgres 23503 = foreign_key_violation. With test rows already
+    // cleared above, only a real (is_test = false) deployed_sites row can
+    // still cause this. The global error handler in server.js never sends
+    // err.message to the client (only its status code varies), so this is
+    // caught here specifically to give the admin an actual explanation
+    // instead of the generic "Something went wrong."
+    if (err.code === '23503') {
+      const count = await pool.query('SELECT COUNT(*) FROM deployed_sites WHERE website_type_id = $1', [id]);
+      const n = count.rows[0].count;
+      return res.status(409).json({
+        error: `Can't delete: ${n} real site${n === '1' ? '' : 's'} ${n === '1' ? 'has' : 'have'} already been deployed under this website type. Deleting it would orphan that deployment history.`
+      });
+    }
+    throw err;
+  }
   if (result.rowCount === 0) {
     return res.status(404).json({ error: 'Website type not found' });
   }
