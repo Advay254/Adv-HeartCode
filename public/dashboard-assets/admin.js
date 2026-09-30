@@ -973,14 +973,24 @@
           <td data-label="Fields">${t.fieldCount}</td>
           <td data-label="Template">${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : 'n/a'}</td>
           <td data-label="Price">$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="admin-badge admin-badge-active">AI</span>' : ''}</td>
-          <td data-label=""><button type="button" class="admin-btn-danger admin-btn-sm delete-type" data-id="${t.id}">Delete</button></td>
+          <td data-label=""><a href="/${slug}/test-deploy/${t.slug}" class="admin-btn-outline admin-btn-sm">Test Deploy</a> <button type="button" class="admin-btn-danger admin-btn-sm delete-type" data-id="${t.id}">Delete</button></td>
         </tr>`).join('') || '<tr><td colspan="6" data-label="">No website types yet.</td></tr>';
 
       document.querySelectorAll('.delete-type').forEach(btn => {
         btn.addEventListener('click', async () => {
           if (!confirm('Delete this website type? This permanently removes its fields and template history.')) return;
           const res = await window.adminFetch(`/api/admin/website-types/${btn.dataset.id}`, { method: 'DELETE' });
-          if (res.ok) load();
+          if (res.ok) {
+            load();
+            return;
+          }
+          // v1.2.8 hotfix: this previously did nothing at all on failure --
+          // the click, the confirm dialog, then silence, with no way to
+          // tell delete had failed short of noticing the row was still
+          // there. Now shows the server's actual reason (e.g. real
+          // deployments still exist under this type).
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || 'Failed to delete website type.');
         });
       });
     }
@@ -1623,7 +1633,8 @@
     email_sent: { label: 'Email sent', dot: 'is-email' },
     recovery_completed: { label: 'Deployment recovered', dot: 'is-recovery' },
     site_details_resent: { label: 'Site details resent', dot: 'is-email' },
-    admin_config_changed: { label: 'Configuration changed', dot: 'is-config' }
+    admin_config_changed: { label: 'Configuration changed', dot: 'is-config' },
+    test_deployment_completed: { label: 'Test deployment', dot: 'is-test' }
   };
   function formatRelativeTime(iso) {
     const then = new Date(iso).getTime();
@@ -2398,7 +2409,12 @@
     }
 
     function renderDrawer(d) {
-      els.drawerTitle.textContent = d.websiteTypeName || 'Unknown website type';
+      // v1.2.7: fetchOne can return a test deployment (deliberately not
+      // filtered — see lib/deploymentQueries.js's fetchOne comment) even
+      // though the list itself never shows one; make that unmistakable if
+      // it's ever reached (a direct reference lookup) rather than showing
+      // it looking like a real, revenue-counted deployment.
+      els.drawerTitle.textContent = (d.websiteTypeName || 'Unknown website type') + (d.isTest ? ' (TEST)' : '');
       els.drawerStatus.hidden = false;
       els.drawerBody.textContent = '';
       const dl = el('dl', 'admin-detail-list');
@@ -4294,6 +4310,141 @@
     });
   }
 
+  // ---- admin test deploy (v1.2.7) ----
+  // Collects the form the same way public/site.js's initBuildPage() does
+  // (per-field-type getFieldValue, image files collected separately into a
+  // multipart request when any image field has a file), then posts to the
+  // admin-only /api/admin/test-deploy/:slug via adminFetch (CSRF-gated,
+  // FormData-aware already). No draft persistence, no preview step, no
+  // funnel tracking — a test deploy is immediate and admin-only.
+  function initTestDeployPage() {
+    var typeSlug = document.body.dataset.typeSlug;
+    var fieldMetaEl = document.getElementById('fieldKeysData');
+    var fieldMeta = fieldMetaEl ? JSON.parse(fieldMetaEl.textContent) : [];
+    var form = document.getElementById('testDeployForm');
+    var errorEl = document.getElementById('testDeployError');
+    var submitBtn = document.getElementById('testDeploySubmit');
+    var resultEl = document.getElementById('testDeployResult');
+
+    function getFieldValue(key, type) {
+      if (type === 'image') return '';
+      if (type === 'radio') {
+        var checked = document.querySelector('input[name="field_' + key + '"]:checked');
+        return checked ? checked.value : '';
+      }
+      if (type === 'checkboxes') {
+        var boxes = document.querySelectorAll('input[name="field_' + key + '"]:checked');
+        return Array.prototype.map.call(boxes, function (el) { return el.value; });
+      }
+      var el = document.getElementById('field_' + key);
+      return el ? el.value.trim() : '';
+    }
+
+    // v1.2.6-style local thumbnail — identical approach to public/site.js's
+    // build page (see that file's own comment on why not
+    // URL.createObjectURL: the admin CSP is img-src 'self' data: https:
+    // too, see server.js's helmet config).
+    fieldMeta.forEach(function (f) {
+      if (f.type !== 'image') return;
+      var input = document.getElementById('field_' + f.key);
+      var preview = document.getElementById('preview_' + f.key);
+      if (!input || !preview) return;
+      input.addEventListener('change', function () {
+        var file = input.files && input.files[0];
+        if (!file || typeof createImageBitmap !== 'function') {
+          preview.style.display = 'none';
+          preview.removeAttribute('src');
+          return;
+        }
+        createImageBitmap(file, { resizeWidth: 128, resizeQuality: 'medium' }).then(function (bitmap) {
+          var canvas = document.createElement('canvas');
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          canvas.getContext('2d').drawImage(bitmap, 0, 0);
+          if (bitmap.close) bitmap.close();
+          preview.src = canvas.toDataURL('image/jpeg', 0.7);
+          preview.style.display = 'block';
+        }).catch(function () {
+          preview.style.display = 'none';
+        });
+      });
+    });
+
+    function showError(text) {
+      errorEl.textContent = text;
+      errorEl.style.display = 'block';
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      errorEl.style.display = 'none';
+
+      var email = document.getElementById('client_email').value.trim();
+      var values = { client_email: email };
+      var imageFiles = {};
+      fieldMeta.forEach(function (f) {
+        if (f.type === 'image') {
+          var fileInput = document.getElementById('field_' + f.key);
+          var file = fileInput && fileInput.files && fileInput.files[0];
+          if (file) imageFiles[f.key] = file;
+          return;
+        }
+        values[f.key] = getFieldValue(f.key, f.type);
+      });
+      // The optional site password rides in the same payload under a
+      // reserved key the server strips before validating form fields
+      // against this type's actual field list — see
+      // routes/adminTestDeploy.js's PASSWORD_KEY.
+      values.__sitePassword = document.getElementById('sitePassword').value;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Deploying…';
+      resultEl.innerHTML = '<p class="admin-help">Running the real generation + deploy pipeline — this can take a little while, especially if this type uses AI…</p>';
+
+      var imageKeys = Object.keys(imageFiles);
+      var fetchOptions;
+      if (imageKeys.length > 0) {
+        var formData = new FormData();
+        formData.append('payload', JSON.stringify(values));
+        imageKeys.forEach(function (key) { formData.append(key, imageFiles[key]); });
+        fetchOptions = { method: 'POST', body: formData };
+      } else {
+        fetchOptions = { method: 'POST', body: JSON.stringify(values) };
+      }
+
+      window.adminFetch('/api/admin/test-deploy/' + encodeURIComponent(typeSlug), fetchOptions)
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Run test deployment';
+          if (!result.ok) {
+            showError(result.data.error || 'Something went wrong.');
+            resultEl.innerHTML = '<p class="admin-help">Run a test deployment to see the result here.</p>';
+            if (result.data.missingFields || result.data.invalidFields) {
+              showError('Missing/invalid: ' + [].concat(result.data.missingFields || [], result.data.invalidFields || []).map(escapeHtml).join(', '));
+            }
+            return;
+          }
+          var site = result.data.site;
+          var safeUrl = escapeHtml(site.url);
+          var rows = [
+            '<p class="admin-msg admin-msg-success">Deployed &mdash; <a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + safeUrl + '</a></p>',
+            '<p class="admin-help">Slug: <code>' + escapeHtml(site.slug) + '</code>' + (site.hasPassword ? ' &middot; password-gated' : '') + (site.aiUsed ? ' &middot; AI content used' : '') + '</p>',
+            '<p class="admin-help">Email: ' + (result.data.email.status === 'sent' ? 'sent (' + escapeHtml(result.data.email.template) + ' template)' : 'FAILED — ' + escapeHtml(result.data.email.error || '')) + '</p>'
+          ];
+          if (result.data.warning) {
+            rows.push('<p class="admin-msg admin-msg-error">' + escapeHtml(result.data.warning) + '</p>');
+          }
+          resultEl.innerHTML = rows.join('');
+        })
+        .catch(function () {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Run test deployment';
+          showError('Network error. Please try again.');
+        });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -4318,5 +4469,6 @@
     if (page === 'faq') initFaqPage();
     if (page === 'seo-pages') initSeoPagesPage();
     if (page === 'legal-pages') initLegalPagesPage();
+    if (page === 'test-deploy') initTestDeployPage();
   });
 })();
