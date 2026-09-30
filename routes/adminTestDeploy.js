@@ -118,7 +118,7 @@ router.post('/:slug', requireCsrf, handleImageUpload, asyncHandler(async (req, r
   // Deliberately NO is_active filter (the public flow requires it): a
   // primary reason to test-deploy is to try a new or edited type BEFORE
   // switching it on for visitors.
-  const typeResult = await pool.query('SELECT * FROM website_types WHERE slug = $1', [slugParsed.data.slug]);
+  const typeResult = await pool.query('SELECT * FROM website_types WHERE slug = $1 AND is_deleted_placeholder = false', [slugParsed.data.slug]);
   if (typeResult.rowCount === 0) {
     return res.status(404).json({ error: 'Website type not found' });
   }

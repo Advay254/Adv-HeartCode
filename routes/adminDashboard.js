@@ -34,6 +34,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
         COUNT(*) FILTER (WHERE is_active) AS active_count,
         COUNT(*) FILTER (WHERE NOT is_active) AS inactive_count
       FROM website_types
+      WHERE is_deleted_placeholder = false
     `)
   ]);
 

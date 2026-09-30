@@ -8,6 +8,9 @@ const { CATEGORY_ICON_NAMES, DEFAULT_ICON_NAME } = require('../lib/icons');
 const { slugify } = require('../lib/slugify');
 const { resolveDeploySlugPattern, extractFieldKeyReferences } = require('../lib/deploySlug');
 const { PASSWORD_PAGE_PLACEHOLDERS } = require('../lib/passwordPageTemplates');
+const { deleteWebsiteType, DeleteBlockedError } = require('../lib/deletedTypePlaceholder');
+const { refreshFooterExtrasCache } = require('../lib/footerExtras');
+const { refreshLandingSectionsCache } = require('../lib/landingSections');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -194,7 +197,7 @@ function formatOutputField(f) {
 
 router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
-  const types = await pool.query('SELECT * FROM website_types ORDER BY display_order ASC, id ASC');
+  const types = await pool.query('SELECT * FROM website_types WHERE is_deleted_placeholder = false ORDER BY display_order ASC, id ASC');
 
   const results = [];
   for (const t of types.rows) {
@@ -294,6 +297,9 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Website type not found' });
   }
   const current = existing.rows[0];
+  if (current.is_deleted_placeholder) {
+    return res.status(400).json({ error: 'The shared "Deleted Website Types" placeholder cannot be edited.' });
+  }
 
   // v1.1.4 Part D: null (explicitly sent) clears back to uncategorized;
   // omitted leaves it unchanged; a real id sets/replaces it. Existence is
@@ -386,45 +392,28 @@ router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   }
   const { id } = parsed.data;
 
-  const pool = getPool();
-
-  // v1.2.8 hotfix: deployed_sites.website_type_id has no ON DELETE clause
-  // (see db/init.js), so Postgres refuses to delete a website type at all
-  // while ANY deployed_sites row still references it -- and since v1.2.7's
-  // admin Test Deploy feature deliberately works on inactive types (the
-  // whole point is testing before switching a type on, or after editing
-  // one), test-deploying a type now silently makes it permanently
-  // undeletable, which is exactly the bug this fixes. A test deployment
-  // has zero business value once its type is gone, so those rows are
-  // cleared here first, automatically. A REAL deployed_sites row is
-  // deliberately left alone -- see the catch below, which still refuses
-  // the delete rather than silently orphaning paid deployment history, but
-  // now says so clearly instead of crashing.
-  await pool.query('DELETE FROM deployed_sites WHERE website_type_id = $1 AND is_test = true', [id]);
-
-  // ON DELETE CASCADE on template_fields.website_type_id and
-  // templates.website_type_id removes dependent rows automatically.
-  let result;
+  // v1.2.9: delete is only allowed while the type is inactive, and always
+  // completes: the type's identity (fields, templates, SEO pages, name
+  // snapshots) is wiped and its deployment history is re-pointed at the
+  // shared "Deleted Website Types" placeholder, all in one transaction.
+  // See lib/deletedTypePlaceholder.js. (Before this, the route refused
+  // whenever any real deployment existed and mapped every foreign-key
+  // failure -- including pending_deployments and funnel_events, which it
+  // never handled -- to a misleading "real sites" message.)
+  let outcome;
   try {
-    result = await pool.query('DELETE FROM website_types WHERE id = $1 RETURNING id', [id]);
+    outcome = await deleteWebsiteType(getPool(), id);
   } catch (err) {
-    // Postgres 23503 = foreign_key_violation. With test rows already
-    // cleared above, only a real (is_test = false) deployed_sites row can
-    // still cause this. The global error handler in server.js never sends
-    // err.message to the client (only its status code varies), so this is
-    // caught here specifically to give the admin an actual explanation
-    // instead of the generic "Something went wrong."
-    if (err.code === '23503') {
-      const count = await pool.query('SELECT COUNT(*) FROM deployed_sites WHERE website_type_id = $1', [id]);
-      const n = count.rows[0].count;
-      return res.status(409).json({
-        error: `Can't delete: ${n} real site${n === '1' ? '' : 's'} ${n === '1' ? 'has' : 'have'} already been deployed under this website type. Deleting it would orphan that deployment history.`
-      });
+    if (err instanceof DeleteBlockedError) {
+      return res.status(err.status).json({ error: err.message });
     }
     throw err;
   }
-  if (result.rowCount === 0) {
-    return res.status(404).json({ error: 'Website type not found' });
+
+  // In-memory caches that may have held the removed SEO pages.
+  await refreshFooterExtrasCache();
+  for (const pageSlug of outcome.removedSeoPageSlugs) {
+    await refreshLandingSectionsCache(pageSlug);
   }
   res.json({ success: true });
 }));

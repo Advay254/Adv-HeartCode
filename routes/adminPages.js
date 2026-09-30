@@ -67,7 +67,7 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types`, (req, res) => {
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, asyncHandler(async (req, res) => {
   const pool = getPool();
-  const result = await pool.query('SELECT * FROM website_types WHERE id = $1', [req.params.id]);
+  const result = await pool.query('SELECT * FROM website_types WHERE id = $1 AND is_deleted_placeholder = false', [req.params.id]);
   if (result.rowCount === 0) {
     return res.status(404).send('Website type not found');
   }
@@ -91,7 +91,7 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/website-types/:id`, asyncHandler(async (req
 // type is a primary reason this page exists.
 router.get(`${INTERNAL_ADMIN_PREFIX}/test-deploy/:slug`, asyncHandler(async (req, res) => {
   const pool = getPool();
-  const typeResult = await pool.query('SELECT * FROM website_types WHERE slug = $1', [req.params.slug]);
+  const typeResult = await pool.query('SELECT * FROM website_types WHERE slug = $1 AND is_deleted_placeholder = false', [req.params.slug]);
   if (typeResult.rowCount === 0) {
     return res.status(404).send('Website type not found');
   }
@@ -138,7 +138,7 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/seo-pages`, asyncHandler(async (req, res) =
   // options here avoids a separate client round trip before it can show
   // the right one pre-selected on edit.
   const typesResult = await pool.query(
-    'SELECT id, name FROM website_types ORDER BY display_order ASC, id ASC'
+    'SELECT id, name FROM website_types WHERE is_deleted_placeholder = false ORDER BY display_order ASC, id ASC'
   );
   res.render('admin/seo-pages', { websiteTypes: typesResult.rows });
 }));
