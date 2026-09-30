@@ -1328,9 +1328,19 @@ ALTER TABLE template_fields ADD CONSTRAINT template_fields_field_type_check
 -- column with a constant default is a metadata-only change in Postgres 11+
 -- (no table rewrite), so this is safe at any table size.
 ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false;
+
+-- v1.2.9: flags the ONE shared "Deleted Website Types" placeholder row that
+-- deployments from deleted website types are re-pointed at (see
+-- lib/deletedTypePlaceholder.js). NOT NULL DEFAULT false: every existing
+-- type is correctly "not a placeholder" with no backfill (metadata-only
+-- change). The partial unique index guarantees there can never be more than
+-- one placeholder, even if two first-ever deletes race.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS is_deleted_placeholder BOOLEAN NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_website_types_single_placeholder
+  ON website_types (is_deleted_placeholder) WHERE is_deleted_placeholder = true;
 `;
 
-const CURRENT_VERSION = '1.2.7';
+const CURRENT_VERSION = '1.2.9';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
