@@ -973,12 +973,12 @@
           <td data-label="Fields">${t.fieldCount}</td>
           <td data-label="Template">${t.activeTemplateVersion ? 'v' + t.activeTemplateVersion : 'n/a'}</td>
           <td data-label="Price">$${Number(t.priceUsd).toFixed(2)}${t.aiEnabled ? ' <span class="admin-badge admin-badge-active">AI</span>' : ''}</td>
-          <td data-label=""><a href="/${slug}/test-deploy/${t.slug}" class="admin-btn-outline admin-btn-sm">Test Deploy</a> <button type="button" class="admin-btn-danger admin-btn-sm delete-type" data-id="${t.id}">Delete</button></td>
+          <td data-label=""><a href="/${slug}/test-deploy/${t.slug}" class="admin-btn-outline admin-btn-sm">Test Deploy</a>${t.isActive ? '' : ' <button type="button" class="admin-btn-danger admin-btn-sm delete-type" data-id="' + t.id + '">Delete</button>'}</td>
         </tr>`).join('') || '<tr><td colspan="6" data-label="">No website types yet.</td></tr>';
 
       document.querySelectorAll('.delete-type').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('Delete this website type? This permanently removes its fields and template history.')) return;
+          if (!confirm('Delete this website type? Its fields, templates and SEO pages are permanently removed. Past deployments and revenue are kept under "Deleted Website Types".')) return;
           const res = await window.adminFetch(`/api/admin/website-types/${btn.dataset.id}`, { method: 'DELETE' });
           if (res.ok) {
             load();
