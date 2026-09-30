@@ -1,5 +1,6 @@
 const express = require('express');
 const { asyncHandler } = require('../lib/asyncHandler');
+const { pruneOldVersions } = require('../lib/versionPrune');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -285,6 +286,8 @@ router.put('/:id/content', requireCsrf, asyncHandler(async (req, res) => {
     );
 
     await client.query('UPDATE seo_pages SET content_format = $1 WHERE id = $2', [contentFormat, id]);
+
+    await pruneOldVersions(client, 'seo_page_content', id);
 
     await client.query('COMMIT');
     res.json({ version: inserted.rows[0].version, contentFormat });

@@ -1,5 +1,6 @@
 const express = require('express');
 const { asyncHandler } = require('../lib/asyncHandler');
+const { pruneOldVersions } = require('../lib/versionPrune');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -820,6 +821,8 @@ router.put('/:id/template', requireCsrf, asyncHandler(async (req, res) => {
       [websiteTypeId, htmlContent, nextVersion]
     );
 
+    await pruneOldVersions(client, 'templates', websiteTypeId);
+
     await client.query('COMMIT');
 
     res.json({
@@ -1029,6 +1032,8 @@ router.put('/:id/email-template', requireCsrf, asyncHandler(async (req, res) => 
       [websiteTypeId, subject, htmlBody, nextVersion]
     );
 
+    await pruneOldVersions(client, 'email_templates', websiteTypeId);
+
     await client.query('COMMIT');
 
     res.json({
@@ -1187,6 +1192,8 @@ router.put('/:id/password-page', requireCsrf, asyncHandler(async (req, res) => {
        VALUES ($1, $2, $3, true) RETURNING *`,
       [websiteTypeId, htmlContent, nextVersion]
     );
+
+    await pruneOldVersions(client, 'password_page_templates', websiteTypeId);
 
     await client.query('COMMIT');
 

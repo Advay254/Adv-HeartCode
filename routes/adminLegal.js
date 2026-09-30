@@ -1,5 +1,6 @@
 const express = require('express');
 const { asyncHandler } = require('../lib/asyncHandler');
+const { pruneOldVersions } = require('../lib/versionPrune');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -97,6 +98,8 @@ router.put('/:pageKey', requireCsrf, asyncHandler(async (req, res) => {
        VALUES ($1, $2, $3, true) RETURNING *`,
       [pageKey, htmlContent, nextVersion]
     );
+
+    await pruneOldVersions(client, 'legal_pages', pageKey);
 
     await client.query('COMMIT');
     res.json({ version: inserted.rows[0].version });
