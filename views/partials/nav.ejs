@@ -21,6 +21,7 @@
       items: [
         { page: 'submissions', href: `/${slug}/submissions`, label: 'Deployments & Subscribers' },
         { page: 'activity', href: `/${slug}/activity`, label: 'Activity' },
+        { page: 'reviews', href: `/${slug}/reviews`, label: 'Reviews', badge: 'pendingReviews' },
         { page: 'payments', href: `/${slug}/payments`, label: 'Payments' },
         { page: 'recovery', href: `/${slug}/recovery`, label: 'Recovery' },
         { page: 'funnel', href: `/${slug}/funnel`, label: 'Funnel' }
@@ -51,6 +52,7 @@
     scripts: 'Scripts',
     submissions: 'Deployments & Subscribers',
     activity: 'Activity',
+    reviews: 'Reviews',
     payments: 'Payments',
     recovery: 'Recovery',
     funnel: 'Funnel',
@@ -126,6 +128,9 @@
             <a href="<%= item.href %>" class="admin-nav-child <%= itemActive ? 'is-active' : '' %>">
               <span class="admin-nav-child-dot"></span>
               <span><%= item.label %></span>
+              <% if (item.badge === 'pendingReviews' && typeof pendingReviewCount !== 'undefined' && pendingReviewCount > 0) { %>
+                <span class="admin-badge admin-badge-brand" style="margin-left:auto;" aria-label="<%= pendingReviewCount %> pending review<%= pendingReviewCount === 1 ? '' : 's' %>"><%= pendingReviewCount %></span>
+              <% } %>
             </a>
           <% }); %>
         </div>
