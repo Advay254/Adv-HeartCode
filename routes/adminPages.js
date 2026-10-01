@@ -6,6 +6,7 @@ const { requireAdminSession, getSessionCookie } = require('../middleware/require
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
 const { CATEGORY_ICON_NAMES, ALL_ICON_NAMES } = require('../lib/icons');
 const { SECTION_TYPES, DEFAULT_CONTENT, ACCENT_COLOR_NAMES } = require('../lib/landingSectionTypes');
+const { countPendingReviews } = require('../lib/reviews');
 
 const router = express.Router();
 
@@ -36,6 +37,19 @@ router.use((req, res, next) => {
   res.locals.landingAccentColors = ACCENT_COLOR_NAMES;
   next();
 });
+
+// v1.2.11: pending review count for the nav badge (every admin page) and the
+// dashboard overview card. A failure here must never stop an admin page from
+// rendering, so it falls back to 0.
+router.use(asyncHandler(async (req, res, next) => {
+  try {
+    res.locals.pendingReviewCount = await countPendingReviews();
+  } catch (err) {
+    console.error('[REVIEWS] Could not load the pending review count:', err.message);
+    res.locals.pendingReviewCount = 0;
+  }
+  next();
+}));
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/`, (req, res) => {
   res.render('admin/overview');
@@ -149,6 +163,10 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/submissions`, (req, res) => {
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/activity`, (req, res) => {
   res.render('admin/activity');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/reviews`, (req, res) => {
+  res.render('admin/reviews');
 });
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/recovery`, (req, res) => {

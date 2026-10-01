@@ -1,6 +1,7 @@
 const express = require('express');
 const { asyncHandler } = require('../lib/asyncHandler');
 const { pruneOldVersions } = require('../lib/versionPrune');
+const { DEFAULT_SUBJECT: DEFAULT_REMINDER_SUBJECT, defaultReminderHtml } = require('../lib/reviewReminder');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { requireAdminSession } = require('../middleware/requireAdminSession');
@@ -894,7 +895,8 @@ router.post('/:id/template/rollback/:version', requireCsrf, asyncHandler(async (
 // this file doesn't import from lib/emailTemplates.js purely to avoid a
 // route file depending on a lib whose only other consumer is the finalize
 // pipeline, not because the list is expected to diverge).
-const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password'];
+// v1.2.11: 'review_link' added (same naming as 'site_password').
+const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password', 'review_link'];
 
 // v1.1.4 Part B: same reasoning and same raise (500,000 -> 5,000,000
 // chars) as templateSchema's htmlContent above — the Email tab's HTML
@@ -1084,6 +1086,160 @@ router.post('/:id/email-template/rollback/:version', requireCsrf, asyncHandler(a
     await client.query('ROLLBACK');
     console.error('[EMAIL TEMPLATE] Failed to rollback email template:', err.message);
     res.status(500).json({ error: 'Failed to rollback email template' });
+  } finally {
+    client.release();
+  }
+}));
+
+// ---- review reminder email template (v1.2.11) ----
+//
+// The one-time "how did it go" reminder sent 2 days after deployment to a
+// client who has not reviewed yet (lib/reviewReminder.js). Same versioning
+// discipline as the confirmation email above: PUT inserts a new version and
+// deactivates the previous one, rollback is a pointer flip, and the same
+// 4-version cap applies, pruned inside the save transaction. A type with no
+// row here sends the built-in default copy.
+//
+// Validated against REMINDER_VARIABLES only, NOT this type's form fields: by
+// the time a reminder is sent the checkout's field values no longer exist,
+// so field-based variables could never be filled in.
+const REVIEW_REMINDER_VARIABLES = ['review_link', 'site_url', 'client_email', 'website_type_name', 'deployed_at'];
+
+const reviewReminderSchema = z.object({
+  subject: z.string().trim().min(1).max(500),
+  htmlBody: z.string().min(1).max(5000000)
+});
+
+router.get('/:id/review-reminder-template', asyncHandler(async (req, res) => {
+  const parsed = idParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const { id } = parsed.data;
+
+  const pool = getPool();
+  const active = await pool.query(
+    'SELECT * FROM review_reminder_templates WHERE website_type_id = $1 AND is_active = true LIMIT 1',
+    [id]
+  );
+  const history = await pool.query(
+    'SELECT version, created_at FROM review_reminder_templates WHERE website_type_id = $1 ORDER BY version DESC LIMIT 4',
+    [id]
+  );
+
+  res.json({
+    active: active.rowCount > 0
+      ? { subject: active.rows[0].subject, htmlBody: active.rows[0].html_body, version: active.rows[0].version }
+      : null,
+    history: history.rows.map(h => ({ version: h.version, createdAt: h.created_at })),
+    defaults: { subject: DEFAULT_REMINDER_SUBJECT, htmlBody: defaultReminderHtml() }
+  });
+}));
+
+router.put('/:id/review-reminder-template', requireCsrf, asyncHandler(async (req, res) => {
+  const paramsParsed = idParamSchema.safeParse(req.params);
+  if (!paramsParsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id' });
+  }
+  const bodyParsed = reviewReminderSchema.safeParse(req.body);
+  if (!bodyParsed.success) {
+    const message = bodyParsed.error.issues[0] ? bodyParsed.error.issues[0].message : 'subject and htmlBody are required';
+    return res.status(400).json({ error: message });
+  }
+  const { id: websiteTypeId } = paramsParsed.data;
+  const { subject, htmlBody } = bodyParsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const typeCheck = await client.query('SELECT id FROM website_types WHERE id = $1 FOR UPDATE', [websiteTypeId]);
+    if (typeCheck.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Website type not found' });
+    }
+
+    const found = new Set();
+    let match;
+    PLACEHOLDER_RE.lastIndex = 0;
+    while ((match = PLACEHOLDER_RE.exec(htmlBody)) !== null) found.add(match[1]);
+    PLACEHOLDER_RE.lastIndex = 0;
+    while ((match = PLACEHOLDER_RE.exec(subject)) !== null) found.add(match[1]);
+    const undefinedPlaceholders = [...found].filter(k => !REVIEW_REMINDER_VARIABLES.includes(k));
+    // A reminder with no link in it cannot do its one job.
+    const missingReviewLink = !found.has('review_link');
+
+    const maxVersionResult = await client.query(
+      'SELECT COALESCE(MAX(version), 0) AS max_version FROM review_reminder_templates WHERE website_type_id = $1',
+      [websiteTypeId]
+    );
+    const nextVersion = Number(maxVersionResult.rows[0].max_version) + 1;
+
+    await client.query(
+      'UPDATE review_reminder_templates SET is_active = false WHERE website_type_id = $1 AND is_active = true',
+      [websiteTypeId]
+    );
+
+    const inserted = await client.query(
+      `INSERT INTO review_reminder_templates (website_type_id, subject, html_body, version, is_active)
+       VALUES ($1, $2, $3, $4, true) RETURNING *`,
+      [websiteTypeId, subject, htmlBody, nextVersion]
+    );
+
+    await pruneOldVersions(client, 'review_reminder_templates', websiteTypeId);
+
+    await client.query('COMMIT');
+
+    res.json({
+      version: inserted.rows[0].version,
+      undefinedPlaceholders,
+      missingReviewLink
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[REVIEW REMINDER] Failed to save reminder template:', err.message);
+    res.status(500).json({ error: 'Failed to save review reminder template' });
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/:id/review-reminder-template/rollback/:version', requireCsrf, asyncHandler(async (req, res) => {
+  const parsed = rollbackParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid website type id or version' });
+  }
+  const { id: websiteTypeId, version } = parsed.data;
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const target = await client.query(
+      'SELECT id FROM review_reminder_templates WHERE website_type_id = $1 AND version = $2 FOR UPDATE',
+      [websiteTypeId, version]
+    );
+    if (target.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'That reminder template version does not exist' });
+    }
+
+    await client.query(
+      'UPDATE review_reminder_templates SET is_active = false WHERE website_type_id = $1 AND is_active = true',
+      [websiteTypeId]
+    );
+    await client.query('UPDATE review_reminder_templates SET is_active = true WHERE id = $1', [target.rows[0].id]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, activeVersion: version });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[REVIEW REMINDER] Failed to rollback reminder template:', err.message);
+    res.status(500).json({ error: 'Failed to rollback review reminder template' });
   } finally {
     client.release();
   }
