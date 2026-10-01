@@ -1,0 +1,186 @@
+/* v1.2.11: styles for the public review page (views/public/review.ejs).
+   Colours are the brand variables the site already defines in
+   src/styles/main.css (--hc-blue, --hc-yellow, --hc-ink); the fallback
+   values after each var() are the same three values, only there so this
+   page still looks right if that stylesheet is slow to load. Buttons and
+   interactive elements are blue and animate to yellow on hover and on press.
+   Stars are yellow. All motion is short and is switched off for people who
+   have reduced motion enabled. */
+
+.rv-body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f5f6fa;
+  color: var(--hc-ink, #14151d);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+}
+.rv-wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+.rv-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px 22px;
+  box-shadow: 0 6px 28px rgba(20, 21, 29, 0.08);
+}
+.rv-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-family: 'Anton', 'Inter', sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hc-blue, #183fad);
+}
+.rv-brand-mark svg { width: 22px; height: 22px; display: block; }
+.rv-title {
+  margin: 0 0 6px;
+  font-family: 'Anton', 'Inter', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--hc-ink, #14151d);
+}
+.rv-lead { margin: 0 0 22px; color: #4b4f5c; }
+
+.rv-field { margin: 0 0 20px; }
+.rv-fieldset { border: 0; padding: 0; min-width: 0; }
+.rv-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0;
+}
+.rv-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1.5px solid #cfd3de;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--hc-ink, #14151d);
+  font: inherit;
+  font-size: 1rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.rv-input:focus {
+  outline: none;
+  border-color: var(--hc-blue, #183fad);
+  box-shadow: 0 0 0 3px rgba(24, 63, 173, 0.18);
+}
+.rv-input.is-invalid { border-color: #b3261e; }
+.rv-textarea { resize: vertical; min-height: 140px; }
+
+.rv-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.rv-hint { margin: 0; font-size: 0.82rem; color: #5d6170; }
+.rv-count { margin: 0; font-size: 0.82rem; color: #5d6170; white-space: nowrap; }
+.rv-count.is-near { color: #8a5a00; }
+.rv-count.is-over { color: #b3261e; font-weight: 600; }
+.rv-error { margin: 6px 0 0; font-size: 0.86rem; color: #b3261e; font-weight: 600; }
+
+.rv-alert { margin: 0 0 18px; padding: 11px 13px; border-radius: 10px; font-size: 0.92rem; }
+.rv-alert-error { background: #fdecea; color: #8c1d18; }
+.rv-alert-warn { background: #fff6d9; color: #5c4400; margin: 10px 0 0; }
+
+/* ---- stars: yellow. Row-reversed so "this star and every one before it"
+   can be lit with plain sibling selectors, no script needed for hover. ---- */
+.rv-stars { display: inline-flex; flex-direction: row-reverse; gap: 4px; }
+.rv-star-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.rv-star-label { display: inline-flex; cursor: pointer; padding: 2px; border-radius: 8px; }
+.rv-star {
+  display: block;
+  fill: none;
+  stroke: var(--hc-yellow, #F1BF0A);
+  transition: fill 140ms ease, transform 140ms ease;
+}
+.rv-star-input:checked ~ .rv-star-label .rv-star,
+.rv-star-label:hover .rv-star,
+.rv-star-label:hover ~ .rv-star-label .rv-star {
+  fill: var(--hc-yellow, #F1BF0A);
+}
+.rv-star-label:active .rv-star { transform: scale(0.92); }
+.rv-star-input:focus-visible + .rv-star-label {
+  outline: 3px solid var(--hc-blue, #183fad);
+  outline-offset: 2px;
+}
+
+/* ---- buttons: blue, animate to yellow on hover and on press ---- */
+.rv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border: 2px solid var(--hc-blue, #183fad);
+  border-radius: 10px;
+  background: var(--hc-blue, #183fad);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 120ms ease;
+}
+.rv-btn:hover,
+.rv-btn:active {
+  background: var(--hc-yellow, #F1BF0A);
+  border-color: var(--hc-yellow, #F1BF0A);
+  color: var(--hc-ink, #14151d);
+}
+.rv-btn:active { transform: scale(0.98); }
+.rv-btn:focus-visible { outline: 3px solid var(--hc-ink, #14151d); outline-offset: 2px; }
+.rv-btn[disabled] { opacity: 0.65; cursor: progress; }
+.rv-btn-primary { width: 100%; }
+.rv-btn-secondary { padding: 9px 16px; font-size: 0.95rem; }
+.rv-btn-ghost {
+  padding: 9px 16px;
+  font-size: 0.95rem;
+  background: transparent;
+  color: var(--hc-blue, #183fad);
+}
+.rv-photo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.rv-preview { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.rv-preview img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1.5px solid #cfd3de; }
+
+.rv-done { text-align: center; padding-top: 34px; padding-bottom: 34px; }
+.rv-done .rv-brand { justify-content: center; }
+.rv-done-icon svg { width: 54px; height: 54px; stroke: var(--hc-blue, #183fad); margin-bottom: 8px; }
+
+.rv-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-input,
+  .rv-star,
+  .rv-btn {
+    transition: none;
+  }
+  .rv-btn:active,
+  .rv-star-label:active .rv-star {
+    transform: none;
+  }
+}
