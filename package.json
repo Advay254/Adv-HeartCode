@@ -1,6 +1,6 @@
 {
   "name": "heartcode",
-  "version": "1.2.8",
+  "version": "1.2.11",
   "description": "HeartCode — client-facing website builder (foundation)",
   "main": "server.js",
   "scripts": {
@@ -20,7 +20,7 @@
     "maxmind": "^5.0.7",
     "multer": "^2.4.0",
     "nodemailer": "^9.0.5",
-    "pg": "^8.12.0",
+    "pg": "^8.23.1",
     "sharp": "^0.35.4",
     "tailwindcss": "^3.4.19",
     "zod": "^4.4.3"

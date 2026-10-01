@@ -37,6 +37,9 @@ const adminRecoveryRouter = require('./routes/adminRecovery');
 const adminFunnelRouter = require('./routes/adminFunnel');
 const adminLegalRouter = require('./routes/adminLegal');
 const adminTestDeployRouter = require('./routes/adminTestDeploy');
+const adminReviewsRouter = require('./routes/adminReviews');
+const reviewRouter = require('./routes/review');
+const { runReviewMaintenance } = require('./lib/reviewJobs');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
 const eventsRouter = require('./routes/events');
@@ -274,6 +277,10 @@ app.use(adminSlugMiddleware(adminPageRouter));
 // whether OTHER sites' JavaScript can read a cross-origin fetch response,
 // not whether a browser can render a page it navigated to directly.
 app.use(cors({ origin: false }));
+// v1.2.11: public review form and its submit endpoint. Mounted before
+// publicRouter so nothing there can shadow /review/:token. Sets its own
+// strict CSP for just those two paths (see routes/review.js).
+app.use(reviewRouter);
 app.use(publicRouter);
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -323,7 +330,7 @@ const ADMIN_LARGE_HTML_JSON_LIMIT = '10mb';
 // just site-wide instead of per website type — /legal-pages/:pageKey
 // rather than /website-types/:id/template — so it gets the same raised
 // ceiling for the exact same reason.
-const LARGE_HTML_ADMIN_ROUTE_RE = /^\/(website-types\/\d+\/(template|email-template|password-page)|legal-pages\/[a-z_]+)$/;
+const LARGE_HTML_ADMIN_ROUTE_RE = /^\/(website-types\/\d+\/(template|email-template|password-page|review-reminder-template)|legal-pages\/[a-z_]+)$/;
 
 function adminJsonBodyParser(req, res, next) {
   // req.path here is already relative to this router's '/api/admin' mount
@@ -357,6 +364,8 @@ app.use('/api/admin/landing-sections', adminLandingSectionsRouter);
 app.use('/api/admin/pending-deployments', adminRecoveryRouter);
 app.use('/api/admin/funnel', adminFunnelRouter);
 app.use('/api/admin/legal-pages', adminLegalRouter);
+// v1.2.11: review moderation (session + CSRF gated inside the router).
+app.use('/api/admin/reviews', adminReviewsRouter);
 // v1.2.7: admin-only test deployment (no Paystack, forced -test slug, flagged
 // is_test). Session + CSRF gated INSIDE its router, session check first --
 // see routes/adminTestDeploy.js's header for why that order is load-bearing.
@@ -576,6 +585,21 @@ function startExchangeRateRefreshJob() {
   }, EXCHANGE_RATE_REFRESH_INTERVAL_MS);
 }
 
+// v1.2.11: the single scheduled job for reviews (2-day reminders, 14-day
+// link cleanup, 14-day auto-publish). Same in-process interval pattern as the
+// jobs above. All state lives in the database, nothing in memory, so it is
+// safe across restarts and safe if two runs ever overlap (see
+// lib/reviewJobs.js). The first pass runs shortly after boot rather than
+// waiting a full interval, so a restart never delays overdue work.
+const REVIEW_JOB_INTERVAL_MS = 15 * 60 * 1000;
+const REVIEW_JOB_FIRST_RUN_DELAY_MS = 60 * 1000;
+
+function startReviewJob() {
+  const run = () => { runReviewMaintenance().catch((err) => console.error('[REVIEWS] Maintenance run failed:', err.message)); };
+  setTimeout(run, REVIEW_JOB_FIRST_RUN_DELAY_MS);
+  setInterval(run, REVIEW_JOB_INTERVAL_MS);
+}
+
 async function start() {
   try {
     await initDB();
@@ -592,6 +616,7 @@ async function start() {
 
   startCleanupJob();
   startExchangeRateRefreshJob();
+  startReviewJob();
 
   app.listen(PORT, () => {
     console.log(`[SERVER] HeartCode listening on port ${PORT}`);
