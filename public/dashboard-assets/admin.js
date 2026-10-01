@@ -1062,7 +1062,7 @@
     // top of this type's own fields/outputs — kept in sync by hand with
     // routes/adminWebsiteTypes.js's SYSTEM_EMAIL_VARIABLES (small, stable
     // list, not worth a shared-module round trip for).
-    const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password'];
+    const SYSTEM_EMAIL_VARIABLES = ['site_url', 'client_email', 'website_type_name', 'deployed_at', 'site_password', 'review_link'];
     function renderEmailPlaceholdersReference() {
       const tokens = SYSTEM_EMAIL_VARIABLES.map(v => `{{${v}}}`)
         .concat(currentFields.map(placeholderTokenForField))
@@ -1554,6 +1554,65 @@
       }
     });
 
+    // ---- Review reminder email (v1.2.11), lives on the Email tab ----
+
+    let reminderDefaults = { subject: '', htmlBody: '' };
+
+    async function loadReviewReminder() {
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/review-reminder-template`);
+      const data = await res.json();
+      reminderDefaults = data.defaults || reminderDefaults;
+      document.getElementById('currentReminderVersion').textContent = data.active ? 'v' + data.active.version : 'none yet, the built-in default is sent';
+      document.getElementById('reminderSubject').value = data.active ? data.active.subject : '';
+      document.getElementById('reminderHtmlBody').value = data.active ? data.active.htmlBody : '';
+      document.getElementById('reminderHistoryTableBody').innerHTML = data.history.map(h => `
+        <tr>
+          <td data-label="Version">v${h.version}</td>
+          <td data-label="Created">${new Date(h.createdAt).toLocaleString()}</td>
+          <td data-label="">${data.active && data.active.version === h.version ? '' : `<button type="button" class="admin-btn-outline admin-btn-sm rollback-reminder" data-version="${h.version}">Rollback to this</button>`}</td>
+        </tr>`).join('') || '<tr><td colspan="3" data-label="">No versions yet. The built-in default is sent.</td></tr>';
+
+      document.querySelectorAll('.rollback-reminder').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm(`Roll back to version ${btn.dataset.version}?`)) return;
+          const r = await window.adminFetch(`/api/admin/website-types/${typeId}/review-reminder-template/rollback/${btn.dataset.version}`, { method: 'POST' });
+          if (r.ok) loadReviewReminder();
+        });
+      });
+    }
+
+    document.getElementById('reminderLoadDefault').addEventListener('click', () => {
+      document.getElementById('reminderSubject').value = reminderDefaults.subject;
+      document.getElementById('reminderHtmlBody').value = reminderDefaults.htmlBody;
+    });
+
+    document.getElementById('reviewReminderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const res = await window.adminFetch(`/api/admin/website-types/${typeId}/review-reminder-template`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          subject: document.getElementById('reminderSubject').value,
+          htmlBody: document.getElementById('reminderHtmlBody').value
+        })
+      });
+      const data = await res.json();
+      const statusEl = document.getElementById('reviewReminderStatus');
+      statusEl.style.display = 'block';
+      if (res.ok) {
+        const warnings = []
+          .concat(data.undefinedPlaceholders.length ? [`unknown variable: ${data.undefinedPlaceholders.join(', ')}`] : [])
+          .concat(data.missingReviewLink ? ['the email does not contain {{review_link}}'] : []);
+        statusEl.className = 'admin-msg ' + (warnings.length ? 'admin-msg-warning' : 'admin-msg-success');
+        statusEl.textContent = warnings.length
+          ? `Saved as v${data.version}, but: ${warnings.join(' | ')}`
+          : `Saved as v${data.version}.`;
+        loadReviewReminder();
+      } else {
+        statusEl.className = 'admin-msg admin-msg-error';
+        statusEl.textContent = data.error || 'Failed to save the reminder template.';
+      }
+    });
+
     // ---- Password Page tab (v1.1.4 Part C) ----
 
     async function loadPasswordPage() {
@@ -1604,6 +1663,7 @@
     loadFields().then(loadAiConfig);
     loadTemplate();
     loadEmailTemplate();
+    loadReviewReminder();
     loadPasswordPage();
   }
 
@@ -4445,6 +4505,184 @@
     });
   }
 
+  // ---- reviews moderation page (v1.2.11) ----
+  // Every piece of review text is escaped with escapeHtml() before it is
+  // placed in markup, and an image address is only used in an <img src> when
+  // it starts with https://. Edit fields are filled via .value (never markup).
+  function initReviewsPage() {
+    const API = '/api/admin/reviews';
+    const pendingList = document.getElementById('pendingList');
+    const approvedList = document.getElementById('approvedList');
+    const messageEl = document.getElementById('reviewsMessage');
+    let data = { pending: [], approved: [], autoPublishAfterDays: 14 };
+
+    function say(kind, text) {
+      messageEl.className = 'admin-msg admin-msg-' + kind;
+      messageEl.textContent = text;
+      messageEl.style.display = 'block';
+    }
+
+    function stars(n) {
+      let out = '';
+      for (let i = 1; i <= 5; i++) {
+        out += '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;fill:' + (i <= n ? '#F1BF0A' : 'none') + ';stroke:#F1BF0A;stroke-width:1.6;"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>';
+      }
+      return '<span aria-label="' + Number(n) + ' out of 5 stars">' + out + '</span>';
+    }
+
+    function fmtDate(value) {
+      return value ? new Date(value).toLocaleString() : '';
+    }
+
+    function imageHtml(url) {
+      if (!url || !/^https:\/\//i.test(url)) return '';
+      return '<p class="mt-2"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer"><img src="' + escapeHtml(url) + '" alt="Photo attached to this review" style="max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e5e7eb;"></a></p>';
+    }
+
+    function deploymentHtml(r) {
+      const d = r.deployment || {};
+      const bits = [];
+      if (d.websiteTypeName) bits.push(escapeHtml(d.websiteTypeName));
+      if (d.siteUrl) bits.push(escapeHtml(d.siteUrl));
+      if (d.clientEmail) bits.push(escapeHtml(d.clientEmail));
+      return bits.length ? bits.join(' &middot; ') : 'Deployment no longer on record';
+    }
+
+    function render() {
+      document.getElementById('autoPublishDays').textContent = String(data.autoPublishAfterDays);
+      document.getElementById('pendingCount').textContent = String(data.pending.length);
+      document.getElementById('approvedCount').textContent = String(data.approved.length);
+
+      pendingList.innerHTML = data.pending.map(r => `
+        <div class="admin-card mb-3" data-review-id="${Number(r.id)}" style="box-shadow:none;border:1px solid #e5e7eb;">
+          <div data-view>
+            <p><strong>${escapeHtml(r.name)}</strong> ${stars(r.rating)}</p>
+            <p class="mt-1" style="white-space:pre-wrap;">${escapeHtml(r.testimonial)}</p>
+            ${imageHtml(r.imageUrl)}
+            <p class="admin-help mt-2">From: ${deploymentHtml(r)}</p>
+            <p class="admin-help">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Auto-published in ${Number(r.daysLeft)} day${Number(r.daysLeft) === 1 ? '' : 's'} if nothing is done.</p>
+            <div class="admin-form-actions mt-2">
+              <button type="button" class="admin-btn admin-btn-sm" data-act="approve">Approve</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm" data-act="edit">Edit then approve</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm" data-act="delete">Delete</button>
+            </div>
+          </div>
+          <div data-edit hidden>
+            <label class="admin-label">Name</label>
+            <input class="admin-input" type="text" data-field="name" maxlength="60">
+            <label class="admin-label">Review</label>
+            <textarea class="admin-textarea" rows="5" data-field="testimonial" maxlength="600"></textarea>
+            <p class="admin-help">Fix typos or lightly adjust wording only. The same length and plain-text rules as a reviewer's own submission apply.</p>
+            <p class="admin-msg admin-msg-error" data-edit-error style="display:none;"></p>
+            <div class="admin-form-actions mt-2">
+              <button type="button" class="admin-btn admin-btn-sm" data-act="save-approve">Save and approve</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm" data-act="cancel">Cancel</button>
+            </div>
+          </div>
+        </div>`).join('') || '<p class="admin-help">No reviews are waiting.</p>';
+
+      approvedList.innerHTML = data.approved.map(r => `
+        <div class="admin-card mb-3" data-review-id="${Number(r.id)}" style="box-shadow:none;border:1px solid #e5e7eb;">
+          <p><strong>${escapeHtml(r.name)}</strong> ${stars(r.rating)}
+            ${r.autoApproved ? '<span class="admin-badge admin-badge-brand">Auto-published</span>' : '<span class="admin-badge admin-badge-active">Approved</span>'}</p>
+          <p class="mt-1" style="white-space:pre-wrap;">${escapeHtml(r.testimonial)}</p>
+          ${imageHtml(r.imageUrl)}
+          <p class="admin-help mt-2">From: ${deploymentHtml(r)}</p>
+          <p class="admin-help">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Approved ${escapeHtml(fmtDate(r.approvedAt))}.</p>
+          <div class="admin-form-actions mt-2">
+            <button type="button" class="admin-btn-outline admin-btn-sm" data-act="delete">Delete</button>
+          </div>
+        </div>`).join('') || '<p class="admin-help">No approved reviews yet.</p>';
+
+      // Fill edit fields through .value, never through markup.
+      pendingList.querySelectorAll('[data-review-id]').forEach(card => {
+        const r = data.pending.find(x => x.id === Number(card.dataset.reviewId));
+        if (!r) return;
+        card.querySelector('[data-field="name"]').value = r.name;
+        card.querySelector('[data-field="testimonial"]').value = r.testimonial;
+      });
+    }
+
+    async function load() {
+      try {
+        const res = await window.adminFetch(API);
+        if (!res.ok) throw new Error('load failed');
+        data = await res.json();
+        render();
+      } catch (err) {
+        say('error', 'Failed to load reviews.');
+      }
+    }
+
+    async function handleClick(e) {
+      const btn = e.target.closest('[data-act]');
+      if (!btn) return;
+      const card = btn.closest('[data-review-id]');
+      if (!card) return;
+      const id = Number(card.dataset.reviewId);
+      const act = btn.dataset.act;
+
+      if (act === 'edit') {
+        card.querySelector('[data-view]').hidden = true;
+        card.querySelector('[data-edit]').hidden = false;
+        return;
+      }
+      if (act === 'cancel') {
+        card.querySelector('[data-edit]').hidden = true;
+        card.querySelector('[data-view]').hidden = false;
+        return;
+      }
+
+      if (act === 'approve' || act === 'save-approve') {
+        const payload = {};
+        if (act === 'save-approve') {
+          payload.edit = {
+            name: card.querySelector('[data-field="name"]').value,
+            testimonial: card.querySelector('[data-field="testimonial"]').value
+          };
+        }
+        btn.disabled = true;
+        const res = await window.adminFetch(`${API}/${id}/approve`, { method: 'POST', body: JSON.stringify(payload) });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok) {
+          say('success', 'Review approved.');
+          load();
+        } else if (res.status === 422 && body.errors) {
+          btn.disabled = false;
+          const errEl = card.querySelector('[data-edit-error]');
+          errEl.textContent = Object.values(body.errors).join(' ');
+          errEl.style.display = 'block';
+        } else {
+          btn.disabled = false;
+          say('error', body.error || 'Failed to approve the review.');
+          load();
+        }
+        return;
+      }
+
+      if (act === 'delete') {
+        if (!confirm('Permanently delete this review? This cannot be undone, and its photo will be removed too.')) return;
+        btn.disabled = true;
+        const res = await window.adminFetch(`${API}/${id}`, { method: 'DELETE' });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (body.hadImage && body.imageDeleted === false) {
+            say('warning', 'The review was deleted, but its photo could not be removed from ClarityHeart. You can remove it by hand: ' + body.imageUrl);
+          } else {
+            say('success', 'Review deleted.');
+          }
+        } else {
+          say('error', body.error || 'Failed to delete the review.');
+        }
+        load();
+      }
+    }
+
+    pendingList.addEventListener('click', handleClick);
+    approvedList.addEventListener('click', handleClick);
+    load();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -4460,6 +4698,7 @@
     if (page === 'submissions') initSubmissionsPage();
     if (page === 'activity') initActivityPage();
     if (page === 'recovery') initRecoveryPage();
+    if (page === 'reviews') initReviewsPage();
     if (page === 'funnel') initFunnelPage();
     if (page === 'site-settings') initSiteSettingsPage();
     if (page === 'scripts') initScriptsPage();
