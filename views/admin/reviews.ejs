@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Reviews | HeartCode Admin</title>
+</head>
+<body data-page="reviews">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'reviews' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Client feedback</p>
+        <h1>Reviews</h1>
+        <p>
+          New reviews wait here. Approve them, fix typos and approve, or delete them. Anything still pending
+          <span id="autoPublishDays">14</span> days after it was submitted is approved automatically. Delete is permanent and also
+          removes the review's photo.
+        </p>
+      </div>
+    </section>
+
+    <p id="reviewsMessage" class="admin-msg" style="display:none;"></p>
+
+    <div class="admin-card mb-6">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Waiting</p><h2>Pending reviews (<span id="pendingCount">0</span>)</h2></div></div>
+      <div id="pendingList"></div>
+    </div>
+
+    <div class="admin-card">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Live</p><h2>Approved reviews (<span id="approvedCount">0</span>)</h2></div></div>
+      <div id="approvedList"></div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

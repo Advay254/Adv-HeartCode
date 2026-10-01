@@ -36,6 +36,14 @@
       </div>
     </section>
 
+    <section class="admin-stat-grid admin-stat-grid-3" aria-label="Reviews">
+      <a class="admin-stat-card" href="/<%= slug %>/reviews" style="text-decoration:none;color:inherit;">
+        <div class="admin-stat-icon"><%- getIconSvg('star') %></div>
+        <div class="admin-stat-row"><div><p class="admin-stat-label">Pending reviews</p><h4 id="statPendingReviewsValue" class="admin-stat-value"><%= typeof pendingReviewCount !== 'undefined' ? pendingReviewCount : 0 %></h4></div></div>
+        <p class="admin-stat-caption">Waiting for approval</p>
+      </a>
+    </section>
+
     <p id="statsError" class="admin-msg admin-msg-error" style="display:none;">Failed to load configuration status.</p>
 
     <section class="admin-dashboard-grid mt-6">
