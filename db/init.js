@@ -1338,9 +1338,74 @@ ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEF
 ALTER TABLE website_types ADD COLUMN IF NOT EXISTS is_deleted_placeholder BOOLEAN NOT NULL DEFAULT false;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_website_types_single_placeholder
   ON website_types (is_deleted_placeholder) WHERE is_deleted_placeholder = true;
+
+-- v1.2.11: review collection and moderation.
+--
+-- TWO SEPARATE TABLES, on purpose: the link must be permanently deleted the
+-- moment it is used (or expires) while the review itself must stay. If they
+-- were one table, deleting the link would mean deleting the review, or
+-- keeping a dead token around forever. Keeping them apart means a used link
+-- leaves no trace in the reviews table at all.
+--
+-- review_links holds ONLY what the link needs to work. ON DELETE CASCADE is
+-- right here (unlike reviews below): a link with no deployment behind it is
+-- meaningless, so it should go with it.
+CREATE TABLE IF NOT EXISTS review_links (
+  id SERIAL PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  deployed_site_id INTEGER NOT NULL REFERENCES deployed_sites(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  reminder_sent_at TIMESTAMPTZ DEFAULT NULL
+);
+-- Exactly one link per deployment, enforced by the database itself, so even
+-- a repeated finalization can never produce a second one.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_review_links_deployed_site
+  ON review_links (deployed_site_id);
+-- The cleanup job and the reminder job both scan by these columns.
+CREATE INDEX IF NOT EXISTS idx_review_links_expires_at
+  ON review_links (expires_at);
+
+-- reviews references the DEPLOYMENT, never the token. There is deliberately
+-- no token column and no link id column here: deleting the link row leaves
+-- no trace of it. There is no 'rejected' status: an admin who does not want
+-- a review deletes it, and delete means the row is gone. ON DELETE SET NULL
+-- (not CASCADE): removing a deployment record must never silently remove a
+-- client's published testimonial. The char_length checks count real
+-- characters (code points), matching the server-side validation.
+CREATE TABLE IF NOT EXISTS reviews (
+  id SERIAL PRIMARY KEY,
+  deployed_site_id INTEGER REFERENCES deployed_sites(id) ON DELETE SET NULL,
+  reviewer_name TEXT NOT NULL CHECK (char_length(reviewer_name) BETWEEN 2 AND 60),
+  rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  testimonial TEXT NOT NULL CHECK (char_length(testimonial) BETWEEN 20 AND 600),
+  image_url TEXT DEFAULT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved')),
+  auto_approved BOOLEAN NOT NULL DEFAULT false,
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  approved_at TIMESTAMPTZ DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_deployed_site
+  ON reviews (deployed_site_id) WHERE deployed_site_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_reviews_status_submitted_at
+  ON reviews (status, submitted_at);
+
+-- v1.2.11: the review reminder email template. Same shape and same
+-- versioning discipline as email_templates above (capped at 4 versions by
+-- lib/versionPrune.js like every other versioned table). A website type with
+-- no row here sends the built-in default reminder copy.
+CREATE TABLE IF NOT EXISTS review_reminder_templates (
+  id SERIAL PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  html_body TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
-const CURRENT_VERSION = '1.2.9';
+const CURRENT_VERSION = '1.2.11';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
