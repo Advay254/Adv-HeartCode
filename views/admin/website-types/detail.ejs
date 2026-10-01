@@ -268,7 +268,7 @@
           <div class="admin-ref">
             <p>Available variables: <span id="availableEmailPlaceholders" class="font-mono text-xs">none</span></p>
             <p>
-              <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>, and <code>site_password</code>
+              <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>, <code>site_password</code>, and <code>review_link</code>
               are always available (a field or AI output with the same name can't override them). There's no conditional syntax yet. A template that
               always prints <code>Password: {{site_password}}</code> will show a blank password line for sites with no password set.
             </p>
@@ -284,6 +284,45 @@
           <table class="admin-table is-responsive-stack">
             <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
             <tbody id="emailHistoryTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-ed-grid mt-6">
+        <div class="admin-card">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Sent once, 2 days after deployment</p><h2>Review reminder email</h2></div></div>
+          <p class="admin-help mb-2">
+            Sent one time to a client who has not left a review yet, containing their review link. Leave it untouched to send the built-in
+            friendly default. Click "Load default copy" to start editing from it.
+          </p>
+          <form id="reviewReminderForm">
+            <label class="admin-label" for="reminderSubject">Subject (current version: <span id="currentReminderVersion">none</span>)</label>
+            <input class="admin-input" type="text" id="reminderSubject" required>
+            <label class="admin-label" for="reminderHtmlBody">HTML body</label>
+            <textarea class="admin-textarea admin-code-area min-h-[12rem] font-mono text-xs" id="reminderHtmlBody"></textarea>
+            <div class="admin-form-actions">
+              <button type="submit" class="admin-btn">Save new version</button>
+              <button type="button" class="admin-btn-outline" id="reminderLoadDefault">Load default copy</button>
+              <p id="reviewReminderStatus" class="admin-msg" style="display:none;"></p>
+            </div>
+          </form>
+        </div>
+        <aside class="admin-card admin-ed-aside">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Reference</p><h2>Reminder variables</h2></div></div>
+          <div class="admin-ref">
+            <p>Available: <code>review_link</code>, <code>site_url</code>, <code>client_email</code>, <code>website_type_name</code>, <code>deployed_at</code>.</p>
+            <p>Form fields and AI outputs are not available here, because that information is no longer kept once a site is deployed. Include <code>review_link</code> or the email cannot do its job.</p>
+            <p>Plain text only in anything you write here: no em dashes and no emojis, to match the rest of what clients see.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="admin-card mt-6">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">History</p><h2>Reminder version history (latest 4 kept)</h2></div></div>
+        <div class="admin-table-wrap admin-table-wrap-inner">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Version</th><th>Created</th><th></th></tr></thead>
+            <tbody id="reminderHistoryTableBody"></tbody>
           </table>
         </div>
       </div>
