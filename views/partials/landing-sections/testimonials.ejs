@@ -2,6 +2,7 @@
   var t = section.content;
 %>
 <% if (t.items && t.items.length > 0) { %>
+<% if (t.items.some(function (i) { return i.review; })) { %><link rel="stylesheet" href="/reviews-display.css"><% } %>
 <section class="relative overflow-hidden bg-white px-4 py-16 font-poppins sm:px-6" data-reveal>
   <div class="pointer-events-none absolute -right-16 top-0 hidden h-64 w-64 opacity-90 lg:block">
     <!-- The original template's "TESTIMONIAL" section paired this image
@@ -26,6 +27,10 @@
 
     <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       <% t.items.forEach(function (item) { %>
+        <% if (item.review) { %>
+          <%# v1.2.12: a promoted review, same public rules everywhere (own rating, Verified client label, live type title or Discontinued). %>
+          <%- include('../public-review-card', { review: item.review, showType: true }) %>
+        <% } else { %>
         <figure class="flex flex-col rounded-2xl bg-sk-yellow-pale/30 p-7 ring-1 ring-black/5" data-reveal>
           <blockquote class="text-sm leading-relaxed text-hc-ink/80">&ldquo;<%= item.quote %>&rdquo;</blockquote>
           <figcaption class="mt-5 text-sm">
@@ -33,6 +38,7 @@
             <% if (item.author_role) { %><span class="block text-hc-ink/50"><%= item.author_role %></span><% } %>
           </figcaption>
         </figure>
+        <% } %>
       <% }); %>
     </div>
   </div>
