@@ -3000,13 +3000,20 @@
 
   // ---- script injection manager page (v1.0.7) ----
   function initScriptsPage() {
-    const CONTAINER_IDS = { head: 'headScripts', body_start: 'bodyStartScripts', footer: 'footerScripts' };
-    const COUNT_IDS = { head: 'headCount', body_start: 'bodyStartCount', footer: 'footerCount' };
+    const CONTAINER_IDS = { head: 'headScripts', body_start: 'bodyStartScripts', footer: 'footerScripts', checkout_confirmation: 'checkoutConfirmationScripts' };
+    const COUNT_IDS = { head: 'headCount', body_start: 'bodyStartCount', footer: 'footerCount', checkout_confirmation: 'checkoutConfirmationCount' };
+
+    // v1.2.12: the variable help shows only for the checkout slot.
+    const placementSelectEl = document.getElementById('placementSelect');
+    const checkoutHelpEl = document.getElementById('placementHelp-checkout');
+    function syncPlacementHelp() { checkoutHelpEl.style.display = placementSelectEl.value === 'checkout_confirmation' ? 'block' : 'none'; }
+    placementSelectEl.addEventListener('change', syncPlacementHelp);
+    syncPlacementHelp();
 
     async function load() {
       const res = await window.adminFetch('/api/admin/scripts');
       const data = await res.json();
-      ['head', 'body_start', 'footer'].forEach(placement => renderPlacement(placement, data[placement] || []));
+      ['head', 'body_start', 'footer', 'checkout_confirmation'].forEach(placement => renderPlacement(placement, data[placement] || []));
     }
 
     function renderPlacement(placement, scripts) {
@@ -3223,7 +3230,7 @@
       if (section.sectionType === 'split_image_text') return c.heading || '';
       if (section.sectionType === 'cta_image_cards') return `${c.heading || ''} (${(c.cards || []).length} card(s))`;
       if (section.sectionType === 'bullet_list') return `${c.heading || ''} (${(c.items || []).length} item(s))`;
-      if (section.sectionType === 'testimonials') return `${c.heading || ''} (${(c.items || []).length} testimonial(s))`;
+      if (section.sectionType === 'testimonials') return `${c.heading || ''} (${(c.items || []).length} testimonial(s), ${(c.items || []).filter(i => i.review_id).length} from reviews)`;
       if (section.sectionType === 'footer') return `${(c.link_columns || []).length} link column(s)`;
       if (section.sectionType === 'category_teaser') return c.heading || '';
       if (section.sectionType === 'faq') return c.heading || '';
@@ -3427,8 +3434,26 @@
     }
 
     // ---- testimonials ----
+    // v1.2.12: an item is either a hand-written quote (as before) or a
+    // REFERENCE to an approved review (review_id only, nothing copied). The
+    // approved list comes from /api/admin/reviews, refreshed on every load().
+    let approvedReviewsForPicker = [];
+
+    function reviewRefRowHtml(item) {
+      const id = Number(item.review_id);
+      const review = approvedReviewsForPicker.find(r => r.id === id);
+      const body = review
+        ? `<strong>${escapeHtml(review.name)}</strong> (${Number(review.rating)} out of 5): ${escapeHtml(review.testimonial.slice(0, 120))}${review.testimonial.length > 120 ? '...' : ''}`
+        : '<em>This review no longer exists or is not approved. It will not show on the page. Remove it.</em>';
+      return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row data-review-ref="${id}">
+        <p class="admin-badge admin-badge-brand">Review</p>
+        <p class="mt-1 text-sm break-words">${body}</p>
+        <button type="button" class="admin-btn-danger admin-btn-sm mt-2" data-remove-row>Remove review</button>
+      </div>`;
+    }
     function testimonialRowHtml(item) {
       item = item || {};
+      if (item.review_id) return reviewRefRowHtml(item);
       return `<div class="admin-subitem mt-3 border-t border-gray-100 pt-3" data-row>
         ${textareaField('Quote', 'quote', item.quote)}
         ${textField('Author name', 'author_name', item.author_name)}
@@ -3437,15 +3462,45 @@
       </div>`;
     }
     function renderTestimonialsForm(c) {
+      const options = approvedReviewsForPicker.map(r =>
+        `<option value="${Number(r.id)}">${escapeHtml(r.name)} (${Number(r.rating)} out of 5): ${escapeHtml(r.testimonial.slice(0, 60))}</option>`
+      ).join('');
       return `
         ${textField('Heading', 'heading', c.heading)}
         ${textField('Eyebrow text', 'eyebrow_text', c.eyebrow_text)}
         <p class="admin-label">Testimonials (section shows nothing on the live page until at least one exists)</p>
         <div data-array="items">${(c.items || []).map(testimonialRowHtml).join('')}</div>
-        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-items>Add testimonial</button>`;
+        <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-items>Add testimonial</button>
+        <div class="mt-4 border-t border-gray-100 pt-3">
+          <label class="admin-label">Or add an approved review</label>
+          <select class="admin-select" data-review-picker>${options || '<option value="">No approved reviews yet</option>'}</select>
+          <p class="admin-help">Shown with its own rating, a Verified client label and the live website type title. If the review is later deleted it disappears from this block by itself.</p>
+          <button type="button" class="admin-btn-outline admin-btn-sm mt-2" data-add-review>Add this review</button>
+        </div>`;
     }
     function collectTestimonialsForm(panel) {
-      return { heading: readField(panel, 'heading'), eyebrow_text: readField(panel, 'eyebrow_text'), items: readRows(panel, 'items') };
+      const container = panel.querySelector('[data-array="items"]');
+      const items = Array.from(container.querySelectorAll(':scope > [data-row]')).map(row => {
+        if (row.dataset.reviewRef) return { review_id: Number(row.dataset.reviewRef) };
+        const obj = {};
+        row.querySelectorAll('[data-field]').forEach(el => { obj[el.dataset.field] = el.value.trim(); });
+        return obj;
+      });
+      return { heading: readField(panel, 'heading'), eyebrow_text: readField(panel, 'eyebrow_text'), items };
+    }
+    function wireReviewPicker(panel) {
+      const addBtn = panel.querySelector('[data-add-review]');
+      const picker = panel.querySelector('[data-review-picker]');
+      const container = panel.querySelector('[data-array="items"]');
+      if (!addBtn || !picker || !container) return;
+      addBtn.addEventListener('click', () => {
+        const id = Number(picker.value);
+        if (!Number.isInteger(id) || id <= 0) return;
+        if (container.querySelector(`[data-review-ref="${id}"]`)) return;
+        const temp = document.createElement('div');
+        temp.innerHTML = reviewRefRowHtml({ review_id: id }).trim();
+        container.appendChild(temp.firstElementChild);
+      });
     }
 
     // ---- footer (the one doubly-nested type: link_columns[].links[]) ----
@@ -3575,6 +3630,7 @@
       const arrayField = TOP_LEVEL_ARRAY_BY_TYPE[sectionType];
       if (!arrayField) return; // hero / split_image_text have no array field at all
 
+      if (sectionType === 'testimonials') wireReviewPicker(panel);
       const containerEl = panel.querySelector(`[data-array="${arrayField.name}"]`);
       const onRowAdded = sectionType === 'footer' ? wireColumnLinks : undefined;
       wireArrayField(panel, containerEl, arrayField.name, arrayField.rowHtmlFn, onRowAdded);
@@ -3656,6 +3712,12 @@
     let currentPageSlug = 'home';
 
     async function load() {
+      try {
+        const rr = await window.adminFetch('/api/admin/reviews');
+        if (rr.ok) approvedReviewsForPicker = (await rr.json()).approved || [];
+      } catch (err) {
+        approvedReviewsForPicker = [];
+      }
       const res = await window.adminFetch(`/api/admin/landing-sections?page=${encodeURIComponent(currentPageSlug)}`);
       const data = await res.json();
       sections = data.sections;
@@ -4681,6 +4743,65 @@
     pendingList.addEventListener('click', handleClick);
     approvedList.addEventListener('click', handleClick);
     load();
+
+    // ---- v1.2.12: public page switch and running message ----
+    const switchEl = document.getElementById('testimonialsPageEnabled');
+    const bInput = document.getElementById('broadcastMessage');
+    const bCount = document.getElementById('broadcastCount');
+    const bInfo = document.getElementById('broadcastInfo');
+    const bStatus = document.getElementById('broadcastStatus');
+
+    function bSay(kind, text) {
+      bStatus.className = 'admin-msg admin-msg-' + kind;
+      bStatus.textContent = text;
+      bStatus.style.display = 'block';
+    }
+    function updateBCount() { bCount.textContent = String(Array.from(bInput.value).length); }
+    bInput.addEventListener('input', updateBCount);
+
+    function showBroadcast(b) {
+      bInput.value = b ? b.message : '';
+      bInfo.textContent = b ? `Live now. It disappears in ${Number(b.daysLeft)} day${Number(b.daysLeft) === 1 ? '' : 's'} (${new Date(b.expiresAt).toLocaleString()}).` : 'No message is live.';
+      updateBCount();
+    }
+
+    async function loadControls() {
+      try {
+        const sres = await window.adminFetch('/api/admin/site-settings');
+        const sdata = await sres.json();
+        switchEl.checked = sdata.testimonials_page_enabled === 'true';
+        const bres = await window.adminFetch(API + '/broadcast');
+        showBroadcast((await bres.json()).broadcast);
+      } catch (err) {
+        bSay('error', 'Failed to load the page controls.');
+      }
+    }
+
+    switchEl.addEventListener('change', async () => {
+      const res = await window.adminFetch('/api/admin/site-settings', {
+        method: 'PUT',
+        body: JSON.stringify({ testimonials_page_enabled: switchEl.checked ? 'true' : 'false' })
+      });
+      if (res.ok) {
+        bSay('success', switchEl.checked ? 'The /testimonials page is now public.' : 'The /testimonials page is now hidden.');
+      } else {
+        switchEl.checked = !switchEl.checked;
+        bSay('error', 'Failed to change the setting.');
+      }
+    });
+
+    document.getElementById('broadcastSave').addEventListener('click', async () => {
+      const res = await window.adminFetch(API + '/broadcast', { method: 'PUT', body: JSON.stringify({ message: bInput.value }) });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) { showBroadcast(body.broadcast); bSay('success', 'Message saved. It is live for 7 days.'); }
+      else bSay('error', body.error || 'Failed to save the message.');
+    });
+    document.getElementById('broadcastClear').addEventListener('click', async () => {
+      const res = await window.adminFetch(API + '/broadcast', { method: 'DELETE' });
+      if (res.ok) { showBroadcast(null); bSay('success', 'Message removed.'); }
+      else bSay('error', 'Failed to remove the message.');
+    });
+    loadControls();
   }
 
   document.addEventListener('DOMContentLoaded', function () {
