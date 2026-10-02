@@ -20,6 +20,9 @@
        unlike that list which an admin builds from scratch. -->
   <div class="border-t border-black/5 py-4">
     <nav class="mx-auto flex max-w-6xl flex-wrap justify-center gap-x-6 gap-y-2 px-4 text-xs text-hc-ink/40 sm:px-6">
+      <% if (typeof siteSettings !== 'undefined' && siteSettings.testimonials_page_enabled === 'true') { %>
+        <a href="/testimonials" class="transition-colors hover:text-hc-ink/60">Client reviews</a>
+      <% } %>
       <a href="/privacy-policy" class="transition-colors hover:text-hc-ink/60">Privacy Policy</a>
       <a href="/terms" class="transition-colors hover:text-hc-ink/60">Terms and Conditions</a>
       <a href="/cookie-policy" class="transition-colors hover:text-hc-ink/60">Cookie Policy</a>
