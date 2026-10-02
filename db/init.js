@@ -1403,9 +1403,46 @@ CREATE TABLE IF NOT EXISTS review_reminder_templates (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- v1.2.12: public review display.
+--
+-- Indexes for the three public queries. All are partial on
+-- status = 'approved' so they stay small (pending reviews never appear
+-- publicly).
+--   /testimonials list:  approved reviews newest first, keyset-stable order.
+--   build page:          approved reviews rated 4 or 5, best first, then newest
+--                        (the join key is deployed_sites.website_type_id).
+--   join to deployments: deployed_sites by type, for the build page query.
+CREATE INDEX IF NOT EXISTS idx_reviews_approved_recent
+  ON reviews (approved_at DESC, id DESC) WHERE status = 'approved';
+CREATE INDEX IF NOT EXISTS idx_reviews_approved_top_rated
+  ON reviews (rating DESC, approved_at DESC, id DESC) WHERE status = 'approved' AND rating >= 4;
+CREATE INDEX IF NOT EXISTS idx_deployed_sites_website_type_id
+  ON deployed_sites (website_type_id);
+
+-- v1.2.12: the single broadcast message on /testimonials. One row at most
+-- (id is pinned to 1 by the CHECK), so saving a new message replaces the old
+-- one. expires_at is set to 7 days after every save; readers also compare it
+-- to NOW() so an expired message is treated as gone before the scheduled
+-- job physically deletes it. The length check counts real characters.
+CREATE TABLE IF NOT EXISTS testimonials_broadcast (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  message TEXT NOT NULL CHECK (char_length(message) BETWEEN 1 AND 160),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+-- v1.2.12: site_scripts gains a fourth slot, 'checkout_confirmation',
+-- rendered only on the checkout confirmation page with {{variable}}
+-- substitution (lib/checkoutScripts.js). Same drop-and-re-add pattern used
+-- to extend other CHECK constraints in this file. The constraint was created
+-- inline, so Postgres named it site_scripts_placement_check.
+ALTER TABLE site_scripts DROP CONSTRAINT IF EXISTS site_scripts_placement_check;
+ALTER TABLE site_scripts ADD CONSTRAINT site_scripts_placement_check
+  CHECK (placement IN ('head', 'body_start', 'footer', 'checkout_confirmation'));
 `;
 
-const CURRENT_VERSION = '1.2.11';
+const CURRENT_VERSION = '1.2.12';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
