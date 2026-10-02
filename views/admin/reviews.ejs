@@ -23,6 +23,27 @@
     <p id="reviewsMessage" class="admin-msg" style="display:none;"></p>
 
     <div class="admin-card mb-6">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Public page</p><h2>Client reviews page</h2></div></div>
+      <label class="admin-checkbox-label"><input type="checkbox" id="testimonialsPageEnabled"> Show the public /testimonials page</label>
+      <p class="admin-help">
+        Off by default. Off means /testimonials shows "not found", is left out of the sitemap, and nothing links to it. This switch controls only that page:
+        review links, moderation, reminders, auto-publish, the reviews on each website type's page and reviews inside landing page blocks are not affected.
+      </p>
+
+      <div class="mt-4 border-t border-gray-100 pt-3">
+        <label class="admin-label" for="broadcastMessage">Running message on the page (optional)</label>
+        <input class="admin-input" type="text" id="broadcastMessage" maxlength="160" autocomplete="off">
+        <p class="admin-help"><span id="broadcastCount">0</span> / 160 characters. Plain text only. It scrolls across the top of /testimonials for 7 days from the last save, then removes itself. Saving a new message replaces the old one and restarts the 7 days.</p>
+        <p id="broadcastInfo" class="admin-help"></p>
+        <div class="admin-form-actions">
+          <button type="button" class="admin-btn admin-btn-sm" id="broadcastSave">Save message</button>
+          <button type="button" class="admin-btn-outline admin-btn-sm" id="broadcastClear">Remove message</button>
+        </div>
+        <p id="broadcastStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+    </div>
+
+    <div class="admin-card mb-6">
       <div class="admin-section-heading"><div><p class="admin-eyebrow">Waiting</p><h2>Pending reviews (<span id="pendingCount">0</span>)</h2></div></div>
       <div id="pendingList"></div>
     </div>

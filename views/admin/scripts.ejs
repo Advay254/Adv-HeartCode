@@ -26,7 +26,14 @@
           <option value="head">Header (inside &lt;head&gt;)</option>
           <option value="body_start">Body (right after &lt;body&gt; opens)</option>
           <option value="footer">Footer (right before &lt;/body&gt;)</option>
+          <option value="checkout_confirmation">Checkout confirmation (only after a completed purchase)</option>
         </select>
+        <p class="admin-help" id="placementHelp-checkout" style="display:none;">
+          Runs only on the confirmation page a client sees after a successful, completed purchase (for example a Trustpilot review invitation). It is filled in with that purchase's real details wherever you write a variable in double braces:
+          <code>{{reference}}</code>, <code>{{amount}}</code>, <code>{{currency}}</code>, <code>{{client_email}}</code>, <code>{{site_url}}</code>, <code>{{website_type_name}}</code>, <code>{{deployed_at}}</code>.
+          Put each one inside quotes in your snippet, for example <code>email: "{{client_email}}"</code>; values are escaped for that. A variable that does not exist becomes empty.
+          The site password and the review link are deliberately not available here, because a third-party script should never receive them.
+        </p>
         <label class="admin-label" for="scriptName">Name</label>
         <input class="admin-input" type="text" name="name" id="scriptName" required placeholder="e.g. Umami Analytics">
         <label class="admin-label" for="scriptContent">Script content</label>
@@ -39,7 +46,7 @@
       </form>
     </div>
 
-    <div class="mt-6 grid gap-6 lg:grid-cols-3">
+    <div class="mt-6 grid gap-6 lg:grid-cols-4">
       <div>
         <h2 class="text-sm font-semibold text-hc-ink">Header <span id="headCount" class="admin-badge admin-badge-brand">0 / 3</span></h2>
         <div id="headScripts"></div>
@@ -51,6 +58,10 @@
       <div>
         <h2 class="text-sm font-semibold text-hc-ink">Footer <span id="footerCount" class="admin-badge admin-badge-brand">0 / 3</span></h2>
         <div id="footerScripts"></div>
+      </div>
+      <div>
+        <h2 class="text-sm font-semibold text-hc-ink">Checkout confirmation <span id="checkoutConfirmationCount" class="admin-badge admin-badge-brand">0 / 3</span></h2>
+        <div id="checkoutConfirmationScripts"></div>
       </div>
     </div>
   </main>
