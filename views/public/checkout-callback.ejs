@@ -51,6 +51,12 @@
 </main>
 
 <%- include('../partials/public-footer') %>
+<% if (outcome === 'success' && typeof checkoutScripts !== 'undefined' && checkoutScripts.length) { %>
+<%# v1.2.12: the checkout_confirmation script slot, after substitution (see lib/checkoutScripts.js). Rendered raw, exactly like the other script slots, and only on a successful, completed transaction. %>
+<% checkoutScripts.forEach(function (scriptContent) { %>
+<%- scriptContent %>
+<% }); %>
+<% } %>
 <%- include('../partials/public-footer-scripts') %>
 </body>
 </html>

@@ -43,6 +43,29 @@
   </div>
 </main>
 
+<%
+  // v1.2.12: reviews for this website type. When the list is empty NOTHING
+  // is rendered: no heading, no wrapper, no spacing, no comment, nothing a
+  // visitor could use to tell the feature exists. Individual ratings only.
+  // The type title is left out here (it would repeat this page's own type).
+  // The link to /testimonials appears only while that page is switched on.
+%>
+<% if (typeof typeReviews !== 'undefined' && typeReviews.length > 0) { %>
+<link rel="stylesheet" href="/reviews-display.css">
+<section class="rvd-build" aria-label="Client reviews">
+  <div class="rvd-section">
+    <div class="rvd-grid<%= typeReviews.length >= 3 ? ' rvd-grid-3' : '' %>">
+      <% typeReviews.forEach(function (review) { %>
+        <%- include('../partials/public-review-card', { review: review, showType: false }) %>
+      <% }); %>
+    </div>
+    <% if (siteSettings.testimonials_page_enabled === 'true') { %>
+      <p class="rvd-more"><a class="rvd-link" href="/testimonials">Read all client reviews</a></p>
+    <% } %>
+  </div>
+</section>
+<% } %>
+
 <script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return { key: f.fieldKey, type: f.fieldType, required: f.isRequired }; })) %></script>
 <%- include('../partials/public-footer') %>
 <%- include('../partials/public-footer-scripts') %>

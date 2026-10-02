@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client reviews, <%= siteSettings.site_title %></title>
+<meta name="description" content="Reviews from verified clients who bought a real website with <%= siteSettings.site_title %>.">
+<% if (siteSettings.favicon_url) { %><link rel="icon" href="<%= siteSettings.favicon_url %>"><% } %>
+<%#
+  Standalone head on purpose (not public-head.ejs): this page ships a strict
+  Content-Security-Policy that blocks inline and third-party scripts, so the
+  admin-pasted script slots (analytics snippets and so on) are NOT rendered
+  here. Only the site's own same-origin scripts load. See routes/testimonials.js.
+%>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/styles/main.css">
+<link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/reviews-display.css">
+<script src="/site-interactions.js" defer></script>
+<script src="/funnel.js" defer></script>
+<script src="/site.js" defer></script>
+<% if (broadcast) { %><script src="/testimonials.js" defer></script><% } %>
+</head>
+<body class="bg-white font-sans text-hc-ink antialiased" data-page="testimonials">
+
+<%- include('../partials/public-nav') %>
+
+<% if (broadcast) { %>
+<div class="rvd-broadcast" id="rvdBroadcast" role="note" aria-label="Announcement" data-speed="60">
+  <p class="rvd-sr-only"><%= broadcast.message %></p>
+  <div class="rvd-marquee" aria-hidden="true">
+    <div class="rvd-track">
+      <span class="rvd-item"><%= broadcast.message %></span>
+      <span class="rvd-item rvd-item-dup"><%= broadcast.message %></span>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<main class="bg-white px-4 py-12 sm:px-6 sm:py-16">
+  <div class="rvd-section">
+    <h1 class="text-center font-display text-3xl uppercase text-hc-ink sm:text-4xl">Client reviews</h1>
+    <p class="rvd-intro mt-3">Every review here comes from a verified client who bought a real website.</p>
+
+    <% if (reviews.length === 0) { %>
+      <p class="rvd-empty">There are no reviews to show yet.</p>
+    <% } else { %>
+      <div class="rvd-grid">
+        <% reviews.forEach(function (review) { %>
+          <%- include('../partials/public-review-card', { review: review, showType: true }) %>
+        <% }); %>
+      </div>
+
+      <% if (totalPages > 1) { %>
+      <nav class="rvd-pagination" aria-label="Review pages">
+        <% if (page > 1) { %>
+          <a class="rvd-page" rel="prev" href="/testimonials?page=<%= page - 1 %>">Previous</a>
+        <% } else { %>
+          <span class="rvd-page is-disabled" aria-disabled="true">Previous</span>
+        <% } %>
+        <% for (var p = 1; p <= totalPages; p++) { %>
+          <% if (p === page) { %>
+            <span class="rvd-page is-current" aria-current="page"><%= p %></span>
+          <% } else { %>
+            <a class="rvd-page" href="/testimonials?page=<%= p %>"><%= p %></a>
+          <% } %>
+        <% } %>
+        <% if (page < totalPages) { %>
+          <a class="rvd-page" rel="next" href="/testimonials?page=<%= page + 1 %>">Next</a>
+        <% } else { %>
+          <span class="rvd-page is-disabled" aria-disabled="true">Next</span>
+        <% } %>
+      </nav>
+      <% } %>
+    <% } %>
+  </div>
+</main>
+
+<%- include('../partials/public-footer') %>
+</body>
+</html>
