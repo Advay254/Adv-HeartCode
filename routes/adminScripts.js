@@ -39,9 +39,9 @@ router.get('/', asyncHandler(async (req, res) => {
   const pool = getPool();
   const result = await pool.query('SELECT * FROM site_scripts ORDER BY placement ASC, id ASC');
 
-  const grouped = { head: [], body_start: [], footer: [] };
+  const grouped = { head: [], body_start: [], footer: [], checkout_confirmation: [] };
   for (const row of result.rows) {
-    grouped[row.placement].push(formatScript(row));
+    if (grouped[row.placement]) grouped[row.placement].push(formatScript(row));
   }
   res.json(grouped);
 }));

@@ -46,6 +46,8 @@ const updateSchema = z.object({
   // so the enum here is deliberately stricter than every url/text field
   // above it.
   show_type_prices_early: z.enum(['true', 'false']).optional(),
+  // v1.2.12: master switch for the public /testimonials page only.
+  testimonials_page_enabled: z.enum(['true', 'false']).optional(),
   // v1.2.6: stored as a string like every other row in this table (the
   // whole table is TEXT-valued), but constrained to a whole number 1-100
   // -- the actual value the WebP encoder in lib/imageProcessing.js

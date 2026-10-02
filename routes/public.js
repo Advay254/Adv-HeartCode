@@ -13,6 +13,9 @@ const { getCurrencyForIp } = require('../lib/geolocation');
 const { getRate, convertUsdTo, getChargeCurrencyForCountry, formatMoney } = require('../lib/currency');
 const { getSiteSettings } = require('../lib/siteSettings');
 const { getActiveScriptsByPlacement } = require('../lib/siteScripts');
+const { listTopForType, resolveTestimonialSections } = require('../lib/publicReviews');
+const { buildCheckoutScriptVariables, renderCheckoutScript } = require('../lib/checkoutScripts');
+const testimonialsRouter = require('./testimonials');
 const { getLandingContent } = require('../lib/landingContent');
 const { getLandingSections } = require('../lib/landingSections');
 const { DEFAULT_CONTENT } = require('../lib/landingSectionTypes');
@@ -295,6 +298,11 @@ router.get('/sitemap.xml', asyncHandler(async (req, res) => {
     { loc: `${rootUrl}/privacy-policy`, changefreq: 'monthly', priority: '0.2' },
     { loc: `${rootUrl}/terms`, changefreq: 'monthly', priority: '0.2' },
     { loc: `${rootUrl}/cookie-policy`, changefreq: 'monthly', priority: '0.2' },
+    // v1.2.12: /testimonials only while its admin switch is on. Off means
+    // it is not listed at all (the page itself also 404s).
+    ...(res.locals.siteSettings && res.locals.siteSettings.testimonials_page_enabled === 'true'
+      ? [{ loc: `${rootUrl}/testimonials`, changefreq: 'weekly', priority: '0.5' }]
+      : []),
     ...result.rows.map(t => ({
       loc: `${rootUrl}/build/${t.slug}`,
       changefreq: 'weekly',
@@ -591,7 +599,20 @@ async function renderLandingPage(req, res, { pageSlug, pageTitle, pageDescriptio
   //
   // v1.2.0: now reads THIS page's own section list (pageSlug), not
   // always 'home' — see lib/landingSections.js's per-page cache.
-  const landingSections = await getLandingSections(pageSlug);
+  const landingSectionsRaw = await getLandingSections(pageSlug);
+  // v1.2.12: testimonials blocks may reference approved reviews by id. They
+  // are resolved to live review data here (one query for the whole page) on
+  // COPIES, so the cached sections are never mutated. A reference whose
+  // review was deleted is simply dropped.
+  let landingSections = landingSectionsRaw;
+  try {
+    landingSections = await resolveTestimonialSections(landingSectionsRaw);
+  } catch (err) {
+    console.error('[REVIEWS] Could not resolve landing testimonial references:', err.message);
+    landingSections = landingSectionsRaw.map(sec => (sec.sectionType === 'testimonials' && sec.content && Array.isArray(sec.content.items))
+      ? { ...sec, content: { ...sec.content, items: sec.content.items.filter(i => !Number.isInteger(i.review_id)) } }
+      : sec);
+  }
   const heroSection = landingSections.find(s => s.sectionType === 'hero') || {
     id: 0, sectionType: 'hero', content: DEFAULT_CONTENT.hero, displayOrder: 1, isActive: true
   };
@@ -894,7 +915,19 @@ router.get('/build/:slug', asyncHandler(async (req, res) => {
     }
   ];
 
+  // v1.2.12: up to 3 approved reviews rated 4 or 5 for THIS type, one
+  // indexed query. A failure here must never break the build page, so it
+  // falls back to showing nothing (which is also what "no qualifying
+  // reviews" looks like: the view renders no trace at all for an empty list).
+  let typeReviews = [];
+  try {
+    typeReviews = await listTopForType(websiteType.id, 3);
+  } catch (err) {
+    console.error('[REVIEWS] Could not load reviews for the build page:', err.message);
+  }
+
   res.render('public/build', {
+    typeReviews,
     pageTitle: websiteType.seo_title || websiteType.name,
     pageDescription: websiteType.seo_description || null,
     structuredData,
@@ -1109,17 +1142,37 @@ router.get('/build/:slug/checkout/callback', asyncHandler(async (req, res) => {
 
   let outcome = 'error';
   let siteUrl = null;
+  let checkoutScripts = [];
 
   if (result.status === 'deployed' || result.status === 'already_deployed') {
     outcome = 'success';
     siteUrl = result.site.site_url;
+
+    // v1.2.12: scripts in the 'checkout_confirmation' slot, rendered ONLY on
+    // this success outcome with the real values of THIS transaction. Built
+    // from the deployment record itself (reference, charge, email, url), so
+    // nothing in the query string can influence the substituted values.
+    // Wrapped so a failure here can never hide the "your site is live" page.
+    try {
+      const slotScripts = (res.locals.activeScripts && res.locals.activeScripts.checkout_confirmation) || [];
+      if (slotScripts.length > 0) {
+        const typeRow = await getPool().query(
+          'SELECT name FROM website_types WHERE id = $1 AND is_active = true AND NOT is_deleted_placeholder',
+          [result.site.website_type_id]
+        );
+        const vars = buildCheckoutScriptVariables(result.site, typeRow.rowCount > 0 ? typeRow.rows[0].name : '');
+        checkoutScripts = slotScripts.map(content => renderCheckoutScript(content, vars));
+      }
+    } catch (err) {
+      console.error('[CHECKOUT] Could not render the checkout confirmation scripts:', err.message);
+    }
   } else if (result.status === 'not_paid' || result.status === 'expired' || result.status === 'not_found') {
     outcome = result.status;
   } else if (result.error) {
     console.error(`[CALLBACK] finalizeDeployment error for ${reference}:`, result.error);
   }
 
-  res.render('public/checkout-callback', { pageTitle: 'Checkout result', outcome, siteUrl, reference, slug: req.params.slug });
+  res.render('public/checkout-callback', { pageTitle: 'Checkout result', outcome, siteUrl, reference, slug: req.params.slug, checkoutScripts });
 }));
 
 // v1.1.2 Part C: resend site details, client self-service, no account
@@ -1153,6 +1206,11 @@ const resendDetailsLimiter = createDynamicRateLimiter({
 // shadow one of these. All three share one small handler since they only
 // differ in which page_key/title they load — see lib/legalPages.js for
 // the actual DB read.
+// v1.2.12: GET /testimonials (switch-gated, strict CSP). Registered here,
+// before the catch-all GET /:seoSlug at the bottom of this file, and
+// 'testimonials' is in lib/reservedSlugs.js so an SEO page can never claim it.
+router.use(testimonialsRouter);
+
 const LEGAL_PAGES_CONFIG = [
   { path: '/privacy-policy', pageKey: 'privacy_policy', pageTitle: 'Privacy Policy' },
   { path: '/terms', pageKey: 'terms', pageTitle: 'Terms and Conditions' },

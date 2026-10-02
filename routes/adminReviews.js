@@ -15,6 +15,7 @@ const {
 } = require('../lib/reviews');
 const { validateName, validateTestimonial } = require('../lib/reviewValidation');
 const { deleteImageFromClarityHeart } = require('../lib/clarityheart');
+const { validateBroadcastMessage, getActiveBroadcast, saveBroadcast, deleteBroadcast } = require('../lib/broadcast');
 
 // v1.2.11: admin moderation API for reviews. Session first, CSRF on every
 // state-changing route, every id validated before it touches the database,
@@ -67,6 +68,26 @@ router.get('/', asyncHandler(async (req, res) => {
 
 router.get('/pending-count', asyncHandler(async (req, res) => {
   res.json({ count: await countPendingReviews() });
+}));
+
+// ---- /testimonials broadcast (v1.2.12) ----
+// Declared BEFORE the '/:id' routes so 'broadcast' is never read as an id.
+// One message at most; saving replaces it and restarts the 7 day clock.
+router.get('/broadcast', asyncHandler(async (req, res) => {
+  res.json({ broadcast: await getActiveBroadcast() });
+}));
+
+router.put('/broadcast', requireCsrf, asyncHandler(async (req, res) => {
+  const body = z.object({ message: z.string().max(2000) }).safeParse(req.body || {});
+  if (!body.success) return res.status(400).json({ error: 'Invalid request' });
+  const checked = validateBroadcastMessage(body.data.message);
+  if (checked.error) return res.status(422).json({ error: checked.error });
+  res.json({ broadcast: await saveBroadcast(checked.value) });
+}));
+
+router.delete('/broadcast', requireCsrf, asyncHandler(async (req, res) => {
+  await deleteBroadcast();
+  res.json({ success: true });
 }));
 
 router.post('/:id/approve', requireCsrf, asyncHandler(async (req, res) => {
