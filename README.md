@@ -4,7 +4,7 @@
 
 <br>
 
-![Version](https://img.shields.io/badge/version-1.2.13-183fad?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.2.15-183fad?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2018-F1BF0A?style=for-the-badge&labelColor=14151d)
 ![Express](https://img.shields.io/badge/express-4-183fad?style=for-the-badge)
 ![Postgres](https://img.shields.io/badge/postgres-ready-F1BF0A?style=for-the-badge&labelColor=14151d)
@@ -97,7 +97,7 @@ docs/        documentation
 
 ## Latest release
 
-**v1.2.13** adds the Promotion page and embeddable script, plus a UI alignment pass on the review screens. See [docs/PROMOTIONS.md](docs/PROMOTIONS.md) and [docs/VERSIONS.md](docs/VERSIONS.md).
+**v1.2.15** makes client reviews text only and removes every trace of review photos. Before that, **v1.2.13** added the Promotion page and embeddable script. See [docs/VERSIONS.md](docs/VERSIONS.md) and [docs/PROMOTIONS.md](docs/PROMOTIONS.md).
 
 <img src="docs/assets/divider.svg" alt="" width="100%">
 
