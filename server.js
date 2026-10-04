@@ -38,6 +38,8 @@ const adminFunnelRouter = require('./routes/adminFunnel');
 const adminLegalRouter = require('./routes/adminLegal');
 const adminTestDeployRouter = require('./routes/adminTestDeploy');
 const adminReviewsRouter = require('./routes/adminReviews');
+const adminPromotionsRouter = require('./routes/adminPromotions');
+const promotionPublicRouter = require('./routes/promotionPublic');
 const reviewRouter = require('./routes/review');
 const { runReviewMaintenance } = require('./lib/reviewJobs');
 const publicRouter = require('./routes/public');
@@ -243,6 +245,14 @@ app.use((req, res, next) => {
 // rather than added for the sake of pattern-matching the other routes.
 app.use('/api/webhooks', webhooksRouter);
 
+// v1.2.13: promotion routes (/embed.js, /api/embed/*, /go/*, /embed/frame/*).
+// Mounted before publicRouter so its catch-all /:seoSlug can never shadow
+// /embed.js, and before the same-origin-only CORS below because the config
+// response is deliberately readable from other sites (GET only, set inside the
+// router). /embed/frame/:token is the one route that overrides the site-wide
+// framing protection above; every other route keeps it.
+app.use(promotionPublicRouter);
+
 // Combine the unauthenticated login page route with the session-gated
 // dashboard page routes into one router, then hand the whole thing to
 // adminSlugMiddleware. Neither sub-router is ever mounted on a public
@@ -366,6 +376,8 @@ app.use('/api/admin/funnel', adminFunnelRouter);
 app.use('/api/admin/legal-pages', adminLegalRouter);
 // v1.2.11: review moderation (session + CSRF gated inside the router).
 app.use('/api/admin/reviews', adminReviewsRouter);
+// v1.2.13: promotion campaigns (session + CSRF gated inside the router).
+app.use('/api/admin/promotions', adminPromotionsRouter);
 // v1.2.7: admin-only test deployment (no Paystack, forced -test slug, flagged
 // is_test). Session + CSRF gated INSIDE its router, session check first --
 // see routes/adminTestDeploy.js's header for why that order is load-bearing.
@@ -520,6 +532,7 @@ app.use((err, req, res, next) => {
 const CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const PENDING_DEPLOYMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const FUNNEL_EVENT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const PROMOTION_STATS_RETENTION_DAYS = 90;
 
 // Deliberately UNRELATED to the two constants above, despite the similar
 // name: this is how long a PLAINTEXT site password sits in the in-memory
@@ -565,6 +578,19 @@ function startCleanupJob() {
       }
     } catch (err) {
       console.error('[CLEANUP] Failed to prune old funnel_events:', err.message);
+    }
+
+    // v1.2.13: promotion counts are kept for 90 days, as daily rows.
+    try {
+      const promoResult = await pool.query(
+        `DELETE FROM promotion_stats WHERE day < (NOW() AT TIME ZONE 'UTC')::date - $1::int`,
+        [PROMOTION_STATS_RETENTION_DAYS]
+      );
+      if (promoResult.rowCount > 0) {
+        console.log(`[CLEANUP] Pruned ${promoResult.rowCount} promotion stat row(s) older than ${PROMOTION_STATS_RETENTION_DAYS} days.`);
+      }
+    } catch (err) {
+      console.error('[CLEANUP] Failed to prune old promotion_stats:', err.message);
     }
 
     sitePasswordCache.pruneExpired(SITE_PASSWORD_CACHE_MAX_AGE_MS);
