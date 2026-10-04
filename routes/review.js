@@ -3,15 +3,12 @@
 const crypto = require('crypto');
 const express = require('express');
 const helmet = require('helmet');
-const multer = require('multer');
 const { asyncHandler } = require('../lib/asyncHandler');
 const { hmacSign, timingSafeEqual } = require('../lib/auth');
 const { createRateLimiter } = require('../lib/rateLimit');
 const { getRealClientIp } = require('../lib/clientIp');
 const { TOKEN_RE, findValidLink, submitReviewWithLink, buildAdminReviewsUrl } = require('../lib/reviews');
 const { validateReviewSubmission, NAME_MAX, TESTIMONIAL_MAX, TESTIMONIAL_MIN } = require('../lib/reviewValidation');
-const { prepareReviewImage, REVIEW_IMAGE_MAX_BYTES, ALLOWED_DECLARED_TYPES } = require('../lib/reviewImage');
-const { uploadImageToClarityHeart, deleteImageFromClarityHeart } = require('../lib/clarityheart');
 const { notifyReviewSubmitted } = require('../lib/notifications');
 
 // v1.2.11: the public review form (GET /review/:token) and its submit
@@ -33,9 +30,6 @@ const CSRF_COOKIE_PATH = '/api/review';
 // ---- rate limits, all keyed by the real client IP ----
 const pageLimiter = createRateLimiter({ max: 30, windowMs: 60 * 1000 });
 const submitLimiter = createRateLimiter({ max: 10, windowMs: 10 * 60 * 1000 });
-// The image upload call is the expensive one (decode, re-encode, outbound
-// request to ClarityHeart), so it gets its own tighter ceiling.
-const imageUploadLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000 });
 
 // ---- Content-Security-Policy for the review page ----
 // Blocks inline scripts and any third-party script. This page is a
@@ -44,8 +38,7 @@ const imageUploadLimiter = createRateLimiter({ max: 5, windowMs: 10 * 60 * 1000 
 // public site injects (analytics snippets, funnel.js, site-interactions.js),
 // which is exactly why the strict policy does not break anything here. The
 // review page deliberately does NOT include those scripts: they would see
-// the review token in the URL. blob: in img-src is for previewing the
-// chosen photo locally before upload.
+// the review token in the URL.
 const cspDefaults = helmet.contentSecurityPolicy.getDefaultDirectives();
 const reviewCsp = helmet.contentSecurityPolicy({
   directives: {
@@ -53,7 +46,7 @@ const reviewCsp = helmet.contentSecurityPolicy({
     'script-src': ["'self'"],
     'script-src-attr': ["'none'"],
     'connect-src': ["'self'"],
-    'img-src': ["'self'", 'data:', 'blob:'],
+    'img-src': ["'self'", 'data:'],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],
     'form-action': ["'self'"],
@@ -135,56 +128,17 @@ router.get('/review/:token', asyncHandler(async (req, res) => {
     limits: {
       nameMax: NAME_MAX,
       testimonialMax: TESTIMONIAL_MAX,
-      testimonialMin: TESTIMONIAL_MIN,
-      imageMaxBytes: REVIEW_IMAGE_MAX_BYTES
+      testimonialMin: TESTIMONIAL_MIN
     }
   });
 }));
 
-// ---- multer: one image at most, size-capped before processing ----
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: REVIEW_IMAGE_MAX_BYTES,
-    files: 1,
-    fields: 6,
-    fieldSize: 8 * 1024,
-    parts: 8
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.fieldname !== 'image' || !ALLOWED_DECLARED_TYPES.includes(file.mimetype)) {
-      const err = new Error('bad_image_type');
-      err.code = 'BAD_IMAGE_TYPE';
-      return cb(err);
-    }
-    cb(null, true);
-  }
-});
-
-function runUpload(req, res) {
-  return new Promise((resolve) => {
-    upload.single('image')(req, res, (err) => resolve(err || null));
-  });
-}
-
-function multerErrorToMessage(err) {
-  if (!err) return null;
-  if (err.code === 'LIMIT_FILE_SIZE') return 'The photo is too large. Please choose one under 5 MB.';
-  if (err.code === 'LIMIT_UNEXPECTED_FILE' || err.code === 'LIMIT_FILE_COUNT') return 'Only one photo can be added.';
-  if (err.code === 'BAD_IMAGE_TYPE') return 'The photo must be a JPEG, PNG or WebP image.';
-  return 'Your submission could not be read. Please try again.';
-}
-
-async function removeUploadedImageQuietly(url) {
-  try {
-    await deleteImageFromClarityHeart(url);
-  } catch (err) {
-    console.error('[REVIEWS] Could not remove an orphaned uploaded image:', err.message);
-  }
-}
+// The form posts a tiny JSON body. The parser is scoped to this one route
+// and capped, per the project rule that body parsers are never router-wide.
+const parseJson = express.json({ limit: '8kb' });
 
 // ---- POST /api/review/:token ----
-router.post('/api/review/:token', asyncHandler(async (req, res) => {
+router.post('/api/review/:token', parseJson, asyncHandler(async (req, res) => {
   const ip = getRealClientIp(req);
   if (!submitLimiter.tryConsume(ip)) {
     return res.status(429).json({ error: 'Too many attempts. Please wait a few minutes and try again.', code: 'rate_limited' });
@@ -193,18 +147,9 @@ router.post('/api/review/:token', asyncHandler(async (req, res) => {
   const token = req.params.token;
   if (!TOKEN_RE.test(token)) return sendInvalidJson(res);
 
-  // CSRF before anything expensive (and before multer reads an upload).
+  // CSRF before anything else is looked at.
   if (!csrfIsValid(req, token)) {
     return res.status(403).json({ error: 'This page has expired. Please reload it and try again.', code: 'bad_csrf' });
-  }
-
-  const uploadError = await runUpload(req, res);
-  if (uploadError) {
-    return res.status(422).json({
-      error: multerErrorToMessage(uploadError),
-      errors: { image: multerErrorToMessage(uploadError) },
-      code: 'invalid_input'
-    });
   }
 
   // Verified again here, server side, on the submit itself.
@@ -225,50 +170,17 @@ router.post('/api/review/:token', asyncHandler(async (req, res) => {
     });
   }
 
-  // Optional photo. The URL is ALWAYS the one ClarityHeart returns to this
-  // server; nothing named imageUrl (or similar) is read from the browser.
-  let imageUrl = null;
-  if (req.file) {
-    if (!imageUploadLimiter.tryConsume(ip)) {
-      return res.status(429).json({ error: 'Too many photo uploads. Please wait a few minutes and try again.', code: 'rate_limited' });
-    }
-
-    const prepared = await prepareReviewImage(req.file.buffer, req.file.mimetype);
-    if (!prepared.ok) {
-      return res.status(422).json({
-        error: prepared.error,
-        errors: { image: prepared.error },
-        code: 'invalid_input'
-      });
-    }
-
-    try {
-      const uploaded = await uploadImageToClarityHeart(prepared.buffer, prepared.contentType);
-      imageUrl = uploaded.url;
-    } catch (err) {
-      console.error('[REVIEWS] Review photo upload to ClarityHeart failed:', err.message);
-      // Tell the reviewer plainly, keep everything they typed (the browser
-      // still has the form), and let them submit again without the photo.
-      return res.status(502).json({
-        error: 'Your photo could not be uploaded. You can send your review without it, or try the photo again.',
-        code: 'image_upload_failed'
-      });
-    }
-  }
-
   // Link row is deleted in the same transaction that saves the review.
   const result = await submitReviewWithLink({
     token,
     name: checked.values.name,
     rating: checked.values.rating,
-    testimonial: checked.values.testimonial,
-    imageUrl
+    testimonial: checked.values.testimonial
   });
 
   if (!result.ok) {
     // Lost a race with another submission on the same link (or it expired in
-    // the last moment). Do not leave the freshly uploaded photo behind.
-    if (imageUrl) await removeUploadedImageQuietly(imageUrl);
+    // the last moment).
     return sendInvalidJson(res);
   }
 

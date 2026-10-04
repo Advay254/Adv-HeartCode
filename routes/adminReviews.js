@@ -14,7 +14,6 @@ const {
   AUTO_PUBLISH_AFTER_DAYS
 } = require('../lib/reviews');
 const { validateName, validateTestimonial } = require('../lib/reviewValidation');
-const { deleteImageFromClarityHeart } = require('../lib/clarityheart');
 const { validateBroadcastMessage, getActiveBroadcast, saveBroadcast, deleteBroadcast } = require('../lib/broadcast');
 
 // v1.2.11: admin moderation API for reviews. Session first, CSRF on every
@@ -43,7 +42,6 @@ function mapReview(row) {
     name: row.reviewer_name,
     rating: row.rating,
     testimonial: row.testimonial,
-    imageUrl: row.image_url,
     status: row.status,
     autoApproved: row.auto_approved,
     submittedAt: row.submitted_at,
@@ -120,24 +118,10 @@ router.delete('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const params = idParamSchema.safeParse(req.params);
   if (!params.success) return res.status(400).json({ error: 'Invalid review id' });
 
-  // The row goes first and is permanent. The image removal happens after and
-  // can fail without undoing the delete; the admin is told clearly when it
-  // does, with the address so the file can be removed by hand.
+  // The row is permanent: deleting it is the whole job.
   const deleted = await deleteReviewRow(params.data.id);
   if (!deleted) return res.status(404).json({ error: 'Review not found' });
-
-  const result = { success: true, hadImage: Boolean(deleted.imageUrl), imageDeleted: null, imageUrl: null };
-  if (deleted.imageUrl) {
-    try {
-      await deleteImageFromClarityHeart(deleted.imageUrl);
-      result.imageDeleted = true;
-    } catch (err) {
-      console.error('[REVIEWS] Review deleted but its ClarityHeart image could not be removed:', err.message);
-      result.imageDeleted = false;
-      result.imageUrl = deleted.imageUrl;
-    }
-  }
-  res.json(result);
+  res.json({ success: true });
 }));
 
 module.exports = router;

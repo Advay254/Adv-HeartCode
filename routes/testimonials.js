@@ -25,16 +25,28 @@ const PAGE_SIZE = 12;
 // /funnel.js, /testimonials.js) are same-origin and keep working. What this
 // DOES block is the admin-pasted script slots (head/body/footer), for example
 // an analytics snippet: those are deliberately not rendered on this page, so
-// such a snippet does not run here. Review photos come from ClarityHeart over
-// https, hence https: in img-src.
+// such a snippet does not run here. Images are limited to this site's own
+// files and data: URIs, plus the origin of the favicon set in Site Settings
+// (the one remote image this page can reference).
 const cspDefaults = helmet.contentSecurityPolicy.getDefaultDirectives();
+// Directive value helper: helmet calls this per request. Returns the https
+// origin of the configured favicon, or a harmless self-only value.
+function faviconOrigin(req, res) {
+  try {
+    const raw = res.locals.siteSettings && res.locals.siteSettings.favicon_url;
+    const url = new URL(String(raw || ''));
+    if (url.protocol === 'https:') return url.origin;
+  } catch (err) { /* no usable favicon address */ }
+  return "'self'";
+}
+
 const testimonialsCsp = helmet.contentSecurityPolicy({
   directives: {
     ...cspDefaults,
     'script-src': ["'self'"],
     'script-src-attr': ["'none'"],
     'connect-src': ["'self'"],
-    'img-src': ["'self'", 'data:', 'https:'],
+    'img-src': ["'self'", 'data:', faviconOrigin],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],
     'form-action': ["'self'"],
