@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Promotion | <%= siteTitle ? siteTitle + ' ' : '' %>Admin</title>
+</head>
+<body data-page="promotion">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'promotion' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Content</p>
+        <h1>Promotion</h1>
+        <p>Build a small promo for another website. You paste one snippet there, and a short, light promo for this site appears right where you pasted it.</p>
+      </div>
+    </section>
+
+    <div class="admin-callout">
+      Everything in a promo is read live from this site: its name, its brand colours, and every website type that is active right now. Newly added types appear in existing promos on their own, and inactive or deleted types never do.
+      Snippets already placed on other websites keep pointing at the address they were built with. If the public domain is ever changed, keep the old domain redirecting here.
+    </div>
+
+    <section class="admin-split-grid">
+      <div class="admin-card admin-sticky-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow" id="promotionFormEyebrow">Create</p><h2 id="promotionFormHeading">Add campaign</h2></div></div>
+        <form id="promotionForm">
+          <label class="admin-label" for="promotionLabel">Label</label>
+          <input class="admin-input" type="text" name="label" id="promotionLabel" required maxlength="100" autocomplete="off" placeholder="e.g. the website this snippet is for">
+
+          <label class="admin-label" for="promotionMode">Mode</label>
+          <select class="admin-select" name="mode" id="promotionMode">
+            <option value="general">General promotion</option>
+            <option value="category">Category promotion</option>
+          </select>
+          <p class="admin-form-hint mt-1">General shows the site and every active website type. Category shows only the active types in one category.</p>
+
+          <div id="promotionCategoryRow" style="display:none;">
+            <label class="admin-label" for="promotionCategory">Category</label>
+            <select class="admin-select" name="categoryId" id="promotionCategory"></select>
+          </div>
+
+          <div class="admin-form-grid-2">
+            <div>
+              <label class="admin-label" for="promotionStyle">Style</label>
+              <select class="admin-select" name="style" id="promotionStyle">
+                <option value="card">Card</option>
+                <option value="slim">Slim line</option>
+                <option value="text">Text link</option>
+              </select>
+            </div>
+            <div>
+              <label class="admin-label" for="promotionTheme">Theme</label>
+              <select class="admin-select" name="theme" id="promotionTheme">
+                <option value="auto">Auto</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="admin-form-hint mt-1">Auto follows the visitor's device setting.</p>
+
+          <label class="admin-label" for="promotionAccent">Accent colour <span class="font-normal text-gray-400">(optional)</span></label>
+          <input class="admin-input font-mono" type="text" name="accentColor" id="promotionAccent" maxlength="7" autocomplete="off" placeholder="#RRGGBB">
+          <p class="admin-form-hint mt-1">Leave blank to use the brand colours.</p>
+
+          <label class="admin-label" for="promotionHeadline">Headline <span class="font-normal text-gray-400">(optional)</span></label>
+          <input class="admin-input" type="text" name="customHeadline" id="promotionHeadline" maxlength="60" autocomplete="off">
+          <label class="admin-label" for="promotionLine">Supporting line <span class="font-normal text-gray-400">(optional)</span></label>
+          <input class="admin-input" type="text" name="customLine" id="promotionLine" maxlength="120" autocomplete="off">
+          <p class="admin-form-hint mt-1">Custom text replaces the site's own message only. A website type always shows its own name and line. Plain text, no links.</p>
+
+          <label class="admin-label" for="promotionButton">Button label</label>
+          <input class="admin-input" type="text" name="buttonLabel" id="promotionButton" maxlength="24" autocomplete="off" required>
+
+          <div class="admin-form-actions">
+            <button type="submit" id="promotionSubmitBtn" class="admin-btn">Add campaign</button>
+            <button type="button" id="promotionCancelBtn" class="admin-btn-outline" style="display:none;">Cancel</button>
+            <p id="promotionStatus" class="admin-msg" style="display:none;"></p>
+          </div>
+        </form>
+      </div>
+
+      <div>
+        <div class="admin-card mb-6">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Live preview</p><h2>Preview</h2></div></div>
+          <div class="admin-form-actions" style="margin-top:0;">
+            <button type="button" class="admin-btn admin-btn-sm" id="previewLight">Light</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm" id="previewDark">Dark</button>
+            <button type="button" class="admin-btn-outline admin-btn-sm" id="previewShuffle">Show another</button>
+          </div>
+          <p id="previewNote" class="admin-msg admin-msg-warning" style="display:none;"></p>
+          <p id="previewError" class="admin-msg admin-msg-error" style="display:none;"></p>
+          <div id="previewStage" class="mt-3 rounded-lg border border-gray-200 p-4"></div>
+          <p class="admin-form-hint mt-2">This is the real promo, built from the form as it is now. Each page view on another website shows one item at random, so use Show another to see the others.</p>
+        </div>
+
+        <div class="admin-list-panel">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Campaigns</p><h2>Campaigns</h2></div></div>
+          <div id="promotionList" class="admin-entry-list"></div>
+        </div>
+
+        <div class="admin-card mt-6" id="snippetPanel" style="display:none;">
+          <div class="admin-section-heading"><div><p class="admin-eyebrow">Build script</p><h2 id="snippetHeading">Snippets</h2></div></div>
+          <p id="snippetBase" class="admin-form-hint"></p>
+          <p id="snippetError" class="admin-msg admin-msg-error" style="display:none;"></p>
+          <div id="snippetBlocks"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

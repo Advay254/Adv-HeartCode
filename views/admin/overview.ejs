@@ -20,7 +20,7 @@
       </div>
     </section>
 
-    <section class="admin-stat-grid admin-stat-grid-3" aria-label="Current configuration">
+    <section class="admin-stat-grid admin-stat-grid-4" aria-label="Current configuration">
       <div class="admin-stat-card">
         <div class="admin-stat-icon"><%- getIconSvg('credit-card') %></div>
         <div class="admin-stat-row"><div><p class="admin-stat-label">Payments</p><h4 id="statPaymentsValue" class="admin-stat-value">&hellip;</h4></div><span id="statPaymentsBadge"></span></div>
@@ -34,10 +34,7 @@
         <div class="admin-stat-icon"><%- getIconSvg('layout-template') %></div>
         <div class="admin-stat-row"><div><p class="admin-stat-label">Website Types</p><h4 id="statWebsiteTypesValue" class="admin-stat-value">&hellip;</h4></div><span id="statWebsiteTypesBadge"></span></div>
       </div>
-    </section>
-
-    <section class="admin-stat-grid admin-stat-grid-3" aria-label="Reviews">
-      <a class="admin-stat-card" href="/<%= slug %>/reviews" style="text-decoration:none;color:inherit;">
+      <a class="admin-stat-card admin-stat-card-link" href="/<%= slug %>/reviews">
         <div class="admin-stat-icon"><%- getIconSvg('star') %></div>
         <div class="admin-stat-row"><div><p class="admin-stat-label">Pending reviews</p><h4 id="statPendingReviewsValue" class="admin-stat-value"><%= typeof pendingReviewCount !== 'undefined' ? pendingReviewCount : 0 %></h4></div></div>
         <p class="admin-stat-caption">Waiting for approval</p>
