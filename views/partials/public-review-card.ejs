@@ -33,9 +33,6 @@
   <blockquote class="rvd-text">&ldquo;<%= rv.text %>&rdquo;</blockquote>
 
   <div class="rvd-person">
-    <% if (rv.imageUrl) { %>
-      <img class="rvd-photo" src="<%= rv.imageUrl %>" alt="Photo shared by <%= rv.name %>" width="56" height="56" loading="lazy" decoding="async">
-    <% } %>
     <div>
       <p class="rvd-name"><%= rv.name %></p>
       <% if (showType) { %>
