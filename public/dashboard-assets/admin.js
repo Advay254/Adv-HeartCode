@@ -1030,6 +1030,7 @@
     let currentFields = [];
     let currentOutputFields = [];
     attachCharCounter(document.getElementById('detailsDescription'));
+    attachCharCounter(document.getElementById('detailsPromoLine'), 100);
 
     function placeholderTokenForField(f) {
       return `{{${f.fieldKey}}}`;
@@ -1137,6 +1138,7 @@
           description: form.description.value,
           priceUsd: Number(form.priceUsd.value) || 0,
           demoUrl: form.demoUrl.value,
+          promoLine: form.promoLine.value,
           displayOrder: Number(form.displayOrder.value) || 0,
           isActive: form.isActive.checked,
           iconName: form.iconName.value,
@@ -4587,9 +4589,9 @@
     function stars(n) {
       let out = '';
       for (let i = 1; i <= 5; i++) {
-        out += '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:middle;fill:' + (i <= n ? '#F1BF0A' : 'none') + ';stroke:#F1BF0A;stroke-width:1.6;"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>';
+        out += '<svg class="inline-block align-middle stroke-hc-yellow" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="' + (i <= n ? 'currentColor' : 'none') + '" stroke-width="1.6"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>';
       }
-      return '<span aria-label="' + Number(n) + ' out of 5 stars">' + out + '</span>';
+      return '<span class="inline-flex items-center gap-0.5 text-hc-yellow" aria-label="' + Number(n) + ' out of 5 stars">' + out + '</span>';
     }
 
     function fmtDate(value) {
@@ -4598,7 +4600,7 @@
 
     function imageHtml(url) {
       if (!url || !/^https:\/\//i.test(url)) return '';
-      return '<p class="mt-2"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer"><img src="' + escapeHtml(url) + '" alt="Photo attached to this review" style="max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e5e7eb;"></a></p>';
+      return '<p class="mt-2"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer"><img src="' + escapeHtml(url) + '" alt="Photo attached to this review" class="max-h-36 max-w-[140px] rounded-lg border border-gray-200"></a></p>';
     }
 
     function deploymentHtml(r) {
@@ -4616,17 +4618,20 @@
       document.getElementById('approvedCount').textContent = String(data.approved.length);
 
       pendingList.innerHTML = data.pending.map(r => `
-        <div class="admin-card mb-3" data-review-id="${Number(r.id)}" style="box-shadow:none;border:1px solid #e5e7eb;">
+        <div class="admin-card" data-review-id="${Number(r.id)}">
           <div data-view>
-            <p><strong>${escapeHtml(r.name)}</strong> ${stars(r.rating)}</p>
-            <p class="mt-1" style="white-space:pre-wrap;">${escapeHtml(r.testimonial)}</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <strong class="text-sm text-hc-ink">${escapeHtml(r.name)}</strong>
+              ${stars(r.rating)}
+            </div>
+            <p class="mt-1 text-sm text-hc-ink/60 break-words whitespace-pre-wrap">${escapeHtml(r.testimonial)}</p>
             ${imageHtml(r.imageUrl)}
-            <p class="admin-help mt-2">From: ${deploymentHtml(r)}</p>
-            <p class="admin-help">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Auto-published in ${Number(r.daysLeft)} day${Number(r.daysLeft) === 1 ? '' : 's'} if nothing is done.</p>
+            <p class="mt-2 text-xs text-gray-400 break-words">From: ${deploymentHtml(r)}</p>
+            <p class="text-xs text-gray-400">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Auto-published in ${Number(r.daysLeft)} day${Number(r.daysLeft) === 1 ? '' : 's'} if nothing is done.</p>
             <div class="admin-form-actions mt-2">
               <button type="button" class="admin-btn admin-btn-sm" data-act="approve">Approve</button>
               <button type="button" class="admin-btn-outline admin-btn-sm" data-act="edit">Edit then approve</button>
-              <button type="button" class="admin-btn-outline admin-btn-sm" data-act="delete">Delete</button>
+              <button type="button" class="admin-btn-danger admin-btn-sm" data-act="delete">Delete</button>
             </div>
           </div>
           <div data-edit hidden>
@@ -4634,27 +4639,32 @@
             <input class="admin-input" type="text" data-field="name" maxlength="60">
             <label class="admin-label">Review</label>
             <textarea class="admin-textarea" rows="5" data-field="testimonial" maxlength="600"></textarea>
-            <p class="admin-help">Fix typos or lightly adjust wording only. The same length and plain-text rules as a reviewer's own submission apply.</p>
+            <p class="admin-form-hint mt-1">Fix typos or lightly adjust wording only. The same length and plain-text rules as a reviewer's own submission apply.</p>
             <p class="admin-msg admin-msg-error" data-edit-error style="display:none;"></p>
             <div class="admin-form-actions mt-2">
               <button type="button" class="admin-btn admin-btn-sm" data-act="save-approve">Save and approve</button>
               <button type="button" class="admin-btn-outline admin-btn-sm" data-act="cancel">Cancel</button>
             </div>
           </div>
-        </div>`).join('') || '<p class="admin-help">No reviews are waiting.</p>';
+        </div>`).join('') || '<p class="text-sm text-gray-400">No reviews are waiting.</p>';
 
       approvedList.innerHTML = data.approved.map(r => `
-        <div class="admin-card mb-3" data-review-id="${Number(r.id)}" style="box-shadow:none;border:1px solid #e5e7eb;">
-          <p><strong>${escapeHtml(r.name)}</strong> ${stars(r.rating)}
-            ${r.autoApproved ? '<span class="admin-badge admin-badge-brand">Auto-published</span>' : '<span class="admin-badge admin-badge-active">Approved</span>'}</p>
-          <p class="mt-1" style="white-space:pre-wrap;">${escapeHtml(r.testimonial)}</p>
-          ${imageHtml(r.imageUrl)}
-          <p class="admin-help mt-2">From: ${deploymentHtml(r)}</p>
-          <p class="admin-help">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Approved ${escapeHtml(fmtDate(r.approvedAt))}.</p>
-          <div class="admin-form-actions mt-2">
-            <button type="button" class="admin-btn-outline admin-btn-sm" data-act="delete">Delete</button>
+        <div class="admin-card" data-review-id="${Number(r.id)}">
+          <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <strong class="text-sm text-hc-ink">${escapeHtml(r.name)}</strong>
+            ${stars(r.rating)}
+            ${r.autoApproved ? '<span class="admin-badge admin-badge-brand">Auto-published</span>' : '<span class="admin-badge admin-badge-active">Approved</span>'}
           </div>
-        </div>`).join('') || '<p class="admin-help">No approved reviews yet.</p>';
+          <p class="mt-1 text-sm text-hc-ink/60 break-words whitespace-pre-wrap">${escapeHtml(r.testimonial)}</p>
+          ${imageHtml(r.imageUrl)}
+          <p class="mt-2 text-xs text-gray-400 break-words">From: ${deploymentHtml(r)}</p>
+          <p class="text-xs text-gray-400">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Approved ${escapeHtml(fmtDate(r.approvedAt))}.</p>
+          <div class="admin-form-actions mt-2">
+            <button type="button" class="admin-btn-danger admin-btn-sm" data-act="delete">Delete</button>
+          </div>
+          </div>
+        </div>`).join('') || '<p class="text-sm text-gray-400">No approved reviews yet.</p>';
 
       // Fill edit fields through .value, never through markup.
       pendingList.querySelectorAll('[data-review-id]').forEach(card => {
@@ -4804,6 +4814,332 @@
     loadControls();
   }
 
+  // ---- Promotion (v1.2.13) ----
+  // Structured like initCategoriesPage() (create/edit form beside a list of
+  // admin-card rows with badges and Edit / Remove buttons), with the edit
+  // form reused for editing the way the Fields tab's form is (heading and
+  // button text switch, plus a Cancel button). The preview renders the real
+  // /embed.js, fed with the config the server builds for the form's current
+  // values, so what the admin sees is what a visitor sees.
+  function initPromotionPage() {
+    const API = '/api/admin/promotions';
+    const form = document.getElementById('promotionForm');
+    const statusEl = document.getElementById('promotionStatus');
+    const listEl = document.getElementById('promotionList');
+    const stageEl = document.getElementById('previewStage');
+    const noteEl = document.getElementById('previewNote');
+    const previewErrorEl = document.getElementById('previewError');
+    const modeEl = document.getElementById('promotionMode');
+    const categoryRow = document.getElementById('promotionCategoryRow');
+    const categoryEl = document.getElementById('promotionCategory');
+    let state = { campaigns: [], categories: [], defaultButtonLabel: 'Build yours', editingId: null, previewTheme: 'light' };
+    let previewSeq = 0;
+    let previewTimer = null;
+
+    function say(kind, text) {
+      statusEl.className = 'admin-msg admin-msg-' + kind;
+      statusEl.textContent = text;
+      statusEl.style.display = 'block';
+    }
+
+    function errorText(body, fallback) {
+      if (body && body.errors) return Object.values(body.errors).join(' ');
+      return (body && body.error) || fallback;
+    }
+
+    function fmtRate(c) {
+      return c.clickRate === null ? 'n/a' : (c.clickRate * 100).toFixed(1) + '%';
+    }
+
+    const MODE_LABELS = { general: 'General', category: 'Category' };
+    const STYLE_LABELS = { card: 'Card', slim: 'Slim line', text: 'Text link' };
+
+    function categoryNotice(c) {
+      if (!c.categoryProblem) return '';
+      const why = c.categoryProblem === 'deleted' ? 'it was deleted'
+        : c.categoryProblem === 'inactive' ? 'it is inactive'
+        : 'it has no active website types';
+      return `<div class="admin-callout is-warn mt-3" style="margin-bottom:0;">This campaign's category is no longer available (${why}), so the general promotion is being shown. It returns to the category on its own if the category becomes available again.</div>`;
+    }
+
+    function render() {
+      listEl.innerHTML = state.campaigns.map((c) => `
+        <div class="admin-card" data-id="${c.id}">
+          <div class="flex flex-col gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-sm text-hc-ink">${escapeHtml(c.label)}</strong>
+                <span class="admin-badge admin-badge-brand">${MODE_LABELS[c.mode]}${c.mode === 'category' && c.categoryName ? ': ' + escapeHtml(c.categoryName) : ''}</span>
+                <span class="admin-badge admin-badge-brand">${STYLE_LABELS[c.style]}</span>
+                <span class="admin-badge ${c.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${c.isActive ? 'on' : 'off'}</span>
+              </div>
+              <p class="mt-1 text-sm text-hc-ink/60 break-words">
+                ${c.impressions} impression${c.impressions === 1 ? '' : 's'} &middot; ${c.clicks} click${c.clicks === 1 ? '' : 's'} &middot; click rate ${fmtRate(c)}
+              </p>
+              <p class="text-xs text-gray-400">Last 7 days: ${c.impressions7d} impression${c.impressions7d === 1 ? '' : 's'}, ${c.clicks7d} click${c.clicks7d === 1 ? '' : 's'}</p>
+              ${categoryNotice(c)}
+              <label class="admin-checkbox-label"><input type="checkbox" class="toggle-promotion" data-id="${c.id}" ${c.isActive ? 'checked' : ''}> On (a switched off campaign shows nothing)</label>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="admin-btn admin-btn-sm build-promotion" data-id="${c.id}">Build script</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm edit-promotion" data-id="${c.id}">Edit</button>
+              <button type="button" class="admin-btn-danger admin-btn-sm remove-promotion" data-id="${c.id}">Remove</button>
+            </div>
+          </div>
+        </div>`).join('') || '<p class="text-sm text-gray-400">No campaigns yet. Add one to get a snippet you can give to another website.</p>';
+
+      listEl.querySelectorAll('.toggle-promotion').forEach((box) => {
+        box.addEventListener('change', async () => {
+          const res = await window.adminFetch(`${API}/${box.dataset.id}/active`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive: box.checked })
+          });
+          if (res.ok) load();
+          else { box.checked = !box.checked; say('error', 'Failed to change the campaign.'); }
+        });
+      });
+      listEl.querySelectorAll('.edit-promotion').forEach((btn) => btn.addEventListener('click', () => openEdit(btn.dataset.id)));
+      listEl.querySelectorAll('.build-promotion').forEach((btn) => btn.addEventListener('click', () => buildScript(btn.dataset.id)));
+      listEl.querySelectorAll('.remove-promotion').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this campaign? Its stats are deleted with it. A snippet still placed on another website will then show the general promotion, uncounted.')) return;
+          const res = await window.adminFetch(`${API}/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            if (String(state.editingId) === String(btn.dataset.id)) resetForm();
+            document.getElementById('snippetPanel').style.display = 'none';
+            load();
+          } else {
+            say('error', 'Failed to delete the campaign.');
+          }
+        });
+      });
+    }
+
+    function fillCategories(selectedId) {
+      categoryEl.innerHTML = '<option value="">Choose a category</option>' + state.categories.map((c) =>
+        `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(c.name)}${c.isActive ? '' : ' (inactive)'}</option>`
+      ).join('');
+    }
+
+    function syncMode() {
+      categoryRow.style.display = modeEl.value === 'category' ? 'block' : 'none';
+    }
+
+    function readForm() {
+      return {
+        label: form.label.value,
+        mode: form.mode.value,
+        categoryId: form.mode.value === 'category' ? (Number(form.categoryId.value) || null) : null,
+        style: form.style.value,
+        theme: form.theme.value,
+        accentColor: form.accentColor.value,
+        customHeadline: form.customHeadline.value,
+        customLine: form.customLine.value,
+        buttonLabel: form.buttonLabel.value
+      };
+    }
+
+    function resetForm() {
+      state.editingId = null;
+      form.reset();
+      form.buttonLabel.value = state.defaultButtonLabel;
+      fillCategories('');
+      syncMode();
+      // form.reset() fires no input event, so refresh the character counters.
+      ['promotionHeadline', 'promotionLine', 'promotionButton'].forEach((id) => {
+        document.getElementById(id).dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      document.getElementById('promotionFormEyebrow').textContent = 'Create';
+      document.getElementById('promotionFormHeading').textContent = 'Add campaign';
+      document.getElementById('promotionSubmitBtn').textContent = 'Add campaign';
+      document.getElementById('promotionCancelBtn').style.display = 'none';
+      schedulePreview();
+    }
+
+    function openEdit(id) {
+      const c = state.campaigns.find((x) => String(x.id) === String(id));
+      if (!c) return;
+      state.editingId = c.id;
+      form.label.value = c.label;
+      form.mode.value = c.mode;
+      fillCategories(c.categoryId || '');
+      form.style.value = c.style;
+      form.theme.value = c.theme;
+      form.accentColor.value = c.accentColor || '';
+      form.customHeadline.value = c.customHeadline;
+      form.customLine.value = c.customLine;
+      form.buttonLabel.value = c.buttonLabel;
+      syncMode();
+      document.getElementById('promotionFormEyebrow').textContent = 'Edit';
+      document.getElementById('promotionFormHeading').textContent = 'Edit campaign';
+      document.getElementById('promotionSubmitBtn').textContent = 'Save changes';
+      document.getElementById('promotionCancelBtn').style.display = 'inline-flex';
+      statusEl.style.display = 'none';
+      form.scrollIntoView();
+      schedulePreview();
+    }
+
+    // ---- live preview ----
+    function schedulePreview() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(refreshPreview, 250);
+    }
+
+    async function refreshPreview() {
+      const seq = ++previewSeq;
+      let res;
+      let body;
+      try {
+        res = await window.adminFetch(`${API}/preview`, {
+          method: 'POST',
+          body: JSON.stringify(Object.assign(readForm(), { theme: state.previewTheme }))
+        });
+        body = await res.json();
+      } catch (err) {
+        if (seq === previewSeq) { previewErrorEl.textContent = 'Failed to load the preview.'; previewErrorEl.style.display = 'block'; }
+        return;
+      }
+      if (seq !== previewSeq) return;
+
+      stageEl.innerHTML = '';
+      stageEl.classList.toggle('bg-gray-50', state.previewTheme === 'light');
+      stageEl.classList.toggle('bg-gray-100', state.previewTheme === 'dark');
+      previewErrorEl.style.display = 'none';
+      noteEl.style.display = 'none';
+
+      if (!res.ok) {
+        previewErrorEl.textContent = errorText(body, 'Failed to load the preview.');
+        previewErrorEl.style.display = 'block';
+        return;
+      }
+      if (body.categoryUnavailable) {
+        noteEl.textContent = 'The chosen category is not available, so the general promotion is shown.';
+        noteEl.style.display = 'block';
+      }
+      const holder = document.createElement('div');
+      const script = document.createElement('script');
+      script.src = '/embed.js';
+      script.async = true;
+      script.setAttribute('data-config', JSON.stringify(body.config));
+      holder.appendChild(script);
+      stageEl.appendChild(holder);
+    }
+
+    function setPreviewTheme(theme) {
+      state.previewTheme = theme;
+      document.getElementById('previewLight').className = theme === 'light' ? 'admin-btn admin-btn-sm' : 'admin-btn-outline admin-btn-sm';
+      document.getElementById('previewDark').className = theme === 'dark' ? 'admin-btn admin-btn-sm' : 'admin-btn-outline admin-btn-sm';
+      refreshPreview();
+    }
+
+    // ---- build script ----
+    function snippetBlock(id, title, hint, value) {
+      return `
+        <div class="admin-form-section">
+          <h3>${escapeHtml(title)}</h3>
+          <p class="admin-form-hint">${escapeHtml(hint)}</p>
+          <textarea class="admin-textarea font-mono" id="${id}" rows="4" readonly></textarea>
+          <div class="admin-form-actions"><button type="button" class="admin-btn-outline admin-btn-sm copy-snippet" data-target="${id}">Copy</button></div>
+        </div>`;
+    }
+
+    async function buildScript(id) {
+      const panel = document.getElementById('snippetPanel');
+      const errEl = document.getElementById('snippetError');
+      const blocks = document.getElementById('snippetBlocks');
+      const campaign = state.campaigns.find((x) => String(x.id) === String(id));
+      panel.style.display = 'block';
+      errEl.style.display = 'none';
+      blocks.innerHTML = '';
+      document.getElementById('snippetHeading').textContent = campaign ? campaign.label : 'Snippets';
+
+      let res;
+      let body;
+      try {
+        res = await window.adminFetch(`${API}/${id}/snippets`);
+        body = await res.json();
+      } catch (err) {
+        res = { ok: false };
+        body = {};
+      }
+      if (!res.ok) {
+        errEl.textContent = errorText(body, 'Failed to build the script.');
+        errEl.style.display = 'block';
+        return;
+      }
+      document.getElementById('snippetBase').textContent = body.publicBaseUrlSource === 'env'
+        ? `Built with the public address ${body.publicBaseUrl} (from PUBLIC_BASE_URL).`
+        : `Built with the address you are using now, ${body.publicBaseUrl}. Set PUBLIC_BASE_URL so snippets always use your public address.`;
+
+      blocks.innerHTML =
+        snippetBlock('snippetScript', 'Script tag', 'The default and best option. Paste it where the promo should appear. It loads without slowing the page and shows nothing if anything goes wrong.', '')
+        + snippetBlock('snippetIframe', 'Iframe', `For hosts who do not want third-party JavaScript on their page. It loads only when near the screen and has a fixed height of ${Number(body.iframeHeight)} px. Impressions are counted when the frame loads.`, '')
+        + snippetBlock('snippetHtml', 'Plain HTML card', 'No JavaScript at all, just a styled link to this campaign. Clicks are counted, impressions are not.', '');
+      // Fill through .value, never through markup.
+      document.getElementById('snippetScript').value = body.snippets.script;
+      document.getElementById('snippetIframe').value = body.snippets.iframe;
+      document.getElementById('snippetHtml').value = body.snippets.html;
+      panel.scrollIntoView();
+    }
+
+    document.getElementById('snippetBlocks').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.copy-snippet');
+      if (!btn) return;
+      const value = document.getElementById(btn.dataset.target).value;
+      try {
+        await navigator.clipboard.writeText(value);
+        btn.textContent = 'Copied';
+      } catch (_err) {
+        btn.textContent = 'Copy failed';
+      }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    });
+
+    // ---- load / save ----
+    async function load() {
+      const res = await window.adminFetch(API);
+      if (!res.ok) { say('error', 'Failed to load campaigns.'); return; }
+      const data = await res.json();
+      state.campaigns = data.campaigns;
+      state.categories = data.categories;
+      state.defaultButtonLabel = data.defaultButtonLabel;
+      if (!form.buttonLabel.value && state.editingId === null) form.buttonLabel.value = state.defaultButtonLabel;
+      fillCategories(form.categoryId.value);
+      render();
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editing = state.editingId !== null;
+      const res = await window.adminFetch(editing ? `${API}/${state.editingId}` : API, {
+        method: editing ? 'PUT' : 'POST',
+        body: JSON.stringify(readForm())
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        resetForm();
+        say('success', editing ? 'Campaign saved.' : 'Campaign added.');
+        await load();
+      } else {
+        say('error', errorText(body, editing ? 'Failed to save the campaign.' : 'Failed to add the campaign.'));
+      }
+    });
+
+    document.getElementById('promotionCancelBtn').addEventListener('click', () => { resetForm(); statusEl.style.display = 'none'; });
+    modeEl.addEventListener('change', () => { syncMode(); schedulePreview(); });
+    form.addEventListener('input', schedulePreview);
+    form.addEventListener('change', schedulePreview);
+    document.getElementById('previewLight').addEventListener('click', () => setPreviewTheme('light'));
+    document.getElementById('previewDark').addEventListener('click', () => setPreviewTheme('dark'));
+    document.getElementById('previewShuffle').addEventListener('click', refreshPreview);
+
+    attachCharCounter(document.getElementById('promotionHeadline'), 60);
+    attachCharCounter(document.getElementById('promotionLine'), 120);
+    attachCharCounter(document.getElementById('promotionButton'), 24);
+
+    load().then(resetForm);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -4830,5 +5166,6 @@
     if (page === 'seo-pages') initSeoPagesPage();
     if (page === 'legal-pages') initLegalPagesPage();
     if (page === 'test-deploy') initTestDeployPage();
+    if (page === 'promotion') initPromotionPage();
   });
 })();
