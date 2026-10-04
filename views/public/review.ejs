@@ -35,8 +35,7 @@
             data-csrf="<%= csrfValue %>"
             data-name-max="<%= limits.nameMax %>"
             data-text-max="<%= limits.testimonialMax %>"
-            data-text-min="<%= limits.testimonialMin %>"
-            data-image-max="<%= limits.imageMaxBytes %>">
+            data-text-min="<%= limits.testimonialMin %>">
 
         <p id="formAlert" class="rv-alert rv-alert-error" role="alert" hidden></p>
 
@@ -72,22 +71,6 @@
             <p class="rv-count" id="rvTextCount" aria-live="off">0 / <%= limits.testimonialMax %></p>
           </div>
           <p class="rv-error" id="rvTextError" hidden></p>
-        </div>
-
-        <div class="rv-field">
-          <span class="rv-label" id="rvImageLabel">Add a photo (optional)</span>
-          <div class="rv-photo-row">
-            <label class="rv-btn rv-btn-secondary" for="rvImage" id="rvImagePick">Choose photo</label>
-            <input class="rv-sr-only" type="file" id="rvImage" name="image" accept="image/jpeg,image/png,image/webp" aria-labelledby="rvImageLabel rvImageName">
-            <button type="button" class="rv-btn rv-btn-ghost" id="rvImageRemove" hidden>Remove</button>
-          </div>
-          <p class="rv-hint" id="rvImageHint">One photo only. JPEG, PNG or WebP, up to 5 MB.</p>
-          <div class="rv-preview" id="rvPreviewBox" hidden>
-            <img id="rvPreview" alt="Preview of the photo you chose" width="96" height="96">
-            <span id="rvImageName" class="rv-hint"></span>
-          </div>
-          <p class="rv-error" id="rvImageError" hidden></p>
-          <p class="rv-alert rv-alert-warn" id="rvImageUploadFailed" role="alert" hidden></p>
         </div>
 
         <button class="rv-btn rv-btn-primary" type="submit" id="rvSubmit">
