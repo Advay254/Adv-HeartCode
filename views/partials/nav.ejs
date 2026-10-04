@@ -12,7 +12,8 @@
         { page: 'faq', href: `/${slug}/faq`, label: 'FAQ' },
         { page: 'legal-pages', href: `/${slug}/legal-pages`, label: 'Legal Pages' },
         { page: 'site-settings', href: `/${slug}/site-settings`, label: 'Site Settings' },
-        { page: 'scripts', href: `/${slug}/scripts`, label: 'Scripts' }
+        { page: 'scripts', href: `/${slug}/scripts`, label: 'Scripts' },
+        { page: 'promotion', href: `/${slug}/promotion`, label: 'Promotion' }
       ]
     },
     {
@@ -50,6 +51,7 @@
     'legal-pages': 'Legal Pages',
     'site-settings': 'Site Settings',
     scripts: 'Scripts',
+    promotion: 'Promotion',
     submissions: 'Deployments & Subscribers',
     activity: 'Activity',
     reviews: 'Reviews',
@@ -129,7 +131,7 @@
               <span class="admin-nav-child-dot"></span>
               <span><%= item.label %></span>
               <% if (item.badge === 'pendingReviews' && typeof pendingReviewCount !== 'undefined' && pendingReviewCount > 0) { %>
-                <span class="admin-badge admin-badge-brand" style="margin-left:auto;" aria-label="<%= pendingReviewCount %> pending review<%= pendingReviewCount === 1 ? '' : 's' %>"><%= pendingReviewCount %></span>
+                <span class="admin-badge admin-badge-brand ml-auto" aria-label="<%= pendingReviewCount %> pending review<%= pendingReviewCount === 1 ? '' : 's' %>"><%= pendingReviewCount %></span>
               <% } %>
             </a>
           <% }); %>
