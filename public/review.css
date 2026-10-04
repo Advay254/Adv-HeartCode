@@ -1,4 +1,9 @@
 /* v1.2.11: styles for the public review page (views/public/review.ejs).
+   Aligned with the public site's own components in src/styles/main.css:
+   the card uses the .hc-panel corner shape, buttons use the .hc-pill-btn
+   pill with its left-to-right colour sweep, fields use the .hc-input look
+   and messages the .hc-msg look. This page stays standalone on purpose, so
+   those shapes are restated here instead of loading the site's scripts.
    Colours are the brand variables the site already defines in
    src/styles/main.css (--hc-blue, --hc-yellow, --hc-ink); the fallback
    values after each var() are the same three values, only there so this
@@ -10,8 +15,9 @@
 .rv-body {
   margin: 0;
   min-height: 100vh;
-  background: #f5f6fa;
+  background: #ffffff;
   color: var(--hc-ink, #14151d);
+  -webkit-font-smoothing: antialiased;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   line-height: 1.5;
 }
@@ -22,9 +28,12 @@
 }
 .rv-card {
   background: #ffffff;
-  border-radius: 16px;
-  padding: 28px 22px;
-  box-shadow: 0 6px 28px rgba(20, 21, 29, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 2.5rem 0.5rem 2.5rem 0.5rem;
+  padding: 32px;
+}
+@media (max-width: 480px) {
+  .rv-card { border-radius: 1.25rem; padding: 24px 20px; }
 }
 .rv-brand {
   display: flex;
@@ -33,7 +42,6 @@
   margin-bottom: 18px;
   font-family: 'Anton', 'Inter', sans-serif;
   font-size: 1.15rem;
-  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--hc-blue, #183fad);
 }
@@ -41,9 +49,8 @@
 .rv-title {
   margin: 0 0 6px;
   font-family: 'Anton', 'Inter', sans-serif;
-  font-size: 1.8rem;
+  font-size: 1.875rem;
   font-weight: 400;
-  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--hc-ink, #14151d);
 }
@@ -54,27 +61,27 @@
 .rv-label {
   display: block;
   margin-bottom: 6px;
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: 500;
+  font-size: 0.875rem;
   padding: 0;
 }
 .rv-input {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: 11px 12px;
-  border: 1.5px solid #cfd3de;
-  border-radius: 10px;
+  padding: 10px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 0.75rem;
   background: #ffffff;
   color: var(--hc-ink, #14151d);
   font: inherit;
-  font-size: 1rem;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  font-size: 0.875rem;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 .rv-input:focus {
   outline: none;
   border-color: var(--hc-blue, #183fad);
-  box-shadow: 0 0 0 3px rgba(24, 63, 173, 0.18);
+  box-shadow: 0 0 0 2px rgba(24, 63, 173, 0.2);
 }
 .rv-input.is-invalid { border-color: #b3261e; }
 .rv-textarea { resize: vertical; min-height: 140px; }
@@ -86,9 +93,9 @@
 .rv-count.is-over { color: #b3261e; font-weight: 600; }
 .rv-error { margin: 6px 0 0; font-size: 0.86rem; color: #b3261e; font-weight: 600; }
 
-.rv-alert { margin: 0 0 18px; padding: 11px 13px; border-radius: 10px; font-size: 0.92rem; }
-.rv-alert-error { background: #fdecea; color: #8c1d18; }
-.rv-alert-warn { background: #fff6d9; color: #5c4400; margin: 10px 0 0; }
+.rv-alert { margin: 0 0 18px; padding: 12px 16px; border-radius: 0.75rem; font-size: 0.875rem; }
+.rv-alert-error { background: #fef2f2; color: #b91c1c; }
+.rv-alert-warn { background: #fffbeb; color: #92400e; margin: 10px 0 0; }
 
 /* ---- stars: yellow. Row-reversed so "this star and every one before it"
    can be lit with plain sibling selectors, no script needed for hover. ---- */
@@ -120,41 +127,57 @@
 
 /* ---- buttons: blue, animate to yellow on hover and on press ---- */
 .rv-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 12px 22px;
+  padding: 12px 24px;
   border: 2px solid var(--hc-blue, #183fad);
-  border-radius: 10px;
+  border-radius: 9999px;
   background: var(--hc-blue, #183fad);
   color: #ffffff;
   font: inherit;
-  font-weight: 700;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 0.875rem;
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 120ms ease;
+  transition: color 300ms ease-out, border-color 300ms ease-out;
+}
+/* The yellow fill sweeps in from the left on hover, focus and press, the
+   same way the site's .hc-pill-btn does. */
+.rv-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--hc-yellow, #F1BF0A);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 300ms ease-out;
 }
 .rv-btn:hover,
+.rv-btn:focus-visible,
 .rv-btn:active {
-  background: var(--hc-yellow, #F1BF0A);
   border-color: var(--hc-yellow, #F1BF0A);
   color: var(--hc-ink, #14151d);
 }
-.rv-btn:active { transform: scale(0.98); }
-.rv-btn:focus-visible { outline: 3px solid var(--hc-ink, #14151d); outline-offset: 2px; }
+.rv-btn:hover::before,
+.rv-btn:focus-visible::before,
+.rv-btn:active::before { transform: scaleX(1); }
+.rv-btn:focus-visible { outline: 2px solid var(--hc-blue, #183fad); outline-offset: 2px; }
 .rv-btn[disabled] { opacity: 0.65; cursor: progress; }
 .rv-btn-primary { width: 100%; }
-.rv-btn-secondary { padding: 9px 16px; font-size: 0.95rem; }
+.rv-btn-secondary { padding: 9px 18px; }
 .rv-btn-ghost {
-  padding: 9px 16px;
-  font-size: 0.95rem;
+  padding: 9px 18px;
   background: transparent;
   color: var(--hc-blue, #183fad);
 }
 .rv-photo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .rv-preview { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.rv-preview img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1.5px solid #cfd3de; }
+.rv-preview img { width: 96px; height: 96px; object-fit: cover; border-radius: 0.75rem; border: 1px solid rgba(0, 0, 0, 0.1); }
 
 .rv-done { text-align: center; padding-top: 34px; padding-bottom: 34px; }
 .rv-done .rv-brand { justify-content: center; }
@@ -176,10 +199,10 @@
 @media (prefers-reduced-motion: reduce) {
   .rv-input,
   .rv-star,
-  .rv-btn {
+  .rv-btn,
+  .rv-btn::before {
     transition: none;
   }
-  .rv-btn:active,
   .rv-star-label:active .rv-star {
     transform: none;
   }
