@@ -75,6 +75,15 @@
           </div>
 
           <div class="admin-form-section">
+            <h3>Promotions</h3>
+            <label class="admin-label" for="detailsPromoLine">Promo line <span class="font-normal text-gray-400">(optional)</span></label>
+            <input class="admin-input" type="text" name="promoLine" id="detailsPromoLine" value="<%= websiteType.promo_line || '' %>" maxlength="100" autocomplete="off" placeholder="e.g. A birthday page they will keep for years">
+            <p class="admin-form-hint">
+              The one line shown in promotions for this type. When it is empty, the type's normal description is used.
+            </p>
+          </div>
+
+          <div class="admin-form-section">
             <h3>Custom deploy slug</h3>
             <p class="admin-form-hint">
               Optional. Leave blank to keep the default random slug. Use <code>{{field_key}}</code> for a raw field's submitted value,
@@ -291,7 +300,7 @@
       <div class="admin-ed-grid mt-6">
         <div class="admin-card">
           <div class="admin-section-heading"><div><p class="admin-eyebrow">Sent once, 2 days after deployment</p><h2>Review reminder email</h2></div></div>
-          <p class="admin-help mb-2">
+          <p class="admin-form-hint">
             Sent one time to a client who has not left a review yet, containing their review link. Leave it untouched to send the built-in
             friendly default. Click "Load default copy" to start editing from it.
           </p>
