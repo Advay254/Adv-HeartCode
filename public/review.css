@@ -95,7 +95,6 @@
 
 .rv-alert { margin: 0 0 18px; padding: 12px 16px; border-radius: 0.75rem; font-size: 0.875rem; }
 .rv-alert-error { background: #fef2f2; color: #b91c1c; }
-.rv-alert-warn { background: #fffbeb; color: #92400e; margin: 10px 0 0; }
 
 /* ---- stars: yellow. Row-reversed so "this star and every one before it"
    can be lit with plain sibling selectors, no script needed for hover. ---- */
@@ -169,15 +168,6 @@
 .rv-btn:focus-visible { outline: 2px solid var(--hc-blue, #183fad); outline-offset: 2px; }
 .rv-btn[disabled] { opacity: 0.65; cursor: progress; }
 .rv-btn-primary { width: 100%; }
-.rv-btn-secondary { padding: 9px 18px; }
-.rv-btn-ghost {
-  padding: 9px 18px;
-  background: transparent;
-  color: var(--hc-blue, #183fad);
-}
-.rv-photo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-.rv-preview { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.rv-preview img { width: 96px; height: 96px; object-fit: cover; border-radius: 0.75rem; border: 1px solid rgba(0, 0, 0, 0.1); }
 
 .rv-done { text-align: center; padding-top: 34px; padding-bottom: 34px; }
 .rv-done .rv-brand { justify-content: center; }

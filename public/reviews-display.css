@@ -42,7 +42,6 @@
 }
 .rvd-text { margin: 0; font-size: 0.95rem; line-height: 1.6; color: rgba(20, 21, 29, 0.85); white-space: pre-line; overflow-wrap: anywhere; }
 .rvd-person { display: flex; align-items: center; gap: 12px; margin-top: auto; }
-.rvd-photo { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; flex: none; background: #eceef4; }
 .rvd-name { margin: 0; font-weight: 700; font-size: 0.95rem; overflow-wrap: anywhere; }
 .rvd-type { margin: 2px 0 0; font-size: 0.82rem; color: rgba(20, 21, 29, 0.6); }
 
