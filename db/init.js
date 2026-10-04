@@ -1440,9 +1440,63 @@ CREATE TABLE IF NOT EXISTS testimonials_broadcast (
 ALTER TABLE site_scripts DROP CONSTRAINT IF EXISTS site_scripts_placement_check;
 ALTER TABLE site_scripts ADD CONSTRAINT site_scripts_placement_check
   CHECK (placement IN ('head', 'body_start', 'footer', 'checkout_confirmation'));
+
+-- v1.2.13: promotions.
+--
+-- website_types.promo_line: one optional plain-text line shown in
+-- promotions. NULL means "not set", and promotions then fall back to the
+-- type's normal description. It needs its own ALTER (the table already
+-- exists on every install that ran an earlier migration). The length check
+-- is NOT VALID like the other retroactive checks in this file, so it only
+-- applies to future writes and can never fail boot over old data. The
+-- server validates length and content before it ever reaches this check.
+ALTER TABLE website_types ADD COLUMN IF NOT EXISTS promo_line TEXT DEFAULT NULL;
+ALTER TABLE website_types DROP CONSTRAINT IF EXISTS website_types_promo_line_length_check;
+ALTER TABLE website_types ADD CONSTRAINT website_types_promo_line_length_check
+  CHECK (promo_line IS NULL OR char_length(promo_line) <= 100) NOT VALID;
+
+-- v1.2.13: promotion campaigns. One row per snippet handed to another
+-- website. category_id is ON DELETE SET NULL (never CASCADE): deleting a
+-- category must never delete or break a campaign. A category-mode campaign
+-- whose category_id is NULL (or points at an inactive category, or one with
+-- no active types) simply serves the general promotion until it recovers.
+-- token is the random, unguessable public identifier used in snippets and in
+-- /go/:token links. The char_length checks count real characters, matching
+-- the server-side validation.
+CREATE TABLE IF NOT EXISTS promotion_campaigns (
+  id SERIAL PRIMARY KEY,
+  label TEXT NOT NULL CHECK (char_length(label) BETWEEN 1 AND 100),
+  token TEXT NOT NULL UNIQUE,
+  mode TEXT NOT NULL DEFAULT 'general' CHECK (mode IN ('general', 'category')),
+  category_id INTEGER REFERENCES website_categories(id) ON DELETE SET NULL,
+  style TEXT NOT NULL DEFAULT 'card' CHECK (style IN ('card', 'slim', 'text')),
+  theme TEXT NOT NULL DEFAULT 'auto' CHECK (theme IN ('light', 'dark', 'auto')),
+  accent_color TEXT DEFAULT NULL CHECK (accent_color IS NULL OR accent_color ~ '^#[0-9a-fA-F]{6}$'),
+  custom_headline TEXT DEFAULT NULL CHECK (custom_headline IS NULL OR char_length(custom_headline) <= 60),
+  custom_line TEXT DEFAULT NULL CHECK (custom_line IS NULL OR char_length(custom_line) <= 120),
+  button_label TEXT NOT NULL DEFAULT 'Build yours' CHECK (char_length(button_label) BETWEEN 1 AND 24),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- v1.2.13: daily promotion counts. One row per campaign per day (UTC),
+-- updated in place by an upsert, never one row per event. Counts only: no
+-- cookies, no IP addresses, no personal data. ON DELETE CASCADE is right
+-- here: deleting a campaign removes its stats too. The scheduled cleanup job
+-- removes rows older than 90 days (server.js).
+CREATE TABLE IF NOT EXISTS promotion_stats (
+  campaign_id INTEGER NOT NULL REFERENCES promotion_campaigns(id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  impressions INTEGER NOT NULL DEFAULT 0,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (campaign_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_promotion_stats_day
+  ON promotion_stats (day);
 `;
 
-const CURRENT_VERSION = '1.2.12';
+const CURRENT_VERSION = '1.2.13';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
