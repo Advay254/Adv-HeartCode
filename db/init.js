@@ -1379,7 +1379,6 @@ CREATE TABLE IF NOT EXISTS reviews (
   reviewer_name TEXT NOT NULL CHECK (char_length(reviewer_name) BETWEEN 2 AND 60),
   rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
   testimonial TEXT NOT NULL CHECK (char_length(testimonial) BETWEEN 20 AND 600),
-  image_url TEXT DEFAULT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved')),
   auto_approved BOOLEAN NOT NULL DEFAULT false,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1494,9 +1493,14 @@ CREATE TABLE IF NOT EXISTS promotion_stats (
 );
 CREATE INDEX IF NOT EXISTS idx_promotion_stats_day
   ON promotion_stats (day);
+
+-- v1.2.15: reviews are text only. The optional photo is gone, so its column
+-- goes with it. Existing reviews keep their name, rating and text; only the
+-- stored picture address disappears.
+ALTER TABLE reviews DROP COLUMN IF EXISTS image_url;
 `;
 
-const CURRENT_VERSION = '1.2.13';
+const CURRENT_VERSION = '1.2.15';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
