@@ -14,9 +14,10 @@ Two numbers exist on purpose. The **app version** is in `package.json` and `/hea
 
 | Version | What changed |
 |---|---|
+| **1.2.15** | **Reviews are text only.** The optional review photo is gone end to end: the upload field, image processing, the ClarityHeart upload and delete calls, its rate limit and security allowance, the database column, and every place a photo was shown. Review cards look the same without it. |
 | **1.2.13** | **Promotion page and embeddable script.** Campaigns, a live preview, three copyable snippets (script, iframe, HTML card), counts-only tracking, 90-day cleanup. New `promo_line` field on website types. Also a UI alignment pass on the review screens. See [PROMOTIONS.md](PROMOTIONS.md). |
 | **1.2.12** | **Public review display.** A `/testimonials` page, up to 3 top reviews on each build page, reviews inside landing blocks, an optional scrolling message, and a fourth Scripts slot for the checkout confirmation. |
-| **1.2.11** | **Review collection and moderation.** One unguessable single-use review link per paid deployment, a public review page with an optional photo, a reminder email, auto-publish after 14 days, and an admin Reviews queue. |
+| **1.2.11** | **Review collection and moderation.** One unguessable single-use review link per paid deployment, a public review page, a reminder email, auto-publish after 14 days, and an admin Reviews queue. |
 | **1.2.10** | **Version cap.** Versioned templates (site, email, password page, legal, review reminder) keep the latest 4 versions. |
 | **1.2.9** | **Safe website type deletion.** A type can be deleted only while inactive, and its deployment history is kept under one shared "Deleted Website Types" placeholder. |
 | **1.2.8** | **Hotfix.** A test-deployed website type can be deleted again, and a real deployment now blocks deletion with a clear message. |
