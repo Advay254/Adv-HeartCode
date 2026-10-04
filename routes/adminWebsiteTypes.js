@@ -13,6 +13,8 @@ const { PASSWORD_PAGE_PLACEHOLDERS } = require('../lib/passwordPageTemplates');
 const { deleteWebsiteType, DeleteBlockedError } = require('../lib/deletedTypePlaceholder');
 const { refreshFooterExtrasCache } = require('../lib/footerExtras');
 const { refreshLandingSectionsCache } = require('../lib/landingSections');
+const { validatePlainText } = require('../lib/promoText');
+const { PROMO_LINE_MAX } = require('../lib/promotions');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -107,6 +109,11 @@ const updateTypeSchema = z.object({
   // (a malformed value just fails to load as a link client-side, not a
   // server error).
   demoUrl: z.string().trim().max(2000).optional(),
+  // v1.2.13: the one line shown in promotions. Same "omitted = don't change,
+  // '' = clear it back to null" convention. The real rules (plain text only,
+  // no HTML, no links, 100 characters at most) are enforced in the PUT
+  // handler with lib/promoText.js; this cap only bounds the request size.
+  promoLine: z.string().max(1000).optional(),
   // v1.1.4 Part D: same "omitted = don't change" convention as everything
   // else in this schema. null (or 0) explicitly clears back to
   // uncategorized — a plain omitted field can't distinguish "don't
@@ -291,7 +298,7 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid request body' });
   }
   const { id } = paramsParsed.data;
-  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription, demoUrl, categoryId } = bodyParsed.data;
+  const { name, description, isActive, priceUsd, displayOrder, iconName, deploySlugPattern, seoTitle, seoDescription, demoUrl, promoLine, categoryId } = bodyParsed.data;
 
   const pool = getPool();
   const existing = await pool.query('SELECT * FROM website_types WHERE id = $1', [id]);
@@ -301,6 +308,17 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
   const current = existing.rows[0];
   if (current.is_deleted_placeholder) {
     return res.status(400).json({ error: 'The shared "Deleted Website Types" placeholder cannot be edited.' });
+  }
+
+  // v1.2.13: validate the promo line before anything is written. Plain text
+  // only, 100 characters at most, no HTML and no links.
+  let validatedPromoLine;
+  if (promoLine !== undefined) {
+    const checkedPromoLine = validatePlainText(promoLine, { max: PROMO_LINE_MAX, label: 'Promo line' });
+    if (!checkedPromoLine.ok) {
+      return res.status(400).json({ error: checkedPromoLine.error });
+    }
+    validatedPromoLine = checkedPromoLine.value;
   }
 
   // v1.1.4 Part D: null (explicitly sent) clears back to uncategorized;
@@ -332,16 +350,18 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     // v1.1.9 Part C: same '' clears / omitted keeps convention as
     // deploySlugPattern/seoTitle/seoDescription above.
     demo_url: demoUrl !== undefined ? (demoUrl === '' ? null : demoUrl) : current.demo_url,
+    // v1.2.13: same '' clears / omitted keeps convention.
+    promo_line: validatedPromoLine !== undefined ? (validatedPromoLine === '' ? null : validatedPromoLine) : current.promo_line,
     category_id: categoryId !== undefined ? categoryId : current.category_id
   };
 
   const result = await pool.query(
     `UPDATE website_types SET name = $1, description = $2, is_active = $3,
        price_usd = $4, display_order = $5, icon_name = $6, deploy_slug_pattern = $7,
-       seo_title = $8, seo_description = $9, category_id = $10, demo_url = $11, updated_at = NOW()
-     WHERE id = $12 RETURNING *`,
+       seo_title = $8, seo_description = $9, category_id = $10, demo_url = $11, promo_line = $12, updated_at = NOW()
+     WHERE id = $13 RETURNING *`,
     [next.name, next.description, next.is_active, next.price_usd, next.display_order, next.icon_name,
-      next.deploy_slug_pattern, next.seo_title, next.seo_description, next.category_id, next.demo_url, id]
+      next.deploy_slug_pattern, next.seo_title, next.seo_description, next.category_id, next.demo_url, next.promo_line, id]
   );
   const t = result.rows[0];
 
@@ -383,6 +403,7 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     seoTitle: t.seo_title,
     seoDescription: t.seo_description,
     demoUrl: t.demo_url,
+    promoLine: t.promo_line,
     categoryId: t.category_id
   });
 }));

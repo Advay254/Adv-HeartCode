@@ -7,6 +7,7 @@ const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
 const { CATEGORY_ICON_NAMES, ALL_ICON_NAMES } = require('../lib/icons');
 const { SECTION_TYPES, DEFAULT_CONTENT, ACCENT_COLOR_NAMES } = require('../lib/landingSectionTypes');
 const { countPendingReviews } = require('../lib/reviews');
+const { getSiteSettings } = require('../lib/siteSettings');
 
 const router = express.Router();
 
@@ -168,6 +169,13 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/activity`, (req, res) => {
 router.get(`${INTERNAL_ADMIN_PREFIX}/reviews`, (req, res) => {
   res.render('admin/reviews');
 });
+
+// v1.2.13: Promotion page. The admin chrome shows the site's own name, read
+// from site settings, so this page never hardcodes it.
+router.get(`${INTERNAL_ADMIN_PREFIX}/promotion`, asyncHandler(async (req, res) => {
+  const settings = await getSiteSettings();
+  res.render('admin/promotion', { siteTitle: settings.site_title || '' });
+}));
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/recovery`, (req, res) => {
   res.render('admin/recovery');

@@ -396,7 +396,11 @@ router.get('/robots.txt', (req, res) => {
     'Disallow: /admin',
     'Disallow: /build/*/preview',
     'Disallow: /build/*/checkout',
-    'Disallow: /build/*/checkout/callback'
+    'Disallow: /build/*/checkout/callback',
+    // v1.2.13: promotion click and frame routes are for visitors on other
+    // websites, not for crawlers, and crawling them would only add counts.
+    'Disallow: /go/*',
+    'Disallow: /embed/*'
   ];
 
   const lines = [
