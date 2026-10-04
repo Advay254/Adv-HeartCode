@@ -4598,11 +4598,6 @@
       return value ? new Date(value).toLocaleString() : '';
     }
 
-    function imageHtml(url) {
-      if (!url || !/^https:\/\//i.test(url)) return '';
-      return '<p class="mt-2"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer"><img src="' + escapeHtml(url) + '" alt="Photo attached to this review" class="max-h-36 max-w-[140px] rounded-lg border border-gray-200"></a></p>';
-    }
-
     function deploymentHtml(r) {
       const d = r.deployment || {};
       const bits = [];
@@ -4625,7 +4620,6 @@
               ${stars(r.rating)}
             </div>
             <p class="mt-1 text-sm text-hc-ink/60 break-words whitespace-pre-wrap">${escapeHtml(r.testimonial)}</p>
-            ${imageHtml(r.imageUrl)}
             <p class="mt-2 text-xs text-gray-400 break-words">From: ${deploymentHtml(r)}</p>
             <p class="text-xs text-gray-400">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Auto-published in ${Number(r.daysLeft)} day${Number(r.daysLeft) === 1 ? '' : 's'} if nothing is done.</p>
             <div class="admin-form-actions mt-2">
@@ -4657,7 +4651,6 @@
             ${r.autoApproved ? '<span class="admin-badge admin-badge-brand">Auto-published</span>' : '<span class="admin-badge admin-badge-active">Approved</span>'}
           </div>
           <p class="mt-1 text-sm text-hc-ink/60 break-words whitespace-pre-wrap">${escapeHtml(r.testimonial)}</p>
-          ${imageHtml(r.imageUrl)}
           <p class="mt-2 text-xs text-gray-400 break-words">From: ${deploymentHtml(r)}</p>
           <p class="text-xs text-gray-400">Submitted ${escapeHtml(fmtDate(r.submittedAt))}. Approved ${escapeHtml(fmtDate(r.approvedAt))}.</p>
           <div class="admin-form-actions mt-2">
@@ -4733,16 +4726,12 @@
       }
 
       if (act === 'delete') {
-        if (!confirm('Permanently delete this review? This cannot be undone, and its photo will be removed too.')) return;
+        if (!confirm('Permanently delete this review? This cannot be undone.')) return;
         btn.disabled = true;
         const res = await window.adminFetch(`${API}/${id}`, { method: 'DELETE' });
         const body = await res.json().catch(() => ({}));
         if (res.ok) {
-          if (body.hadImage && body.imageDeleted === false) {
-            say('warning', 'The review was deleted, but its photo could not be removed from ClarityHeart. You can remove it by hand: ' + body.imageUrl);
-          } else {
-            say('success', 'Review deleted.');
-          }
+          say('success', 'Review deleted.');
         } else {
           say('error', body.error || 'Failed to delete the review.');
         }
