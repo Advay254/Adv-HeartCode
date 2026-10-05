@@ -14,6 +14,7 @@ Two numbers exist on purpose. The **app version** is in `package.json` and `/hea
 
 | Version | What changed |
 |---|---|
+| **1.2.14** | **Promotion reliability and card.** Delivery routes are never rate limited, the promo renders at once from a single per-campaign script (`/embed/:token.js`), edge cache headers, a container placed by the snippet, beacon plus image-ping tracking, ES5 script with a no-Shadow-DOM fallback, a `data-debug` switch and troubleshooting help. The card is the only style (slim and text campaigns are converted), with accent, background, text, corner and density options, a contrast check, and a new default design. See [PROMOTIONS.md](PROMOTIONS.md). |
 | **1.2.15** | **Reviews are text only.** The optional review photo is gone end to end: the upload field, image processing, the ClarityHeart upload and delete calls, its rate limit and security allowance, the database column, and every place a photo was shown. Review cards look the same without it. |
 | **1.2.13** | **Promotion page and embeddable script.** Campaigns, a live preview, three copyable snippets (script, iframe, HTML card), counts-only tracking, 90-day cleanup. New `promo_line` field on website types. Also a UI alignment pass on the review screens. See [PROMOTIONS.md](PROMOTIONS.md). |
 | **1.2.12** | **Public review display.** A `/testimonials` page, up to 3 top reviews on each build page, reviews inside landing blocks, an optional scrolling message, and a fourth Scripts slot for the checkout confirmation. |
