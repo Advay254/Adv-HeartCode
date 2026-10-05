@@ -1468,7 +1468,7 @@ CREATE TABLE IF NOT EXISTS promotion_campaigns (
   token TEXT NOT NULL UNIQUE,
   mode TEXT NOT NULL DEFAULT 'general' CHECK (mode IN ('general', 'category')),
   category_id INTEGER REFERENCES website_categories(id) ON DELETE SET NULL,
-  style TEXT NOT NULL DEFAULT 'card' CHECK (style IN ('card', 'slim', 'text')),
+  style TEXT NOT NULL DEFAULT 'card' CHECK (style = 'card'),
   theme TEXT NOT NULL DEFAULT 'auto' CHECK (theme IN ('light', 'dark', 'auto')),
   accent_color TEXT DEFAULT NULL CHECK (accent_color IS NULL OR accent_color ~ '^#[0-9a-fA-F]{6}$'),
   custom_headline TEXT DEFAULT NULL CHECK (custom_headline IS NULL OR char_length(custom_headline) <= 60),
@@ -1493,6 +1493,34 @@ CREATE TABLE IF NOT EXISTS promotion_stats (
 );
 CREATE INDEX IF NOT EXISTS idx_promotion_stats_day
   ON promotion_stats (day);
+
+-- v1.2.14: the promotion card is the only style. Slim line and text link are
+-- gone, so every campaign that used one is converted to the card (nothing else
+-- about it changes), and the column only accepts 'card' from now on. The old
+-- check is dropped and replaced, so the conversion runs before the new check.
+ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_style_check;
+UPDATE promotion_campaigns SET style = 'card' WHERE style <> 'card';
+ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_style_check CHECK (style = 'card');
+
+-- v1.2.14: optional card appearance. NULL colours mean "use the defaults",
+-- and corner and density default to the standard look, so every existing
+-- campaign keeps its current appearance until someone edits it.
+ALTER TABLE promotion_campaigns ADD COLUMN IF NOT EXISTS card_bg TEXT DEFAULT NULL;
+ALTER TABLE promotion_campaigns ADD COLUMN IF NOT EXISTS text_color TEXT DEFAULT NULL;
+ALTER TABLE promotion_campaigns ADD COLUMN IF NOT EXISTS corner TEXT NOT NULL DEFAULT 'soft';
+ALTER TABLE promotion_campaigns ADD COLUMN IF NOT EXISTS density TEXT NOT NULL DEFAULT 'comfortable';
+ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_card_bg_check;
+ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_card_bg_check
+  CHECK (card_bg IS NULL OR card_bg ~ '^#[0-9a-fA-F]{6}$');
+ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_text_color_check;
+ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_text_color_check
+  CHECK (text_color IS NULL OR text_color ~ '^#[0-9a-fA-F]{6}$');
+ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_corner_check;
+ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_corner_check
+  CHECK (corner IN ('sharp', 'soft', 'round'));
+ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_density_check;
+ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_density_check
+  CHECK (density IN ('compact', 'comfortable'));
 
 -- v1.2.15: reviews are text only. The optional photo is gone, so its column
 -- goes with it. Existing reviews keep their name, rating and text; only the
