@@ -97,7 +97,7 @@ docs/        documentation
 
 ## Latest release
 
-**v1.2.15** makes client reviews text only and removes every trace of review photos. Before that, **v1.2.13** added the Promotion page and embeddable script. See [docs/VERSIONS.md](docs/VERSIONS.md) and [docs/PROMOTIONS.md](docs/PROMOTIONS.md).
+**v1.2.14** makes promotions reliable (no rate limits on delivery, one-request script, edge caching) and card only. **v1.2.15** makes client reviews text only. **v1.2.13** added the Promotion page and embeddable script. See [docs/VERSIONS.md](docs/VERSIONS.md) and [docs/PROMOTIONS.md](docs/PROMOTIONS.md).
 
 <img src="docs/assets/divider.svg" alt="" width="100%">
 

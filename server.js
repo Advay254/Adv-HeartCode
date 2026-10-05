@@ -212,6 +212,14 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/webhooks/')) {
     return next();
   }
+  // v1.2.14: promotion delivery is never rate limited. Another site's visitors
+  // often share one address, and a blocked script or config means the promo
+  // simply does not appear. (Counting has its own generous limits in
+  // routes/promotionPublic.js, and those never affect what is shown.)
+  if (req.path === '/embed.js' || req.path.startsWith('/embed/')
+    || req.path.startsWith('/api/embed/') || req.path.startsWith('/go/')) {
+    return next();
+  }
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- req.ip alone can land on
   // Cloudflare's own edge address rather than the real visitor's once
   // Cloudflare is in front of a request, which would key this limiter
