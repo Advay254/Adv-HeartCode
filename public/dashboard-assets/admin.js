@@ -4818,6 +4818,7 @@
     const stageEl = document.getElementById('previewStage');
     const noteEl = document.getElementById('previewNote');
     const previewErrorEl = document.getElementById('previewError');
+    const contrastEl = document.getElementById('promotionContrast');
     const modeEl = document.getElementById('promotionMode');
     const categoryRow = document.getElementById('promotionCategoryRow');
     const categoryEl = document.getElementById('promotionCategory');
@@ -4841,7 +4842,6 @@
     }
 
     const MODE_LABELS = { general: 'General', category: 'Category' };
-    const STYLE_LABELS = { card: 'Card', slim: 'Slim line', text: 'Text link' };
 
     function categoryNotice(c) {
       if (!c.categoryProblem) return '';
@@ -4859,7 +4859,6 @@
               <div class="flex flex-wrap items-center gap-2">
                 <strong class="text-sm text-hc-ink">${escapeHtml(c.label)}</strong>
                 <span class="admin-badge admin-badge-brand">${MODE_LABELS[c.mode]}${c.mode === 'category' && c.categoryName ? ': ' + escapeHtml(c.categoryName) : ''}</span>
-                <span class="admin-badge admin-badge-brand">${STYLE_LABELS[c.style]}</span>
                 <span class="admin-badge ${c.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${c.isActive ? 'on' : 'off'}</span>
               </div>
               <p class="mt-1 text-sm text-hc-ink/60 break-words">
@@ -4919,9 +4918,12 @@
         label: form.label.value,
         mode: form.mode.value,
         categoryId: form.mode.value === 'category' ? (Number(form.categoryId.value) || null) : null,
-        style: form.style.value,
         theme: form.theme.value,
         accentColor: form.accentColor.value,
+        cardBg: form.cardBg.value,
+        textColor: form.textColor.value,
+        corner: form.corner.value,
+        density: form.density.value,
         customHeadline: form.customHeadline.value,
         customLine: form.customLine.value,
         buttonLabel: form.buttonLabel.value
@@ -4952,9 +4954,12 @@
       form.label.value = c.label;
       form.mode.value = c.mode;
       fillCategories(c.categoryId || '');
-      form.style.value = c.style;
       form.theme.value = c.theme;
       form.accentColor.value = c.accentColor || '';
+      form.cardBg.value = c.cardBg || '';
+      form.textColor.value = c.textColor || '';
+      form.corner.value = c.corner;
+      form.density.value = c.density;
       form.customHeadline.value = c.customHeadline;
       form.customLine.value = c.customLine;
       form.buttonLabel.value = c.buttonLabel;
@@ -4981,7 +4986,7 @@
       try {
         res = await window.adminFetch(`${API}/preview`, {
           method: 'POST',
-          body: JSON.stringify(Object.assign(readForm(), { theme: state.previewTheme }))
+          body: JSON.stringify(Object.assign(readForm(), { theme: state.previewTheme, formTheme: form.theme.value }))
         });
         body = await res.json();
       } catch (err) {
@@ -4995,8 +5000,15 @@
       stageEl.classList.toggle('bg-gray-100', state.previewTheme === 'dark');
       previewErrorEl.style.display = 'none';
       noteEl.style.display = 'none';
+      contrastEl.style.display = 'none';
 
       if (!res.ok) {
+        // Extremely low contrast: say so next to the colours, and cannot be saved.
+        if (body && body.errors && body.errors.contrast) {
+          contrastEl.className = 'admin-msg admin-msg-error';
+          contrastEl.textContent = body.errors.contrast;
+          contrastEl.style.display = 'block';
+        }
         previewErrorEl.textContent = errorText(body, 'Failed to load the preview.');
         previewErrorEl.style.display = 'block';
         return;
@@ -5004,6 +5016,11 @@
       if (body.categoryUnavailable) {
         noteEl.textContent = 'The chosen category is not available, so the general promotion is shown.';
         noteEl.style.display = 'block';
+      }
+      if (body.contrast && body.contrast.messages && body.contrast.messages.length) {
+        contrastEl.className = 'admin-msg admin-msg-warning';
+        contrastEl.textContent = body.contrast.messages.join(' ');
+        contrastEl.style.display = 'block';
       }
       const holder = document.createElement('div');
       const script = document.createElement('script');
@@ -5030,6 +5047,32 @@
           <textarea class="admin-textarea font-mono" id="${id}" rows="4" readonly></textarea>
           <div class="admin-form-actions"><button type="button" class="admin-btn-outline admin-btn-sm copy-snippet" data-target="${id}">Copy</button></div>
         </div>`;
+    }
+
+    // Help for the host's side. The script address is built from live settings.
+    function troubleshooting(body) {
+      const wrap = document.createElement('details');
+      wrap.className = 'admin-form-section';
+      const sum = document.createElement('summary');
+      sum.className = 'admin-label';
+      sum.style.cursor = 'pointer';
+      sum.textContent = 'If the promo does not appear on the other website';
+      wrap.appendChild(sum);
+      const p1 = document.createElement('p');
+      p1.className = 'admin-form-hint';
+      p1.textContent = 'Speed and caching plugins on the host can delay or remove third-party scripts. In that plugin, exclude this script address from delaying, combining and minifying:';
+      const code = document.createElement('textarea');
+      code.className = 'admin-textarea font-mono';
+      code.rows = 2;
+      code.readOnly = true;
+      code.value = body.scriptUrl + '\n' + body.legacyScriptUrl;
+      const p2 = document.createElement('p');
+      p2.className = 'admin-form-hint';
+      p2.textContent = 'Then clear the host\'s cache. To see what the script did, add data-debug to the first line of the snippet (the empty div), reload the page and open the browser console. Without it, nothing is printed.';
+      wrap.appendChild(p1);
+      wrap.appendChild(code);
+      wrap.appendChild(p2);
+      return wrap;
     }
 
     async function buildScript(id) {
@@ -5061,13 +5104,14 @@
         : `Built with the address you are using now, ${body.publicBaseUrl}. Set PUBLIC_BASE_URL so snippets always use your public address.`;
 
       blocks.innerHTML =
-        snippetBlock('snippetScript', 'Script tag', 'The default and best option. Paste it where the promo should appear. It loads without slowing the page and shows nothing if anything goes wrong.', '')
+        snippetBlock('snippetScript', 'Script tag', 'The default and best option. Paste all three lines where the promo should appear. The card appears at once from a single request, and shows nothing if anything goes wrong. Add data-debug to the first line to see in the browser console why a card did not show.', '')
         + snippetBlock('snippetIframe', 'Iframe', `For hosts who do not want third-party JavaScript on their page. It loads only when near the screen and has a fixed height of ${Number(body.iframeHeight)} px. Impressions are counted when the frame loads.`, '')
         + snippetBlock('snippetHtml', 'Plain HTML card', 'No JavaScript at all, just a styled link to this campaign. Clicks are counted, impressions are not.', '');
       // Fill through .value, never through markup.
       document.getElementById('snippetScript').value = body.snippets.script;
       document.getElementById('snippetIframe').value = body.snippets.iframe;
       document.getElementById('snippetHtml').value = body.snippets.html;
+      blocks.appendChild(troubleshooting(body));
       panel.scrollIntoView();
     }
 
@@ -5116,7 +5160,7 @@
 
     document.getElementById('promotionCancelBtn').addEventListener('click', () => { resetForm(); statusEl.style.display = 'none'; });
     modeEl.addEventListener('change', () => { syncMode(); schedulePreview(); });
-    form.addEventListener('input', schedulePreview);
+    form.addEventListener('input', () => { statusEl.style.display = 'none'; schedulePreview(); });
     form.addEventListener('change', schedulePreview);
     document.getElementById('previewLight').addEventListener('click', () => setPreviewTheme('light'));
     document.getElementById('previewDark').addEventListener('click', () => setPreviewTheme('dark'));
