@@ -7,16 +7,25 @@ const { asyncHandler } = require('../lib/asyncHandler');
 const { createRateLimiter } = require('../lib/rateLimit');
 const { getRealClientIp } = require('../lib/clientIp');
 const promotions = require('../lib/promotions');
+const { resolvePublicBaseUrl } = require('../lib/publicUrl');
 const { renderFramePage, pickItem } = require('../lib/promoRender');
 
-// v1.2.13: the public side of promotions. Five routes, all stateless and
-// cookie-free:
+// v1.2.13: the public side of promotions. Stateless and cookie-free:
 //
-//   GET  /embed.js                       the embeddable script (static file)
-//   GET  /api/embed/config/:token        the small config response it fetches
-//   POST /api/embed/impression/:token    one tiny count per page view
+//   GET  /embed/:token.js                v1.2.14: the campaign's script, with its
+//                                        settings inside (one request is enough)
+//   GET  /embed.js                       the original script (static file), kept
+//                                        so snippets already placed keep working
+//   GET  /api/embed/config/:token        the config the original script fetches
+//   POST /api/embed/impression/:token    one tiny count per page view (beacon)
+//   GET  /api/embed/ping/:token          the same count as an image ping
 //   GET  /go/:token/:slug?               count one click, then redirect
 //   GET  /embed/frame/:token             the iframe variant's page
+//
+// v1.2.14: none of the delivery routes (script, config, frame, redirect) is
+// rate limited, here or by the site-wide limiter (server.js exempts them). Only
+// the two counting endpoints have limits, and a limit there only skips the
+// count: it never changes what is shown or where a click goes.
 //
 // Mounted in server.js BEFORE publicRouter so none of these can be shadowed
 // by its catch-all /:seoSlug route.
@@ -33,13 +42,20 @@ const EMBED_FILE = path.join(__dirname, '..', 'public', 'embed.js');
 // a cache and never reach the server. max-age is the window in which a
 // campaign switched on or off takes effect; stale-while-revalidate lets a
 // cache answer instantly while it refreshes in the background.
-const CONFIG_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=120';
-// The script itself changes rarely. An hour of freshness, then a stale copy
-// may be served while a new one is fetched.
-const SCRIPT_CACHE_CONTROL = 'public, max-age=3600, stale-while-revalidate=86400';
+const CONFIG_CACHE_CONTROL = 'public, max-age=300, s-maxage=900, stale-while-revalidate=3600, stale-if-error=604800';
+// The per-campaign script carries the campaign's settings, so it is cached the
+// same way as the config.
+const CAMPAIGN_SCRIPT_CACHE_CONTROL = CONFIG_CACHE_CONTROL;
+// The shared script changes rarely. s-maxage is for shared caches (the CDN),
+// max-age for browsers, stale-if-error keeps it served if the origin is down.
+const SCRIPT_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400, stale-if-error=604800';
 
-const impressionLimiter = createRateLimiter({ max: 60, windowMs: 60 * 1000 });
-const clickLimiter = createRateLimiter({ max: 60, windowMs: 60 * 1000 });
+// Counting limits only. Generous, because many visitors can share one address.
+const impressionLimiter = createRateLimiter({ max: 600, windowMs: 60 * 1000 });
+const clickLimiter = createRateLimiter({ max: 300, windowMs: 60 * 1000 });
+
+const INJECT_MARKER = '/*HC_INJECT*/null';
+const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
 // The embed file is tiny. Read it once and keep it, re-reading only when the
 // file's modified time changes.
@@ -72,6 +88,37 @@ router.get('/embed.js', (req, res) => {
   res.send(body);
 });
 
+// ---- the campaign's own script ----
+//
+// The shared script with this campaign's token and settings written in at the
+// marker on its last line, so the page needs one request and no second trip
+// for the config. Unknown, malformed or deleted tokens get the general
+// promotion (uncounted), the same as the config route.
+router.get('/embed/:token.js', asyncHandler(async (req, res) => {
+  let body;
+  try {
+    body = readEmbedScript().toString('utf8');
+  } catch (err) {
+    console.error('[PROMOTIONS] Could not read embed.js:', err.message);
+    return res.status(404).type('text/plain').send('Not found');
+  }
+  const token = req.params.token;
+  const campaign = await promotions.getCampaignByToken(token);
+  const { config } = await promotions.buildConfig(campaign, token);
+  const base = resolvePublicBaseUrl(req).url;
+  const inject = JSON.stringify({ t: promotions.isValidToken(token) ? token : '', o: base, c: config })
+    // Keep the JSON safe inside a script file.
+    .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  if (!body.includes(INJECT_MARKER)) {
+    return res.status(500).type('text/plain').send('Script unavailable');
+  }
+  crossOriginHeaders(res);
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', CAMPAIGN_SCRIPT_CACHE_CONTROL);
+  res.type('application/javascript; charset=utf-8');
+  res.send(body.replace(INJECT_MARKER, () => inject));
+}));
+
 // ---- config ----
 router.get('/api/embed/config/:token', asyncHandler(async (req, res) => {
   const token = req.params.token;
@@ -101,6 +148,23 @@ router.post('/api/embed/impression/:token', asyncHandler(async (req, res) => {
   crossOriginHeaders(res);
   res.set('Cache-Control', 'no-store');
   res.status(204).end();
+}));
+
+// ---- impression, image ping ----
+// The fallback for browsers without sendBeacon. A plain image request, so it
+// is a simple request with nothing to preflight. Always answers with the
+// pixel, whatever happens to the count.
+router.get('/api/embed/ping/:token', asyncHandler(async (req, res) => {
+  if (impressionLimiter.tryConsume(getRealClientIp(req))) {
+    try {
+      await promotions.recordImpression(req.params.token);
+    } catch (err) {
+      console.error('[PROMOTIONS] Could not record an impression:', err.message);
+    }
+  }
+  crossOriginHeaders(res);
+  res.set('Cache-Control', 'no-store');
+  res.type('image/gif').send(PIXEL);
 }));
 
 // ---- click and redirect ----

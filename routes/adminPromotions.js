@@ -10,6 +10,7 @@ const { validatePlainText } = require('../lib/promoText');
 const { resolvePublicBaseUrl } = require('../lib/publicUrl');
 const promotions = require('../lib/promotions');
 const { buildSnippets } = require('../lib/promoRender');
+const card = require('../lib/promoCard');
 
 // v1.2.13: admin API for promotion campaigns. Session-gated, and every
 // state-changing route is CSRF-gated, like every other admin router.
@@ -25,10 +26,16 @@ const campaignBodySchema = z.object({
   label: z.string().max(400),
   mode: z.enum(['general', 'category']),
   categoryId: z.coerce.number().int().positive().nullable().optional(),
-  style: z.enum(['card', 'slim', 'text']),
   theme: z.enum(['light', 'dark', 'auto']),
   // '' (or omitted) means "use the brand colours".
   accentColor: z.string().trim().max(20).optional(),
+  cardBg: z.string().trim().max(20).optional(),
+  textColor: z.string().trim().max(20).optional(),
+  corner: z.enum(['sharp', 'soft', 'round']).optional(),
+  density: z.enum(['compact', 'comfortable']).optional(),
+  // Preview only: the theme the campaign is set to, for the contrast check
+  // (the preview itself is drawn in light or dark).
+  formTheme: z.enum(['light', 'dark', 'auto']).optional(),
   customHeadline: z.string().max(400).optional(),
   customLine: z.string().max(600).optional(),
   buttonLabel: z.string().max(400).optional()
@@ -62,16 +69,38 @@ function validateCampaign(body) {
   const accent = (body.accentColor || '').trim();
   if (accent && !HEX_RE.test(accent)) errors.accentColor = 'Accent colour must look like #RRGGBB, or be left blank.';
 
+  const cardBg = (body.cardBg || '').trim();
+  if (cardBg && !HEX_RE.test(cardBg)) errors.cardBg = 'Card background must look like #RRGGBB, or be left blank.';
+  const textColor = (body.textColor || '').trim();
+  if (textColor && !HEX_RE.test(textColor)) errors.textColor = 'Text colour must look like #RRGGBB, or be left blank.';
+
   if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+  // Readability. Low contrast is a warning (shown live in the form), and
+  // extremely low contrast cannot be saved.
+  const contrast = card.checkContrast({
+    accent_color: accent ? accent.toLowerCase() : null,
+    card_bg: cardBg ? cardBg.toLowerCase() : null,
+    text_color: textColor ? textColor.toLowerCase() : null,
+    theme: body.theme
+  });
+  if (contrast.level === 'block') {
+    errors.contrast = contrast.messages.join(' ') + ' Choose colours with more contrast.';
+    return { ok: false, errors };
+  }
 
   return {
     ok: true,
     values: {
       label,
       mode: body.mode,
-      style: body.style,
       theme: body.theme,
       accentColor: accent ? accent.toLowerCase() : null,
+      cardBg: cardBg ? cardBg.toLowerCase() : null,
+      textColor: textColor ? textColor.toLowerCase() : null,
+      corner: body.corner || card.DEFAULT_CORNER,
+      density: body.density || card.DEFAULT_DENSITY,
+      contrast,
       customHeadline: headline.value || null,
       customLine: line.value || null,
       buttonLabel: button.value
@@ -111,23 +140,30 @@ router.get('/', asyncHandler(async (req, res) => {
 router.post('/preview', requireCsrf, asyncHandler(async (req, res) => {
   const parsed = campaignBodySchema.partial({ label: true }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid request body' });
-  const checked = validateCampaign({ ...parsed.data, label: parsed.data.label || 'Preview' });
+  const checked = validateCampaign({
+    ...parsed.data,
+    label: parsed.data.label || 'Preview',
+    theme: parsed.data.formTheme || parsed.data.theme
+  });
   if (!checked.ok) return res.status(422).json({ errors: checked.errors });
 
   const v = checked.values;
   const draft = {
     mode: v.mode,
     category_id: parsed.data.mode === 'category' ? (parsed.data.categoryId || null) : null,
-    style: v.style,
-    theme: v.theme,
+    theme: parsed.data.theme,
     accent_color: v.accentColor,
+    card_bg: v.cardBg,
+    text_color: v.textColor,
+    corner: v.corner,
+    density: v.density,
     custom_headline: v.customHeadline,
     custom_line: v.customLine,
     button_label: v.buttonLabel,
     is_active: true
   };
   const { config, effectiveMode, categoryUnavailable } = await promotions.buildConfig(draft, null);
-  res.json({ config, effectiveMode, categoryUnavailable });
+  res.json({ config, effectiveMode, categoryUnavailable, contrast: v.contrast });
 }));
 
 // ---- create ----
@@ -149,11 +185,12 @@ router.post('/', requireCsrf, asyncHandler(async (req, res) => {
 
   const result = await getPool().query(
     `INSERT INTO promotion_campaigns
-       (label, token, mode, category_id, style, theme, accent_color, custom_headline, custom_line, button_label)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (label, token, mode, category_id, theme, accent_color, card_bg, text_color, corner, density,
+        custom_headline, custom_line, button_label)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
-    [v.label, promotions.createToken(), v.mode, categoryId, v.style, v.theme, v.accentColor,
-      v.customHeadline, v.customLine, v.buttonLabel]
+    [v.label, promotions.createToken(), v.mode, categoryId, v.theme, v.accentColor, v.cardBg, v.textColor,
+      v.corner, v.density, v.customHeadline, v.customLine, v.buttonLabel]
   );
   res.status(201).json(await promotions.getCampaignForAdmin(result.rows[0].id));
 }));
@@ -190,10 +227,12 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
 
   await getPool().query(
     `UPDATE promotion_campaigns
-     SET label = $1, mode = $2, category_id = $3, style = $4, theme = $5, accent_color = $6,
-         custom_headline = $7, custom_line = $8, button_label = $9, updated_at = NOW()
-     WHERE id = $10`,
-    [v.label, v.mode, categoryId, v.style, v.theme, v.accentColor, v.customHeadline, v.customLine, v.buttonLabel, id]
+     SET label = $1, mode = $2, category_id = $3, theme = $4, accent_color = $5, card_bg = $6,
+         text_color = $7, corner = $8, density = $9, custom_headline = $10, custom_line = $11,
+         button_label = $12, updated_at = NOW()
+     WHERE id = $13`,
+    [v.label, v.mode, categoryId, v.theme, v.accentColor, v.cardBg, v.textColor, v.corner, v.density,
+      v.customHeadline, v.customLine, v.buttonLabel, id]
   );
   res.json(await promotions.getCampaignForAdmin(id));
 }));
@@ -245,6 +284,8 @@ router.get('/:id/snippets', asyncHandler(async (req, res) => {
     publicBaseUrl: base.url,
     publicBaseUrlSource: base.source,
     snippets: { script: snippets.script, iframe: snippets.iframe, html: snippets.html },
+    scriptUrl: snippets.scriptUrl,
+    legacyScriptUrl: snippets.legacyScriptUrl,
     iframeHeight: snippets.iframeHeight
   });
 }));
