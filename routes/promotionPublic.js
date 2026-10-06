@@ -7,6 +7,7 @@ const { asyncHandler } = require('../lib/asyncHandler');
 const { createRateLimiter } = require('../lib/rateLimit');
 const { getRealClientIp } = require('../lib/clientIp');
 const promotions = require('../lib/promotions');
+const adCards = require('../lib/adCards');
 const { resolvePublicBaseUrl } = require('../lib/publicUrl');
 const { renderFramePage, pickItem } = require('../lib/promoRender');
 
@@ -20,6 +21,7 @@ const { renderFramePage, pickItem } = require('../lib/promoRender');
 //   POST /api/embed/impression/:token    one tiny count per page view (beacon)
 //   GET  /api/embed/ping/:token          the same count as an image ping
 //   GET  /go/:token/:slug?               count one click, then redirect
+//   GET  /go/:token/card/:adId           the same for an ad card (v1.2.15)
 //   GET  /embed/frame/:token             the iframe variant's page
 //
 // v1.2.14: none of the delivery routes (script, config, frame, redirect) is
@@ -66,6 +68,13 @@ function readEmbedScript() {
     scriptCache = { mtimeMs: stat.mtimeMs, body: fs.readFileSync(EMBED_FILE) };
   }
   return scriptCache.body;
+}
+
+// The ad card id sent with a count. Only ever used as a number in a query; it
+// is never an address and never leaves the database layer.
+function adIdFrom(value) {
+  const n = Number(value);
+  return typeof value === 'string' && /^\d{1,9}$/.test(value) && n > 0 ? n : 0;
 }
 
 function crossOriginHeaders(res) {
@@ -138,7 +147,7 @@ router.get('/api/embed/config/:token', asyncHandler(async (req, res) => {
 router.post('/api/embed/impression/:token', asyncHandler(async (req, res) => {
   if (impressionLimiter.tryConsume(getRealClientIp(req))) {
     try {
-      await promotions.recordImpression(req.params.token);
+      await promotions.recordImpression(req.params.token, adIdFrom(req.query.a));
     } catch (err) {
       console.error('[PROMOTIONS] Could not record an impression:', err.message);
     }
@@ -157,7 +166,7 @@ router.post('/api/embed/impression/:token', asyncHandler(async (req, res) => {
 router.get('/api/embed/ping/:token', asyncHandler(async (req, res) => {
   if (impressionLimiter.tryConsume(getRealClientIp(req))) {
     try {
-      await promotions.recordImpression(req.params.token);
+      await promotions.recordImpression(req.params.token, adIdFrom(req.query.a));
     } catch (err) {
       console.error('[PROMOTIONS] Could not record an impression:', err.message);
     }
@@ -165,6 +174,36 @@ router.get('/api/embed/ping/:token', asyncHandler(async (req, res) => {
   crossOriginHeaders(res);
   res.set('Cache-Control', 'no-store');
   res.type('image/gif').send(PIXEL);
+}));
+
+// ---- click and redirect, ad card ----
+//
+// The destination is worked out here, now, from the database: the build page
+// of the card's chosen website type while that type is active, otherwise the
+// home page. Nothing from the request (no query value, no header, no host)
+// is ever used as an address. Counting never stands between a visitor and the
+// site: any failure or limit still redirects.
+router.get('/go/:token/card/:adId', asyncHandler(async (req, res) => {
+  const adId = adIdFrom(req.params.adId);
+  let target = '/';
+  let ad = null;
+  try {
+    ad = adId ? await adCards.getAdCard(adId) : null;
+    if (ad) target = await adCards.resolveDestination(ad.dest_type_id);
+  } catch (err) {
+    console.error('[PROMOTIONS] Could not work out an ad card destination:', err.message);
+  }
+
+  if (req.method === 'GET' && clickLimiter.tryConsume(getRealClientIp(req))) {
+    try {
+      await promotions.recordClick(req.params.token, ad ? adId : 0);
+    } catch (err) {
+      console.error('[PROMOTIONS] Could not record a click:', err.message);
+    }
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, target);
 }));
 
 // ---- click and redirect ----
@@ -210,7 +249,7 @@ router.get('/embed/frame/:token', asyncHandler(async (req, res) => {
   // Impressions for the iframe variant are counted when the frame loads.
   if (!config.off && campaign && req.method === 'GET' && impressionLimiter.tryConsume(getRealClientIp(req))) {
     try {
-      await promotions.recordImpression(token);
+      await promotions.recordImpression(token, item && item.id ? item.id : 0);
     } catch (err) {
       console.error('[PROMOTIONS] Could not record a frame impression:', err.message);
     }

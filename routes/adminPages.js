@@ -1,4 +1,5 @@
 const express = require('express');
+const helmet = require('helmet');
 const { asyncHandler } = require('../lib/asyncHandler');
 const { getPool } = require('../db/init');
 const { deriveCsrfToken } = require('../lib/auth');
@@ -175,6 +176,24 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/reviews`, (req, res) => {
 router.get(`${INTERNAL_ADMIN_PREFIX}/promotion`, asyncHandler(async (req, res) => {
   const settings = await getSiteSettings();
   res.render('admin/promotion', { siteTitle: settings.site_title || '' });
+}));
+
+// v1.2.15: Ad Cards page. Its preview shows the media straight from the link
+// the admin pastes, so this one page also allows images and video from any
+// https address. Every other directive stays exactly as strict as the rest of
+// the admin (scripts only from this site, no framing).
+const adCardsPageCsp = helmet.contentSecurityPolicy({
+  directives: {
+    ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+    'frame-ancestors': ["'none'"],
+    'img-src': ["'self'", 'data:', 'https:'],
+    'media-src': ["'self'", 'https:']
+  }
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/ad-cards`, adCardsPageCsp, asyncHandler(async (req, res) => {
+  const settings = await getSiteSettings();
+  res.render('admin/ad-cards', { siteTitle: settings.site_title || '' });
 }));
 
 router.get(`${INTERNAL_ADMIN_PREFIX}/recovery`, (req, res) => {

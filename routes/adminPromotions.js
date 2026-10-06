@@ -27,6 +27,7 @@ const campaignBodySchema = z.object({
   mode: z.enum(['general', 'category']),
   categoryId: z.coerce.number().int().positive().nullable().optional(),
   theme: z.enum(['light', 'dark', 'auto']),
+  cardSource: z.enum(['auto', 'ads', 'both']).optional(),
   // '' (or omitted) means "use the brand colours".
   accentColor: z.string().trim().max(20).optional(),
   cardBg: z.string().trim().max(20).optional(),
@@ -95,6 +96,7 @@ function validateCampaign(body) {
       label,
       mode: body.mode,
       theme: body.theme,
+      cardSource: body.cardSource || 'auto',
       accentColor: accent ? accent.toLowerCase() : null,
       cardBg: cardBg ? cardBg.toLowerCase() : null,
       textColor: textColor ? textColor.toLowerCase() : null,
@@ -152,6 +154,7 @@ router.post('/preview', requireCsrf, asyncHandler(async (req, res) => {
     mode: v.mode,
     category_id: parsed.data.mode === 'category' ? (parsed.data.categoryId || null) : null,
     theme: parsed.data.theme,
+    card_source: 'auto',
     accent_color: v.accentColor,
     card_bg: v.cardBg,
     text_color: v.textColor,
@@ -186,11 +189,11 @@ router.post('/', requireCsrf, asyncHandler(async (req, res) => {
   const result = await getPool().query(
     `INSERT INTO promotion_campaigns
        (label, token, mode, category_id, theme, accent_color, card_bg, text_color, corner, density,
-        custom_headline, custom_line, button_label)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        custom_headline, custom_line, button_label, card_source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING id`,
     [v.label, promotions.createToken(), v.mode, categoryId, v.theme, v.accentColor, v.cardBg, v.textColor,
-      v.corner, v.density, v.customHeadline, v.customLine, v.buttonLabel]
+      v.corner, v.density, v.customHeadline, v.customLine, v.buttonLabel, v.cardSource]
   );
   res.status(201).json(await promotions.getCampaignForAdmin(result.rows[0].id));
 }));
@@ -229,10 +232,10 @@ router.put('/:id', requireCsrf, asyncHandler(async (req, res) => {
     `UPDATE promotion_campaigns
      SET label = $1, mode = $2, category_id = $3, theme = $4, accent_color = $5, card_bg = $6,
          text_color = $7, corner = $8, density = $9, custom_headline = $10, custom_line = $11,
-         button_label = $12, updated_at = NOW()
-     WHERE id = $13`,
+         button_label = $12, card_source = $13, updated_at = NOW()
+     WHERE id = $14`,
     [v.label, v.mode, categoryId, v.theme, v.accentColor, v.cardBg, v.textColor, v.corner, v.density,
-      v.customHeadline, v.customLine, v.buttonLabel, id]
+      v.customHeadline, v.customLine, v.buttonLabel, v.cardSource, id]
   );
   res.json(await promotions.getCampaignForAdmin(id));
 }));
