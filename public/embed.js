@@ -171,6 +171,127 @@
     if (box) { try { box.style.minHeight = '0'; } catch (e) { /* silent */ } }
   }
 
+  // Random pick by weight (an item's w, default 1). Done here, in the visitor's
+  // browser, so the cached script is identical for every visitor.
+  function pick(items) {
+    var total = 0, i;
+    for (i = 0; i < items.length; i++) total += items[i].w || 1;
+    var roll = Math.random() * total;
+    for (i = 0; i < items.length; i++) {
+      roll -= items[i].w || 1;
+      if (roll < 0) return items[i];
+    }
+    return items[items.length - 1];
+  }
+
+  // Reduced motion or a data saver: no animated files.
+  function calm() {
+    try {
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+      var c = navigator.connection;
+      return !!(c && c.saveData);
+    } catch (e) { return false; }
+  }
+
+  function httpsOnly(u) { return typeof u === 'string' && u.indexOf('https://') === 0; }
+
+  function tell(host, name) {
+    // Lets the admin preview show the outcome. Nothing else listens.
+    try { var ev = d.createEvent('Event'); ev.initEvent(name, true, false); host.dispatchEvent(ev); } catch (e) { /* silent */ }
+  }
+
+  /**
+   * Builds the media area of an ad card, or returns null when there is nothing
+   * to show. The card text never waits for it: the area is created empty with
+   * its space reserved from the ratio, and the file is requested separately
+   * once the card is visible or close to visible. Only an img or a video
+   * element is ever used, never a frame, embed or markup from the link, so an
+   * SVG is only ever an image.
+   */
+  function buildMedia(m, host, onFail) {
+    if (!m || !httpsOnly(m.u)) return null;
+    var moving = m.an === true || m.k === 'v';
+    var still = httpsOnly(m.s) ? m.s : '';
+    var src, asVideo = false;
+    if (calm() && moving) {
+      // No still image: do not download the animated file at all.
+      if (!still) { log('media skipped: reduced motion or data saver, and no still image'); tell(host, 'hcp-media-skipped'); return null; }
+      src = still;
+    } else {
+      src = m.u;
+      asVideo = m.k === 'v';
+    }
+
+    var r = m.r || [16, 9];
+    var w = Number(r[0]) || 16, h = Number(r[1]) || 9;
+    var box = el('span', 'hcp-mbox' + (m.f === 'n' ? ' hcp-fit' : ''));
+    box.style.setProperty('--hcp-ar', w + ' / ' + h);
+    box.style.setProperty('--hcp-arn', String(w / h));
+
+    var node = null, started = false, failed = false, timer = 0;
+
+    function fail(why) {
+      if (failed) return;
+      failed = true;
+      clearTimeout(timer);
+      log('media failed (' + why + '), showing the text card');
+      tell(host, 'hcp-media-failed');
+      onFail();
+    }
+
+    function start() {
+      if (started) return;
+      started = true;
+      // A request that never answers is treated as a failure too.
+      timer = setTimeout(function () { fail('timeout'); }, 20000);
+      if (asVideo) {
+        node = d.createElement('video');
+        node.muted = true; node.defaultMuted = true; node.loop = true; node.controls = false;
+        node.setAttribute('muted', ''); node.setAttribute('loop', '');
+        node.setAttribute('playsinline', ''); node.setAttribute('webkit-playsinline', '');
+        node.setAttribute('preload', 'metadata');
+        node.setAttribute('disablepictureinpicture', '');
+        node.setAttribute('aria-label', m.a || '');
+        if (still) node.poster = still;
+        node.onerror = function () { fail('video error'); };
+        node.onloadeddata = function () { clearTimeout(timer); };
+        node.src = src;
+        box.appendChild(node);
+        watchVideo(node, box);
+      } else {
+        node = d.createElement('img');
+        node.alt = m.a || '';
+        node.setAttribute('referrerpolicy', 'no-referrer');
+        node.decoding = 'async';
+        node.onerror = function () { fail('image error'); };
+        node.onload = function () { clearTimeout(timer); };
+        node.src = src;
+        box.appendChild(node);
+      }
+    }
+
+    // Load straight away when visible or close to visible, later when far away.
+    if (window.IntersectionObserver) {
+      var near = new IntersectionObserver(function (entries) {
+        if (entries[entries.length - 1].isIntersecting) { near.disconnect(); start(); }
+      }, { rootMargin: '300px 0px' });
+      near.observe(box);
+    } else {
+      start();
+    }
+    return box;
+  }
+
+  // Video plays only while it is on screen, and pauses when scrolled away.
+  function watchVideo(v, box) {
+    function play() { try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) { /* silent */ } }
+    if (!window.IntersectionObserver) { play(); return; }
+    new IntersectionObserver(function (entries) {
+      if (entries[entries.length - 1].isIntersecting) play();
+      else { try { v.pause(); } catch (e) { /* silent */ } }
+    }, { threshold: 0.25 }).observe(box);
+  }
+
   function render(cfg, preview, box, s, token, origin) {
     if (!cfg) { log('not rendered: no config'); release(box); return; }
     if (cfg.off) { log('not rendered: this campaign is switched off'); release(box); return; }
@@ -183,12 +304,21 @@
     var parent = box || (s && s.parentNode);
     if (!parent) { log('not rendered: nowhere to put the card'); return; }
 
-    var item = items[Math.floor(Math.random() * items.length)];
+    var item = pick(items);
     var name = String(cfg.name || '');
     var head = String(item.h || '');
     var line = String(item.l || '');
+    var label = String(item.b || cfg.btn || '');
+    var href = origin + item.u;
+    var m = item.m || null;
+    var lay = item.lay === 'media' || item.lay === 'banner' ? item.lay : 'text';
+    if (!m) lay = 'text';
 
-    var tree = el('div', 'hcp-root');
+    // The host element is created first so the media can report to it.
+    var host = d.createElement('div');
+    host.style.display = 'block';
+
+    var tree = el('div', 'hcp-root' + (item.v ? ' hcp-v' : ''));
     var cardEl = el('div', 'hcp-card');
     var main = el('div', 'hcp-main');
     var brand = el('div', 'hcp-brand');
@@ -199,25 +329,67 @@
     main.appendChild(brand);
     if (head && head !== name) main.appendChild(el('p', 'hcp-head', head));
     if (line) main.appendChild(el('p', 'hcp-line', line));
-    cardEl.appendChild(main);
 
-    var a = el('a', 'hcp-btn', String(cfg.btn || ''));
-    a.href = origin + item.u;
+    var a = el('a', 'hcp-btn', label);
+    a.href = href;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.setAttribute('aria-label', String(cfg.btn || '') + (head ? ': ' + head : ''));
+    a.setAttribute('aria-label', label + (head ? ': ' + head : ''));
+
+    // The text card is always built. For a banner it starts hidden and takes
+    // over if the media cannot be shown.
+    cardEl.appendChild(main);
     cardEl.appendChild(a);
+
+    var banner = null;
+    if (lay === 'media') {
+      var body = el('div', 'hcp-body');
+      var mbox = buildMedia(m, host, function () {
+        // Media failed: leave the plain text card in place.
+        if (mbox && mbox.parentNode) mbox.parentNode.removeChild(mbox);
+        if (body.parentNode) body.parentNode.removeChild(body);
+        cardEl.className = 'hcp-card';
+        cardEl.appendChild(main);
+        cardEl.appendChild(a);
+      });
+      if (mbox) {
+        // appendChild moves the text and button out of the plain card.
+        body.appendChild(main);
+        body.appendChild(a);
+        cardEl.className = 'hcp-card hcp-hasm' + (m.r && m.r[0] / m.r[1] >= 2.4 ? ' hcp-top' : '');
+        cardEl.appendChild(mbox);
+        cardEl.appendChild(body);
+      }
+    } else if (lay === 'banner') {
+      var bbox = buildMedia(m, host, function () {
+        if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+        cardEl.hidden = false;
+      });
+      if (bbox) {
+        banner = el('a', 'hcp-banner');
+        banner.href = href;
+        banner.target = '_blank';
+        banner.rel = 'noopener';
+        banner.setAttribute('aria-label', (m.a || head) + (label ? ' (' + label + ')' : ''));
+        banner.appendChild(bbox);
+        // The site name mark stays visible on the banner.
+        var chip = el('span', 'hcp-chip');
+        var ctile = el('span', 'hcp-tile'); ctile.appendChild(icon());
+        chip.appendChild(ctile); chip.appendChild(el('span', 'hcp-name', name));
+        banner.appendChild(chip);
+        cardEl.hidden = true;
+      }
+    }
     tree.appendChild(cardEl);
+    if (banner) tree.insertBefore(banner, cardEl);
 
     // Built completely before it touches the page, then inserted in one step.
-    var host = d.createElement('div');
-    host.style.display = 'block';
     var root = null;
     if (host.attachShadow) { try { root = host.attachShadow({ mode: 'closed' }); } catch (e) { root = null; } }
     var shadow = !!root;
     if (!root) root = host;
     var style = d.createElement('style');
-    style.appendChild(d.createTextNode(String(cfg.css || '')));
+    style.appendChild(d.createTextNode(String(cfg.css || '') + String(item.v || '')));
     root.appendChild(style);
     root.appendChild(tree);
 
@@ -227,14 +399,15 @@
     } else {
       parent.insertBefore(host, s.nextSibling);
     }
-    log('rendered the card', shadow ? '(Shadow DOM)' : '(page DOM, prefixed classes)');
+    log('rendered', lay, 'card', shadow ? '(Shadow DOM)' : '(page DOM, prefixed classes)');
 
-    if (!preview) countView(host, token, origin);
+    if (!preview) countView(host, token, origin, item.id || 0);
   }
 
   // One count per page view, only after the card has been on screen for a
   // moment. The only thing here that waits for visibility.
-  function countView(host, token, origin) {
+  function countView(host, token, origin, adId) {
+    var extra = adId ? '?a=' + adId : '';
     var sent = false, seen = false, timer = 0;
 
     function send() {
@@ -242,7 +415,7 @@
       sent = true;
       var ok = false;
       try {
-        if (navigator.sendBeacon) ok = navigator.sendBeacon(origin + '/api/embed/impression/' + encodeURIComponent(token));
+        if (navigator.sendBeacon) ok = navigator.sendBeacon(origin + '/api/embed/impression/' + encodeURIComponent(token) + extra);
       } catch (e) { ok = false; }
       if (!ok) {
         try { (new Image()).src = origin + '/api/embed/ping/' + encodeURIComponent(token) + '?r=' + (new Date()).getTime(); } catch (e2) { /* silent */ }
