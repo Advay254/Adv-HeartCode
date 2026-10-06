@@ -4842,6 +4842,7 @@
     }
 
     const MODE_LABELS = { general: 'General', category: 'Category' };
+    const SOURCE_LABELS = { auto: 'Automatic cards', ads: 'Ad cards', both: 'Automatic and ad cards' };
 
     function categoryNotice(c) {
       if (!c.categoryProblem) return '';
@@ -4859,11 +4860,13 @@
               <div class="flex flex-wrap items-center gap-2">
                 <strong class="text-sm text-hc-ink">${escapeHtml(c.label)}</strong>
                 <span class="admin-badge admin-badge-brand">${MODE_LABELS[c.mode]}${c.mode === 'category' && c.categoryName ? ': ' + escapeHtml(c.categoryName) : ''}</span>
+                <span class="admin-badge admin-badge-brand">${SOURCE_LABELS[c.cardSource]}</span>
                 <span class="admin-badge ${c.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${c.isActive ? 'on' : 'off'}</span>
               </div>
               <p class="mt-1 text-sm text-hc-ink/60 break-words">
                 ${c.impressions} impression${c.impressions === 1 ? '' : 's'} &middot; ${c.clicks} click${c.clicks === 1 ? '' : 's'} &middot; click rate ${fmtRate(c)}
               </p>
+              <p class="text-xs text-gray-400">Automatic cards: ${c.autoImpressions} impression${c.autoImpressions === 1 ? '' : 's'}, ${c.autoClicks} click${c.autoClicks === 1 ? '' : 's'}. Ad cards: ${c.adImpressions} impression${c.adImpressions === 1 ? '' : 's'}, ${c.adClicks} click${c.adClicks === 1 ? '' : 's'}.</p>
               <p class="text-xs text-gray-400">Last 7 days: ${c.impressions7d} impression${c.impressions7d === 1 ? '' : 's'}, ${c.clicks7d} click${c.clicks7d === 1 ? '' : 's'}</p>
               ${categoryNotice(c)}
               <label class="admin-checkbox-label"><input type="checkbox" class="toggle-promotion" data-id="${c.id}" ${c.isActive ? 'checked' : ''}> On (a switched off campaign shows nothing)</label>
@@ -4919,6 +4922,7 @@
         mode: form.mode.value,
         categoryId: form.mode.value === 'category' ? (Number(form.categoryId.value) || null) : null,
         theme: form.theme.value,
+        cardSource: form.cardSource.value,
         accentColor: form.accentColor.value,
         cardBg: form.cardBg.value,
         textColor: form.textColor.value,
@@ -4955,6 +4959,7 @@
       form.mode.value = c.mode;
       fillCategories(c.categoryId || '');
       form.theme.value = c.theme;
+      form.cardSource.value = c.cardSource;
       form.accentColor.value = c.accentColor || '';
       form.cardBg.value = c.cardBg || '';
       form.textColor.value = c.textColor || '';
@@ -5173,6 +5178,392 @@
     load().then(resetForm);
   }
 
+  // ---- Ad Cards (v1.2.15) ----
+  // Structured like initPromotionPage(): a create/edit form beside a live
+  // preview and a list of admin-card rows with badges and actions. The preview
+  // renders the real /embed.js, fed the config the server builds from the
+  // form's current values, in a narrow and a wide box. Media is loaded by this
+  // browser straight from the pasted link; the server never requests it.
+  function initAdCardsPage() {
+    const API = '/api/admin/ad-cards';
+    const form = document.getElementById('adForm');
+    const statusEl = document.getElementById('adStatus');
+    const listEl = document.getElementById('adList');
+    const narrowEl = document.getElementById('adStageNarrow');
+    const wideEl = document.getElementById('adStageWide');
+    const errEl = document.getElementById('adPreviewError');
+    const noteEl = document.getElementById('adPreviewNote');
+    const contrastEl = document.getElementById('adContrast');
+    const mediaSection = document.getElementById('adMediaSection');
+    const ratioPreset = document.getElementById('adRatioPreset');
+    const ratioCustom = document.getElementById('adRatioCustom');
+    const allBox = document.getElementById('adAllCampaigns');
+    const campaignListEl = document.getElementById('adCampaignList');
+    const destEl = document.getElementById('adDest');
+    let state = { cards: [], campaigns: [], types: [], defaultButtonLabel: 'Build yours', editingId: null, previewTheme: 'light', kindTouched: false };
+    let previewSeq = 0;
+    let previewTimer = null;
+
+    const LAYOUT_LABELS = { text: 'Text card', media: 'Card with media', banner: 'Media only banner' };
+    const STATUS_LABELS = { live: 'live', scheduled: 'scheduled', ended: 'ended', off: 'off' };
+    const LAYOUT_HINTS = {
+      text: 'The same card as the automatic ones, with no media.',
+      media: 'Media beside the text in a wide space, on top of it in a narrow one.',
+      banner: 'The media fills the whole banner and the whole banner is the link. The headline and button are used only if the media cannot be shown.'
+    };
+
+    function say(kind, text) {
+      statusEl.className = 'admin-msg admin-msg-' + kind;
+      statusEl.textContent = text;
+      statusEl.style.display = 'block';
+    }
+
+    function errorText(body, fallback) {
+      if (body && body.errors) return Object.values(body.errors).join(' ');
+      return (body && body.error) || fallback;
+    }
+
+    function fmtRate(c) {
+      return c.clickRate === null ? 'n/a' : (c.clickRate * 100).toFixed(1) + '%';
+    }
+
+    function dateText(c) {
+      if (c.startsOn && c.endsOn) return c.startsOn + ' to ' + c.endsOn;
+      if (c.startsOn) return 'from ' + c.startsOn;
+      if (c.endsOn) return 'until ' + c.endsOn;
+      return 'no dates';
+    }
+
+    function render() {
+      listEl.innerHTML = state.cards.map((c) => `
+        <div class="admin-card" data-id="${c.id}">
+          <div class="flex flex-col gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-sm text-hc-ink">${escapeHtml(c.name)}</strong>
+                <span class="admin-badge admin-badge-brand">${LAYOUT_LABELS[c.layout]}</span>
+                <span class="admin-badge ${c.status === 'live' ? 'admin-badge-active' : c.status === 'scheduled' ? 'admin-badge-brand' : 'admin-badge-error'}">${STATUS_LABELS[c.status]}</span>
+              </div>
+              <p class="mt-1 text-sm text-hc-ink/60 break-words">
+                ${c.impressions} impression${c.impressions === 1 ? '' : 's'} &middot; ${c.clicks} click${c.clicks === 1 ? '' : 's'} &middot; click rate ${fmtRate(c)}
+              </p>
+              <p class="text-xs text-gray-400">${escapeHtml(dateText(c))} &middot; weight ${c.weight} &middot; ${c.allCampaigns ? 'all campaigns' : c.campaignIds.length + ' campaign' + (c.campaignIds.length === 1 ? '' : 's')}</p>
+              ${c.destProblem ? '<div class="admin-callout is-warn mt-3" style="margin-bottom:0;">The chosen destination type is switched off, so visitors are sent to the home page.</div>' : ''}
+              <label class="admin-checkbox-label"><input type="checkbox" class="toggle-ad" data-id="${c.id}" ${c.isActive ? 'checked' : ''}> On</label>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="admin-btn-outline admin-btn-sm edit-ad" data-id="${c.id}">Edit</button>
+              <button type="button" class="admin-btn-outline admin-btn-sm duplicate-ad" data-id="${c.id}">Duplicate</button>
+              <button type="button" class="admin-btn-danger admin-btn-sm remove-ad" data-id="${c.id}">Remove</button>
+            </div>
+          </div>
+        </div>`).join('') || '<p class="text-sm text-gray-400">No ad cards yet. Add one, then set a campaign to show ad cards on the Promotion page.</p>';
+
+      listEl.querySelectorAll('.toggle-ad').forEach((box) => {
+        box.addEventListener('change', async () => {
+          const res = await window.adminFetch(`${API}/${box.dataset.id}/active`, { method: 'PUT', body: JSON.stringify({ isActive: box.checked }) });
+          if (res.ok) load();
+          else { box.checked = !box.checked; say('error', 'Failed to change the ad card.'); }
+        });
+      });
+      listEl.querySelectorAll('.edit-ad').forEach((btn) => btn.addEventListener('click', () => openEdit(btn.dataset.id)));
+      listEl.querySelectorAll('.duplicate-ad').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const res = await window.adminFetch(`${API}/${btn.dataset.id}/duplicate`, { method: 'POST', body: '{}' });
+          if (res.ok) { say('success', 'Ad card duplicated.'); await load(); }
+          else say('error', 'Failed to duplicate the ad card.');
+        });
+      });
+      listEl.querySelectorAll('.remove-ad').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this ad card? Its statistics are deleted with it, and it disappears from websites within the cache time.')) return;
+          const res = await window.adminFetch(`${API}/${btn.dataset.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            if (String(state.editingId) === String(btn.dataset.id)) resetForm();
+            load();
+          } else {
+            say('error', 'Failed to delete the ad card.');
+          }
+        });
+      });
+    }
+
+    function fillDest(selected) {
+      destEl.innerHTML = '<option value="">Home page</option>' + state.types.map((t) =>
+        `<option value="${t.id}" ${String(t.id) === String(selected) ? 'selected' : ''}>${escapeHtml(t.name)}</option>`
+      ).join('');
+    }
+
+    function fillCampaigns(selectedIds) {
+      const chosen = new Set((selectedIds || []).map(Number));
+      campaignListEl.innerHTML = state.campaigns.map((c) =>
+        `<label class="admin-checkbox-label"><input type="checkbox" class="ad-campaign" value="${c.id}" ${chosen.has(c.id) ? 'checked' : ''}> ${escapeHtml(c.label)}${c.isActive ? '' : ' (off)'}</label>`
+      ).join('') || '<p class="admin-form-hint">No campaigns yet.</p>';
+    }
+
+    function syncLayout() {
+      mediaSection.style.display = form.layout.value === 'text' ? 'none' : 'block';
+      document.getElementById('adLayoutHint').textContent = LAYOUT_HINTS[form.layout.value];
+    }
+
+    function syncRatio() {
+      const custom = ratioPreset.value === 'custom';
+      ratioCustom.style.display = custom ? 'grid' : 'none';
+      if (!custom) {
+        const parts = ratioPreset.value.split(':');
+        form.ratioW.value = parts[0];
+        form.ratioH.value = parts[1];
+      }
+    }
+
+    function setRatio(w, h) {
+      const key = w + ':' + h;
+      const known = Array.from(ratioPreset.options).some((o) => o.value === key);
+      ratioPreset.value = known ? key : 'custom';
+      form.ratioW.value = w;
+      form.ratioH.value = h;
+      syncRatio();
+    }
+
+    function guessKind(link) {
+      const m = String(link).split('?')[0].split('#')[0].toLowerCase().match(/\.([a-z0-9]{2,5})$/);
+      if (!m) return null;
+      if (['gif', 'webp', 'png', 'jpg', 'jpeg', 'svg', 'avif', 'apng'].includes(m[1])) return 'image';
+      if (['mp4', 'webm', 'm4v', 'mov', 'ogv'].includes(m[1])) return 'video';
+      return null;
+    }
+
+    function selectedCampaignIds() {
+      return Array.from(campaignListEl.querySelectorAll('.ad-campaign:checked')).map((b) => Number(b.value));
+    }
+
+    function readForm() {
+      return {
+        name: form.name.value,
+        layout: form.layout.value,
+        mediaUrl: form.mediaUrl.value,
+        mediaKind: form.mediaKind.value,
+        ratioW: form.ratioW.value,
+        ratioH: form.ratioH.value,
+        mediaFit: form.mediaFit.value,
+        mediaAlt: form.mediaAlt.value,
+        stillUrl: form.stillUrl.value,
+        headline: form.headline.value,
+        line: form.line.value,
+        buttonLabel: form.buttonLabel.value,
+        destTypeId: Number(form.destTypeId.value) || null,
+        accentColor: form.accentColor.value,
+        cardBg: form.cardBg.value,
+        textColor: form.textColor.value,
+        corner: form.corner.value,
+        density: form.density.value,
+        isActive: form.isActive.checked,
+        startsOn: form.startsOn.value,
+        endsOn: form.endsOn.value,
+        weight: form.weight.value,
+        allCampaigns: allBox.checked,
+        campaignIds: allBox.checked ? [] : selectedCampaignIds()
+      };
+    }
+
+    function resetForm() {
+      state.editingId = null;
+      state.kindTouched = false;
+      form.reset();
+      form.buttonLabel.value = state.defaultButtonLabel;
+      fillDest('');
+      fillCampaigns([]);
+      campaignListEl.style.display = 'none';
+      setRatio(16, 9);
+      syncLayout();
+      document.getElementById('adFormEyebrow').textContent = 'Create';
+      document.getElementById('adFormHeading').textContent = 'Add ad card';
+      document.getElementById('adSubmitBtn').textContent = 'Add ad card';
+      document.getElementById('adCancelBtn').style.display = 'none';
+      ['adName', 'adHeadline', 'adLine', 'adButton'].forEach((id) => document.getElementById(id).dispatchEvent(new Event('input', { bubbles: true })));
+      schedulePreview();
+    }
+
+    function openEdit(id) {
+      const c = state.cards.find((x) => String(x.id) === String(id));
+      if (!c) return;
+      state.editingId = c.id;
+      state.kindTouched = true;
+      form.name.value = c.name;
+      form.layout.value = c.layout;
+      form.mediaUrl.value = c.mediaUrl;
+      form.mediaKind.value = c.mediaKind;
+      form.mediaFit.value = c.mediaFit;
+      form.mediaAlt.value = c.mediaAlt;
+      form.stillUrl.value = c.stillUrl;
+      setRatio(c.ratioW, c.ratioH);
+      form.headline.value = c.headline;
+      form.line.value = c.line;
+      form.buttonLabel.value = c.buttonLabel;
+      fillDest(c.destTypeId || '');
+      form.accentColor.value = c.accentColor;
+      form.cardBg.value = c.cardBg;
+      form.textColor.value = c.textColor;
+      form.corner.value = c.corner;
+      form.density.value = c.density;
+      form.isActive.checked = c.isActive;
+      form.startsOn.value = c.startsOn;
+      form.endsOn.value = c.endsOn;
+      form.weight.value = c.weight;
+      allBox.checked = c.allCampaigns;
+      fillCampaigns(c.campaignIds);
+      campaignListEl.style.display = c.allCampaigns ? 'none' : 'block';
+      syncLayout();
+      document.getElementById('adFormEyebrow').textContent = 'Edit';
+      document.getElementById('adFormHeading').textContent = 'Edit ad card';
+      document.getElementById('adSubmitBtn').textContent = 'Save changes';
+      document.getElementById('adCancelBtn').style.display = 'inline-flex';
+      statusEl.style.display = 'none';
+      form.scrollIntoView();
+      schedulePreview();
+    }
+
+    // ---- live preview ----
+    function schedulePreview() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(refreshPreview, 300);
+    }
+
+    function mount(stageEl, config) {
+      stageEl.innerHTML = '';
+      const holder = document.createElement('div');
+      const script = document.createElement('script');
+      script.src = '/embed.js';
+      script.async = true;
+      script.setAttribute('data-config', JSON.stringify(config));
+      holder.appendChild(script);
+      stageEl.appendChild(holder);
+    }
+
+    async function refreshPreview() {
+      const seq = ++previewSeq;
+      let res;
+      let body;
+      try {
+        res = await window.adminFetch(`${API}/preview`, {
+          method: 'POST',
+          body: JSON.stringify(Object.assign(readForm(), { previewTheme: state.previewTheme }))
+        });
+        body = await res.json();
+      } catch (err) {
+        if (seq === previewSeq) { errEl.textContent = 'Failed to load the preview.'; errEl.style.display = 'block'; }
+        return;
+      }
+      if (seq !== previewSeq) return;
+
+      narrowEl.innerHTML = '';
+      wideEl.innerHTML = '';
+      [narrowEl, wideEl].forEach((el) => {
+        el.classList.toggle('bg-gray-50', state.previewTheme === 'light');
+        el.classList.toggle('bg-gray-100', state.previewTheme === 'dark');
+      });
+      errEl.style.display = 'none';
+      noteEl.style.display = 'none';
+      contrastEl.style.display = 'none';
+
+      if (!res.ok) {
+        if (body && body.errors && body.errors.contrast) {
+          contrastEl.className = 'admin-msg admin-msg-error';
+          contrastEl.textContent = body.errors.contrast;
+          contrastEl.style.display = 'block';
+        }
+        errEl.textContent = errorText(body, 'Failed to load the preview.');
+        errEl.style.display = 'block';
+        return;
+      }
+      if (body.contrast && body.contrast.messages && body.contrast.messages.length) {
+        contrastEl.className = 'admin-msg admin-msg-warning';
+        contrastEl.textContent = body.contrast.messages.join(' ');
+        contrastEl.style.display = 'block';
+      }
+      mount(narrowEl, body.config);
+      mount(wideEl, body.config);
+    }
+
+    // The embed script tells the preview what happened to the media.
+    function onMediaEvent(e) {
+      if (e.type === 'hcp-media-failed') {
+        noteEl.textContent = 'The media did not load from that link, so a visitor would see the text card only. Check that the link is a direct link to the file, that it ends in a file type, and that the host allows other websites to show it.';
+        noteEl.style.display = 'block';
+      } else {
+        noteEl.textContent = 'Your device asks for reduced motion or a data saver, so the animated file was not loaded here. Visitors with the same setting see the still image, or the text only if there is none.';
+        noteEl.style.display = 'block';
+      }
+    }
+    [narrowEl, wideEl].forEach((el) => {
+      el.addEventListener('hcp-media-failed', onMediaEvent);
+      el.addEventListener('hcp-media-skipped', onMediaEvent);
+    });
+
+    function setPreviewTheme(theme) {
+      state.previewTheme = theme;
+      document.getElementById('adPreviewLight').className = theme === 'light' ? 'admin-btn admin-btn-sm' : 'admin-btn-outline admin-btn-sm';
+      document.getElementById('adPreviewDark').className = theme === 'dark' ? 'admin-btn admin-btn-sm' : 'admin-btn-outline admin-btn-sm';
+      refreshPreview();
+    }
+
+    // ---- load / save ----
+    async function load() {
+      const res = await window.adminFetch(API);
+      if (!res.ok) { say('error', 'Failed to load ad cards.'); return; }
+      const data = await res.json();
+      state.cards = data.adCards;
+      state.campaigns = data.campaigns;
+      state.types = data.types;
+      state.defaultButtonLabel = data.defaultButtonLabel;
+      if (!form.buttonLabel.value && state.editingId === null) form.buttonLabel.value = state.defaultButtonLabel;
+      fillDest(form.destTypeId.value);
+      fillCampaigns(selectedCampaignIds());
+      render();
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editing = state.editingId !== null;
+      const res = await window.adminFetch(editing ? `${API}/${state.editingId}` : API, {
+        method: editing ? 'PUT' : 'POST',
+        body: JSON.stringify(readForm())
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        resetForm();
+        say('success', editing ? 'Ad card saved.' : 'Ad card added.');
+        await load();
+      } else {
+        say('error', errorText(body, editing ? 'Failed to save the ad card.' : 'Failed to add the ad card.'));
+      }
+    });
+
+    document.getElementById('adCancelBtn').addEventListener('click', () => { resetForm(); statusEl.style.display = 'none'; });
+    form.layout.addEventListener('change', () => { syncLayout(); schedulePreview(); });
+    ratioPreset.addEventListener('change', () => { syncRatio(); schedulePreview(); });
+    form.mediaKind.addEventListener('change', () => { state.kindTouched = true; });
+    form.mediaUrl.addEventListener('input', () => {
+      if (state.kindTouched) return;
+      const kind = guessKind(form.mediaUrl.value);
+      if (kind) form.mediaKind.value = kind;
+    });
+    allBox.addEventListener('change', () => {
+      campaignListEl.style.display = allBox.checked ? 'none' : 'block';
+    });
+    form.addEventListener('input', () => { statusEl.style.display = 'none'; schedulePreview(); });
+    form.addEventListener('change', schedulePreview);
+    document.getElementById('adPreviewLight').addEventListener('click', () => setPreviewTheme('light'));
+    document.getElementById('adPreviewDark').addEventListener('click', () => setPreviewTheme('dark'));
+
+    attachCharCounter(document.getElementById('adHeadline'), 60);
+    attachCharCounter(document.getElementById('adLine'), 120);
+    attachCharCounter(document.getElementById('adButton'), 24);
+    attachCharCounter(document.getElementById('adMediaAlt'), 125);
+
+    load().then(resetForm);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initNav();
     const page = document.body.dataset.page;
@@ -5200,5 +5591,6 @@
     if (page === 'legal-pages') initLegalPagesPage();
     if (page === 'test-deploy') initTestDeployPage();
     if (page === 'promotion') initPromotionPage();
+    if (page === 'ad-cards') initAdCardsPage();
   });
 })();
