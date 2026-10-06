@@ -19,6 +19,7 @@ Open **Promotion** in the Content group.
 | Card background, text colour | Optional `#RRGGBB` each. Blank uses the brand defaults for the theme. |
 | Headline, line | Optional custom text for the site message. Plain text only. |
 | Button label | Up to 24 characters, default "Build yours". |
+| Cards shown | Automatic cards only (default), your ad cards only, or both. See [AD-CARDS.md](AD-CARDS.md). |
 
 The card is the only style (v1.2.14). The site name and its mark always show. Text against the card and the button text against the button are checked for contrast: below 4.5:1 you get a warning, below 2:1 saving is refused.
 
