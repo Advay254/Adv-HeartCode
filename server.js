@@ -40,6 +40,7 @@ const adminTestDeployRouter = require('./routes/adminTestDeploy');
 const adminReviewsRouter = require('./routes/adminReviews');
 const adminPromotionsRouter = require('./routes/adminPromotions');
 const promotionPublicRouter = require('./routes/promotionPublic');
+const adminAdCardsRouter = require('./routes/adminAdCards');
 const reviewRouter = require('./routes/review');
 const { runReviewMaintenance } = require('./lib/reviewJobs');
 const publicRouter = require('./routes/public');
@@ -386,6 +387,8 @@ app.use('/api/admin/legal-pages', adminLegalRouter);
 app.use('/api/admin/reviews', adminReviewsRouter);
 // v1.2.13: promotion campaigns (session + CSRF gated inside the router).
 app.use('/api/admin/promotions', adminPromotionsRouter);
+// v1.2.15: ad cards (session + CSRF gated inside the router).
+app.use('/api/admin/ad-cards', adminAdCardsRouter);
 // v1.2.7: admin-only test deployment (no Paystack, forced -test slug, flagged
 // is_test). Session + CSRF gated INSIDE its router, session check first --
 // see routes/adminTestDeploy.js's header for why that order is load-bearing.
@@ -599,6 +602,19 @@ function startCleanupJob() {
       }
     } catch (err) {
       console.error('[CLEANUP] Failed to prune old promotion_stats:', err.message);
+    }
+
+    // v1.2.15: the same 90 days for ad card counts.
+    try {
+      const adResult = await pool.query(
+        `DELETE FROM ad_card_stats WHERE day < (NOW() AT TIME ZONE 'UTC')::date - $1::int`,
+        [PROMOTION_STATS_RETENTION_DAYS]
+      );
+      if (adResult.rowCount > 0) {
+        console.log(`[CLEANUP] Pruned ${adResult.rowCount} ad card stat row(s) older than ${PROMOTION_STATS_RETENTION_DAYS} days.`);
+      }
+    } catch (err) {
+      console.error('[CLEANUP] Failed to prune old ad_card_stats:', err.message);
     }
 
     sitePasswordCache.pruneExpired(SITE_PASSWORD_CACHE_MAX_AGE_MS);
