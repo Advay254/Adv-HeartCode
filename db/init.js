@@ -1522,6 +1522,69 @@ ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_de
 ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_density_check
   CHECK (density IN ('compact', 'comfortable'));
 
+-- v1.2.15: ad cards. Cards designed by hand, shown by promotion campaigns.
+-- Media is never uploaded or stored here: media_url and still_url are links to
+-- files hosted elsewhere, https only (checked on the server before saving).
+-- dest_type_id is ON DELETE SET NULL: a deleted website type simply sends
+-- visitors to the home page. The corner, density and colour columns are
+-- nullable: NULL means "use the campaign's choice".
+CREATE TABLE IF NOT EXISTS ad_cards (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
+  layout TEXT NOT NULL DEFAULT 'text' CHECK (layout IN ('text', 'media', 'banner')),
+  media_url TEXT DEFAULT NULL CHECK (media_url IS NULL OR (char_length(media_url) <= 2000 AND media_url LIKE 'https://%')),
+  media_kind TEXT NOT NULL DEFAULT 'image' CHECK (media_kind IN ('image', 'video')),
+  ratio_w INTEGER NOT NULL DEFAULT 16 CHECK (ratio_w BETWEEN 1 AND 100),
+  ratio_h INTEGER NOT NULL DEFAULT 9 CHECK (ratio_h BETWEEN 1 AND 100),
+  media_fit TEXT NOT NULL DEFAULT 'fill' CHECK (media_fit IN ('fill', 'fit')),
+  media_alt TEXT DEFAULT NULL CHECK (media_alt IS NULL OR char_length(media_alt) <= 125),
+  still_url TEXT DEFAULT NULL CHECK (still_url IS NULL OR (char_length(still_url) <= 2000 AND still_url LIKE 'https://%')),
+  headline TEXT NOT NULL CHECK (char_length(headline) BETWEEN 1 AND 60),
+  line TEXT DEFAULT NULL CHECK (line IS NULL OR char_length(line) <= 120),
+  button_label TEXT NOT NULL DEFAULT 'Build yours' CHECK (char_length(button_label) BETWEEN 1 AND 24),
+  dest_type_id INTEGER REFERENCES website_types(id) ON DELETE SET NULL,
+  accent_color TEXT DEFAULT NULL CHECK (accent_color IS NULL OR accent_color ~ '^#[0-9a-fA-F]{6}$'),
+  card_bg TEXT DEFAULT NULL CHECK (card_bg IS NULL OR card_bg ~ '^#[0-9a-fA-F]{6}$'),
+  text_color TEXT DEFAULT NULL CHECK (text_color IS NULL OR text_color ~ '^#[0-9a-fA-F]{6}$'),
+  corner TEXT DEFAULT NULL CHECK (corner IS NULL OR corner IN ('sharp', 'soft', 'round')),
+  density TEXT DEFAULT NULL CHECK (density IS NULL OR density IN ('compact', 'comfortable')),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  starts_on DATE DEFAULT NULL,
+  ends_on DATE DEFAULT NULL,
+  weight INTEGER NOT NULL DEFAULT 5 CHECK (weight BETWEEN 1 AND 10),
+  all_campaigns BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Which campaigns a card is assigned to (used when all_campaigns is false).
+CREATE TABLE IF NOT EXISTS ad_card_campaigns (
+  ad_card_id INTEGER NOT NULL REFERENCES ad_cards(id) ON DELETE CASCADE,
+  campaign_id INTEGER NOT NULL REFERENCES promotion_campaigns(id) ON DELETE CASCADE,
+  PRIMARY KEY (ad_card_id, campaign_id)
+);
+
+-- Daily counts, one row per ad card per campaign per day (UTC), updated in
+-- place. Counts only: no cookies, no IP addresses, no personal data. Deleting
+-- an ad card or a campaign deletes its rows. The scheduled cleanup job removes
+-- rows older than 90 days (server.js).
+CREATE TABLE IF NOT EXISTS ad_card_stats (
+  ad_card_id INTEGER NOT NULL REFERENCES ad_cards(id) ON DELETE CASCADE,
+  campaign_id INTEGER NOT NULL REFERENCES promotion_campaigns(id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  impressions INTEGER NOT NULL DEFAULT 0,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (ad_card_id, campaign_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_ad_card_stats_day ON ad_card_stats (day);
+
+-- What a campaign shows: automatic cards only (the default, and what every
+-- existing campaign keeps doing), ad cards only, or both.
+ALTER TABLE promotion_campaigns ADD COLUMN IF NOT EXISTS card_source TEXT NOT NULL DEFAULT 'auto';
+ALTER TABLE promotion_campaigns DROP CONSTRAINT IF EXISTS promotion_campaigns_card_source_check;
+ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_card_source_check
+  CHECK (card_source IN ('auto', 'ads', 'both'));
+
 -- v1.2.15: reviews are text only. The optional photo is gone, so its column
 -- goes with it. Existing reviews keep their name, rating and text; only the
 -- stored picture address disappears.
