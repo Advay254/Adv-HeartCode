@@ -40,6 +40,14 @@
             <select class="admin-select" name="categoryId" id="promotionCategory"></select>
           </div>
 
+          <label class="admin-label" for="promotionSource">Cards shown</label>
+          <select class="admin-select" name="cardSource" id="promotionSource">
+            <option value="auto">Automatic cards only</option>
+            <option value="ads">My ad cards only</option>
+            <option value="both">Both</option>
+          </select>
+          <p class="admin-form-hint mt-1">Automatic cards come from the website types. Ad cards are the ones you design on the Ad Cards page. If a campaign has no ad card to show right now, it shows the automatic cards instead.</p>
+
           <div class="admin-form-grid-2">
             <div>
               <label class="admin-label" for="promotionTheme">Theme</label>
@@ -115,7 +123,7 @@
           <p id="previewNote" class="admin-msg admin-msg-warning" style="display:none;"></p>
           <p id="previewError" class="admin-msg admin-msg-error" style="display:none;"></p>
           <div id="previewStage" class="mt-3 rounded-lg border border-gray-200 p-4"></div>
-          <p class="admin-form-hint mt-2">This is the real promo, built from the form as it is now. Each page view on another website shows one item at random, so use Show another to see the others.</p>
+          <p class="admin-form-hint mt-2">This is the real promo, built from the form as it is now (automatic cards). Each page view on another website shows one item at random, so use Show another to see the others.</p>
         </div>
 
         <div class="admin-list-panel">
