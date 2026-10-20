@@ -26,7 +26,7 @@
 <link rel="stylesheet" href="/site.css">
 <script src="/site-interactions.js" defer></script>
 <script src="/funnel.js" defer></script>
-<script src="/site.js" defer></script>
+<script src="/site.js" defer></script><% if (typeof analytics !== 'undefined' && analytics) { %><%- include('public-analytics') %><% } %>
 
 <% if (typeof activeScripts !== 'undefined' && activeScripts.head && activeScripts.head.length) { %>
 <%# v1.0.7: admin-pasted third-party snippets (routes/adminScripts.js), rendered
