@@ -2934,6 +2934,64 @@
       statusEl.textContent = res.ok ? 'Saved.' : 'Failed to save.';
     });
 
+    // v1.2.16: analytics card. Same status pattern as the card above.
+    const anaEl = (id) => document.getElementById(id);
+    function applyAnalytics(data) {
+      anaEl('analyticsEnabled').checked = !!data.enabled;
+      anaEl('analyticsScriptUrl').value = data.scriptUrl || '';
+      anaEl('analyticsWebsiteId').value = data.websiteId || '';
+      anaEl('analyticsDomains').value = data.domains || '';
+      anaEl('analyticsDnt').checked = !!data.dnt;
+      anaEl('analyticsAfterInteraction').checked = !!data.afterInteraction;
+      anaEl('analyticsPerformance').checked = !!data.performance;
+      anaEl('analyticsRecorder').checked = !!data.recorder;
+      anaEl('analyticsRecorderUrl').value = data.recorderUrl || '';
+      anaEl('analyticsProxy').checked = !!data.proxy;
+      if (data.defaultDomain) anaEl('analyticsDomains').placeholder = data.defaultDomain;
+      if (data.defaultRecorderUrl) anaEl('analyticsRecorderUrl').placeholder = data.defaultRecorderUrl;
+      const link = anaEl('analyticsDashboardLink');
+      if (data.enabled && data.dashboardUrl) {
+        link.href = data.dashboardUrl;
+        link.style.display = '';
+      } else {
+        link.style.display = 'none';
+      }
+    }
+
+    async function loadAnalytics() {
+      const res = await window.adminFetch('/api/admin/site-settings/analytics');
+      if (res.ok) applyAnalytics(await res.json());
+    }
+
+    anaEl('analyticsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const res = await window.adminFetch('/api/admin/site-settings/analytics', {
+        method: 'PUT',
+        body: JSON.stringify({
+          enabled: anaEl('analyticsEnabled').checked,
+          scriptUrl: anaEl('analyticsScriptUrl').value,
+          websiteId: anaEl('analyticsWebsiteId').value,
+          domains: anaEl('analyticsDomains').value,
+          dnt: anaEl('analyticsDnt').checked,
+          afterInteraction: anaEl('analyticsAfterInteraction').checked,
+          performance: anaEl('analyticsPerformance').checked,
+          recorder: anaEl('analyticsRecorder').checked,
+          recorderUrl: anaEl('analyticsRecorderUrl').value,
+          proxy: anaEl('analyticsProxy').checked
+        })
+      });
+      const statusEl = anaEl('analyticsStatus');
+      statusEl.style.display = 'block';
+      statusEl.className = 'admin-msg ' + (res.ok ? 'admin-msg-success' : 'admin-msg-error');
+      if (res.ok) {
+        applyAnalytics(await res.json());
+        statusEl.textContent = 'Saved.';
+      } else {
+        const body = await res.json().catch(() => ({}));
+        statusEl.textContent = body.error || 'Failed to save.';
+      }
+    });
+
     // v1.2.2 Part F: footer custom links. Same shape as
     // initLandingPagePage()'s own footer-links list (renderFooterLinks/
     // moveFooterLink/removeFooterLink), against the separate
@@ -2997,6 +3055,7 @@
 
     load();
     loadResendDetailsRateLimit();
+    loadAnalytics();
     loadCustomLinks();
   }
 
