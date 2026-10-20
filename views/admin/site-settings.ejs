@@ -83,6 +83,53 @@
       <p id="resendDetailsRateLimitStatus" class="admin-msg" style="display:none;"></p>
     </div>
 
+    <!-- v1.2.16: Umami analytics. A separate card with its own save button
+         and status line, modelled on the Resend site details card above. -->
+    <div class="admin-card admin-settings-card mt-6" id="analyticsCard">
+      <h2 class="text-sm font-semibold text-hc-ink">Analytics</h2>
+      <p class="mt-1 text-sm text-gray-500">Connects the public pages to your own Umami installation. Nothing is added to any page, and no extra request is made, until this is switched on and saved. Never runs on admin pages, review pages, checkout return pages or previews of a customer's site.</p>
+      <form id="analyticsForm" class="mt-2">
+        <label class="admin-checkbox-label"><input type="checkbox" id="analyticsEnabled"> Enable analytics</label>
+        <p class="mt-1 text-xs text-gray-500">Off by default. Needs the script address and website ID below.</p>
+
+        <label class="admin-label" for="analyticsScriptUrl">Script address</label>
+        <input class="admin-input" type="text" id="analyticsScriptUrl" maxlength="500" autocomplete="off" placeholder="https://">
+        <p class="mt-1 text-xs text-gray-500">The full address of the tracker script, exactly as Umami shows it in its tracking code. Must start with https:// and use a normal public host name.</p>
+
+        <label class="admin-label" for="analyticsWebsiteId">Website ID</label>
+        <input class="admin-input" type="text" id="analyticsWebsiteId" maxlength="64" autocomplete="off">
+        <p class="mt-1 text-xs text-gray-500">The long ID with dashes that Umami shows for this website.</p>
+
+        <label class="admin-label" for="analyticsDomains">Allowed domains</label>
+        <input class="admin-input" type="text" id="analyticsDomains" maxlength="1000" autocomplete="off">
+        <p class="mt-1 text-xs text-gray-500" id="analyticsDomainsHint">Visits are only counted on these domains, separated by commas. Leave empty to use this site's own domain.</p>
+
+        <label class="admin-checkbox-label mt-3"><input type="checkbox" id="analyticsDnt"> Respect Do Not Track</label>
+        <p class="mt-1 text-xs text-gray-500">On by default. Visitors whose browser asks not to be tracked are not counted.</p>
+
+        <label class="admin-checkbox-label mt-3"><input type="checkbox" id="analyticsAfterInteraction"> Count a visit only after first interaction</label>
+        <p class="mt-1 text-xs text-gray-500">Reduces automated visits in your stats. Visitors who leave without scrolling, tapping, moving the mouse, or pressing a key are not counted. Needs Umami 3.2 or newer to hold back the first page view reliably. Referrer and campaign tags still arrive, but page speed data is only recorded if the first interaction happens within about 10 seconds.</p>
+
+        <label class="admin-checkbox-label mt-3"><input type="checkbox" id="analyticsPerformance"> Collect page speed data</label>
+        <p class="mt-1 text-xs text-gray-500">On by default. Only works if your Umami is version 3.1 or newer. On older versions this setting is ignored and nothing breaks.</p>
+
+        <label class="admin-checkbox-label mt-3"><input type="checkbox" id="analyticsRecorder"> Heatmap recorder</label>
+        <p class="mt-1 text-xs text-gray-500">Off by default. Loads Umami's recorder on the home page, the type gallery and the testimonials page only. Never on build, checkout, review, resend or preview pages. Needs Umami 3.1 or newer, and Replays &amp; Heatmaps switched on for this website in Umami.</p>
+        <label class="admin-label" for="analyticsRecorderUrl">Recorder script address</label>
+        <input class="admin-input" type="text" id="analyticsRecorderUrl" maxlength="500" autocomplete="off" placeholder="https://">
+        <p class="mt-1 text-xs text-gray-500" id="analyticsRecorderHint">Leave empty to use the recorder on the same host as the tracker script.</p>
+
+        <label class="admin-checkbox-label mt-3"><input type="checkbox" id="analyticsProxy"> Serve through this site</label>
+        <p class="mt-1 text-xs text-gray-500">Off by default. Loads the tracker script from, and sends visit data through, two addresses on this site (/hc/s.js and /hc/api/send), which are then forwarded to the saved script address. The recorder is not covered by this switch.</p>
+
+        <div class="mt-4">
+          <button type="submit" class="admin-btn">Save analytics</button>
+          <a id="analyticsDashboardLink" class="admin-btn-outline ml-2" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open analytics dashboard <img src="/icons/external-link.svg" alt="" width="14" height="14" style="display:inline-block;vertical-align:-2px;"></a>
+        </div>
+      </form>
+      <p id="analyticsStatus" class="admin-msg" style="display:none;"></p>
+    </div>
+
     <!-- v1.2.2 Part F: any additional link Advay wants in the public
          footer beyond the fixed X/Facebook/Instagram/LinkedIn fields
          above -- rendered with a generic link icon (see
