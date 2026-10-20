@@ -58,7 +58,7 @@
               <% } %>
               <% if (t.demoUrl) { %>
               <div class="mt-5 flex gap-2">
-                <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center">Preview</a>
+                <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center"<%- typeof analyticsPreviewAttr === 'function' ? analyticsPreviewAttr(t.slug) : '' %>>Preview</a>
                 <a href="/build/<%= t.slug %>" class="hc-pill-btn flex-1 justify-center">Build this</a>
               </div>
               <% } else { %>
@@ -106,7 +106,7 @@
               <% } %>
               <% if (t.demoUrl) { %>
               <div class="mt-5 flex gap-2">
-                <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center">Preview</a>
+                <a href="<%= t.demoUrl %>" target="_blank" rel="noopener noreferrer" class="hc-pill-btn-outline flex-1 justify-center"<%- typeof analyticsPreviewAttr === 'function' ? analyticsPreviewAttr(t.slug) : '' %>>Preview</a>
                 <a href="/build/<%= t.slug %>" class="hc-pill-btn flex-1 justify-center">Build this</a>
               </div>
               <% } else { %>

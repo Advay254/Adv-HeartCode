@@ -19,7 +19,7 @@
 <link rel="stylesheet" href="/reviews-display.css">
 <script src="/site-interactions.js" defer></script>
 <script src="/funnel.js" defer></script>
-<script src="/site.js" defer></script>
+<script src="/site.js" defer></script><% if (typeof analytics !== 'undefined' && analytics) { %><%- include('../partials/public-analytics') %><% } %>
 <% if (broadcast) { %><script src="/testimonials.js" defer></script><% } %>
 </head>
 <body class="bg-white font-sans text-hc-ink antialiased" data-page="testimonials">
