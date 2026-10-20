@@ -25,6 +25,7 @@ const { getRealClientIp } = require('../lib/clientIp');
 const { getActiveLegalPage } = require('../lib/legalPages');
 const { getFooterExtras } = require('../lib/footerExtras');
 const { logEvent } = require('../lib/activityEvents');
+const analytics = require('../lib/analytics');
 const { marked } = require('marked');
 
 const router = express.Router();
@@ -66,6 +67,13 @@ router.use(async (req, res, next) => {
     res.locals.landingFooterLinks = landing.footerLinks;
     res.locals.activeSeoPages = footerExtras.seoPages;
     res.locals.footerCustomLinks = footerExtras.customLinks;
+    // v1.2.16: null (so nothing is rendered) when analytics is off or this
+    // path must never be tracked. See lib/analytics.js.
+    res.locals.analytics = analytics.buildPageContext(siteSettings, req);
+    // Adds data-hc-preview="<slug>" to a demo Preview link, only while
+    // analytics is on. Empty otherwise, so the page is unchanged.
+    res.locals.analyticsPreviewAttr = (slug) => (res.locals.analytics && /^[a-z0-9][a-z0-9-]{0,99}$/.test(String(slug || ''))
+      ? ` data-hc-preview="${slug}"` : '');
   } catch (err) {
     // These helpers already catch their own DB errors internally and fall
     // back to safe defaults — this catch is only for something more
@@ -930,6 +938,8 @@ router.get('/build/:slug', asyncHandler(async (req, res) => {
     console.error('[REVIEWS] Could not load reviews for the build page:', err.message);
   }
 
+  analytics.addPageEvent(res, 'type_viewed', { type: websiteType.slug });
+
   res.render('public/build', {
     typeReviews,
     pageTitle: websiteType.seo_title || websiteType.name,
@@ -990,6 +1000,8 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
   // charged, not a browsing-convenience estimate in the visitor's local
   // currency.
   const charge = await resolveChargeForCheckout(req, priceUsd);
+
+  analytics.addPageEvent(res, 'checkout_started', { type: t.slug, currency: charge.currency, value: charge.amount });
 
   res.render('public/checkout', {
     pageTitle: `Checkout, ${t.name}`,
@@ -1142,7 +1154,14 @@ router.get('/build/:slug/checkout/callback', asyncHandler(async (req, res) => {
     });
   }
 
-  const result = await finalizeDeployment(reference);
+  // v1.2.16: the visitor's browser details, passed along only so the revenue
+  // event can be grouped with their visit in Umami. Never stored.
+  let visitor = null;
+  try {
+    visitor = analytics.visitorFromRequest(req, analytics.readConfig(res.locals.siteSettings));
+  } catch (err) { /* analytics never affects finalisation */ }
+
+  const result = await finalizeDeployment(reference, { visitor });
 
   let outcome = 'error';
   let siteUrl = null;
@@ -1174,6 +1193,23 @@ router.get('/build/:slug/checkout/callback', asyncHandler(async (req, res) => {
     outcome = result.status;
   } else if (result.error) {
     console.error(`[CALLBACK] finalizeDeployment error for ${reference}:`, result.error);
+  }
+
+  // v1.2.16: this page never loads the tracker (its address carries a one-time
+  // reference), so the return and a failed payment are sent from here instead.
+  // Once per reference; no personal data; the slug must be a real type.
+  if (outcome !== 'not_found' && res.locals.siteSettings && analytics.readConfig(res.locals.siteSettings).enabled) {
+    try {
+      const known = await getPool().query('SELECT 1 FROM website_types WHERE slug = $1', [req.params.slug]);
+      if (known.rowCount > 0) {
+        const cbUrl = `/build/${req.params.slug}/checkout/callback`;
+        const onceKey = `cb:${reference}`;
+        analytics.fireFromRequest(req, { name: 'checkout_return', data: { type: req.params.slug }, url: cbUrl, onceKey });
+        if (outcome === 'not_paid') {
+          analytics.fireFromRequest(req, { name: 'payment_failed', data: { type: req.params.slug }, url: cbUrl, onceKey });
+        }
+      }
+    } catch (err) { /* analytics never affects the page */ }
   }
 
   res.render('public/checkout-callback', { pageTitle: 'Checkout result', outcome, siteUrl, reference, slug: req.params.slug, checkoutScripts });

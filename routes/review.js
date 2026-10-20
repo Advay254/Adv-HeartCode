@@ -10,6 +10,7 @@ const { getRealClientIp } = require('../lib/clientIp');
 const { TOKEN_RE, findValidLink, submitReviewWithLink, buildAdminReviewsUrl } = require('../lib/reviews');
 const { validateReviewSubmission, NAME_MAX, TESTIMONIAL_MAX, TESTIMONIAL_MIN } = require('../lib/reviewValidation');
 const { notifyReviewSubmitted } = require('../lib/notifications');
+const analytics = require('../lib/analytics');
 
 // v1.2.11: the public review form (GET /review/:token) and its submit
 // endpoint (POST /api/review/:token).
@@ -197,6 +198,11 @@ router.post('/api/review/:token', parseJson, asyncHandler(async (req, res) => {
   } catch (err) {
     console.error('[REVIEWS] Review notification failed to start (the review itself was saved):', err.message);
   }
+
+  // v1.2.16: this page never loads the tracker (its address carries a private
+  // token), so the submission is counted from here. No data, no token, and the
+  // address sent is the fixed /review, never the real one.
+  analytics.fireFromRequest(req, { name: 'review_submitted', url: '/review' });
 
   res.status(201).json({ ok: true });
 }));

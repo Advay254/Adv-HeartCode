@@ -8,6 +8,7 @@ const { logEvent } = require('../lib/activityEvents');
 const { getSiteSettings, refreshSiteSettingsCache, DEFAULTS } = require('../lib/siteSettings');
 const { moveItem } = require('../lib/reorder');
 const { refreshFooterExtrasCache } = require('../lib/footerExtras');
+const analytics = require('../lib/analytics');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -108,6 +109,90 @@ router.put('/', requireCsrf, asyncHandler(async (req, res) => {
     detail: entries.map(([key]) => key).join(', ')
   });
   res.json(fresh);
+}));
+
+// ---- analytics (v1.2.16) ----
+//
+// Its own pair of endpoints and its own card on the page (same shape as the
+// resend-details limit card: a separate card with its own Save button). All
+// analytics keys are saved together in one statement, so a failed save never
+// leaves a half-updated connection, and the settings cache and the cached
+// tracker script are refreshed straight after.
+
+const analyticsSchema = z.object({
+  enabled: z.boolean(),
+  scriptUrl: z.string().max(600),
+  websiteId: z.string().max(100),
+  domains: z.string().max(1000),
+  dnt: z.boolean(),
+  afterInteraction: z.boolean(),
+  performance: z.boolean(),
+  recorder: z.boolean(),
+  recorderUrl: z.string().max(600),
+  proxy: z.boolean()
+});
+
+function formatAnalytics(values, req) {
+  const get = (k) => values[analytics.SETTING_KEYS[k]];
+  const cfg = analytics.readConfig({ ...values });
+  return {
+    enabled: get('enabled') === 'true',
+    scriptUrl: get('scriptUrl') || '',
+    websiteId: get('websiteId') || '',
+    domains: get('domains') || '',
+    dnt: get('dnt') !== 'false',
+    afterInteraction: get('afterInteraction') === 'true',
+    performance: get('performance') !== 'false',
+    recorder: get('recorder') === 'true',
+    recorderUrl: get('recorderUrl') || '',
+    proxy: get('proxy') === 'true',
+    defaultDomain: analytics.defaultDomain(req),
+    dashboardUrl: cfg.enabled ? cfg.origin : '',
+    defaultRecorderUrl: cfg.collectBase ? cfg.collectBase + '/recorder.js' : '',
+    proxyScriptPath: analytics.PROXY_SCRIPT_PATH,
+    proxyCollectPath: analytics.PROXY_COLLECT_PATH
+  };
+}
+
+async function readAnalyticsValues(pool) {
+  const keys = Object.values(analytics.SETTING_KEYS);
+  const result = await pool.query('SELECT key, value FROM site_settings WHERE key = ANY($1)', [keys]);
+  const values = { ...analytics.SETTING_DEFAULTS };
+  for (const row of result.rows) {
+    if (row.value !== null && row.value !== undefined) values[row.key] = row.value;
+  }
+  return values;
+}
+
+router.get('/analytics', asyncHandler(async (req, res) => {
+  res.json(formatAnalytics(await readAnalyticsValues(getPool()), req));
+}));
+
+router.put('/analytics', requireCsrf, asyncHandler(async (req, res) => {
+  const parsed = analyticsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Some analytics fields are missing or the wrong type.' });
+  }
+  const checked = analytics.validateSettingsInput(parsed.data);
+  if (!checked.ok) return res.status(400).json({ error: checked.error });
+
+  const pool = getPool();
+  const keys = Object.keys(checked.values);
+  await pool.query(
+    `INSERT INTO site_settings (key, value, updated_at)
+     SELECT k, v, NOW() FROM unnest($1::text[], $2::text[]) AS t(k, v)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [keys, keys.map((k) => checked.values[k])]
+  );
+
+  analytics.clearScriptCache();
+  await refreshSiteSettingsCache();
+  await logEvent(pool, {
+    eventType: 'admin_config_changed',
+    title: 'Analytics settings updated',
+    detail: parsed.data.enabled ? 'analytics on' : 'analytics off'
+  });
+  res.json(formatAnalytics(checked.values, req));
 }));
 
 // ---- custom footer links (v1.2.2 Part F) ----

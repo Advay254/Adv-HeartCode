@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const { asyncHandler } = require('../lib/asyncHandler');
 const { listApprovedPage } = require('../lib/publicReviews');
 const { getActiveBroadcast } = require('../lib/broadcast');
+const { cspOrigins } = require('../lib/analytics');
 
 // v1.2.12: the public /testimonials page. Mounted inside routes/public.js
 // (before its catch-all /:seoSlug route) so the router-wide middleware there
@@ -40,12 +41,28 @@ function faviconOrigin(req, res) {
   return "'self'";
 }
 
+// v1.2.16: when analytics is on, this page's strict policy also allows the
+// tracker (and the recorder, if on) addresses saved in Site Settings, and
+// nothing else. Off, or serving through this site, every slot below is just
+// 'self' again. Helmet calls each function per request and needs one source
+// per function, hence the numbered slots.
+function analyticsSource(kind, index) {
+  return (req, res) => {
+    try {
+      const list = cspOrigins(res.locals.siteSettings, req)[kind];
+      return list[index] || "'self'";
+    } catch (err) {
+      return "'self'";
+    }
+  };
+}
+
 const testimonialsCsp = helmet.contentSecurityPolicy({
   directives: {
     ...cspDefaults,
-    'script-src': ["'self'"],
+    'script-src': ["'self'", analyticsSource('script', 0), analyticsSource('script', 1)],
     'script-src-attr': ["'none'"],
-    'connect-src': ["'self'"],
+    'connect-src': ["'self'", analyticsSource('connect', 0), analyticsSource('connect', 1), analyticsSource('connect', 2)],
     'img-src': ["'self'", 'data:', faviconOrigin],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],
