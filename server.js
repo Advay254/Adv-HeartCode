@@ -43,6 +43,7 @@ const promotionPublicRouter = require('./routes/promotionPublic');
 const adminAdCardsRouter = require('./routes/adminAdCards');
 const reviewRouter = require('./routes/review');
 const { runReviewMaintenance } = require('./lib/reviewJobs');
+const analyticsProxyRouter = require('./routes/analyticsProxy');
 const publicRouter = require('./routes/public');
 const apiBuildRouter = require('./routes/apiBuild');
 const eventsRouter = require('./routes/events');
@@ -221,6 +222,11 @@ app.use((req, res, next) => {
     || req.path.startsWith('/api/embed/') || req.path.startsWith('/go/')) {
     return next();
   }
+  // v1.2.16: the analytics routes have their own generous limit and only
+  // ever drop data when it is hit (routes/analyticsProxy.js).
+  if (req.path === '/hc.js' || req.path.startsWith('/hc/')) {
+    return next();
+  }
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- req.ip alone can land on
   // Cloudflare's own edge address rather than the real visitor's once
   // Cloudflare is in front of a request, which would key this limiter
@@ -261,6 +267,11 @@ app.use('/api/webhooks', webhooksRouter);
 // router). /embed/frame/:token is the one route that overrides the site-wide
 // framing protection above; every other route keeps it.
 app.use(promotionPublicRouter);
+
+// v1.2.16: /hc.js and the optional "serve through this site" routes. Mounted
+// before publicRouter so its catch-all cannot shadow them; each route steps
+// aside (next) whenever analytics or that switch is off.
+app.use(analyticsProxyRouter);
 
 // Combine the unauthenticated login page route with the session-gated
 // dashboard page routes into one router, then hand the whole thing to
