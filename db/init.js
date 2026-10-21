@@ -1589,9 +1589,31 @@ ALTER TABLE promotion_campaigns ADD CONSTRAINT promotion_campaigns_card_source_c
 -- goes with it. Existing reviews keep their name, rating and text; only the
 -- stored picture address disappears.
 ALTER TABLE reviews DROP COLUMN IF EXISTS image_url;
+
+-- v1.2.17: two-step admin login and session idle timeout.
+-- One row only (id is always 1). The authenticator secret is stored encrypted
+-- with ENCRYPTION_KEY (lib/crypto.js); recovery codes are stored only as salted
+-- hashes. totp_last_counter is the newest 30 second step already accepted, so
+-- the same code cannot be used twice.
+CREATE TABLE IF NOT EXISTS admin_security (
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  totp_enabled BOOLEAN NOT NULL DEFAULT false,
+  totp_secret_encrypted TEXT,
+  totp_pending_secret_encrypted TEXT,
+  totp_pending_at TIMESTAMPTZ,
+  totp_last_counter BIGINT NOT NULL DEFAULT 0,
+  recovery_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+INSERT INTO admin_security (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- When a session was last used, written at most about once a minute.
+ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions (expires_at);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_last_used_at ON admin_sessions (last_used_at);
 `;
 
-const CURRENT_VERSION = '1.2.15';
+const CURRENT_VERSION = '1.2.17';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
