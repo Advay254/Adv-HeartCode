@@ -194,7 +194,19 @@
     // the one thing CSRF can't hand them. CSRF is enforced on every
     // state-changing request from the dashboard onward, once a session
     // (and therefore a token) exists.
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    // v1.2.17: with two-step login on, a correct password answers needsCode and
+    // a short-lived single-use token. The same page then asks for the code.
+    let pendingToken = '';
+    const errorEl = document.getElementById('error');
+    const codeForm = document.getElementById('codeForm');
+    const loginForm = document.getElementById('loginForm');
+
+    function showError(text) {
+      errorEl.textContent = text;
+      errorEl.style.display = 'block';
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
       const body = { username: form.username.value, password: form.password.value };
@@ -204,13 +216,47 @@
         body: JSON.stringify(body)
       });
       const data = await res.json();
-      const errorEl = document.getElementById('error');
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.needsCode) {
+        pendingToken = data.pendingToken;
+        form.password.value = '';
+        errorEl.style.display = 'none';
+        loginForm.style.display = 'none';
+        codeForm.style.display = 'block';
+        document.getElementById('codeInput').focus();
+      } else if (res.ok && data.success) {
         window.location.href = '/' + slug + '/';
       } else {
-        errorEl.textContent = data.error || 'Login failed';
-        errorEl.style.display = 'block';
+        showError(data.error || 'Login failed');
       }
+    });
+
+    codeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('codeInput');
+      const res = await fetch('/api/admin/login/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingToken, code: input.value })
+      });
+      const data = await res.json();
+      input.value = '';
+      if (res.ok && data.success) {
+        window.location.href = '/' + slug + '/';
+      } else if (data.restart) {
+        pendingToken = '';
+        codeForm.style.display = 'none';
+        loginForm.style.display = 'block';
+        showError(data.error);
+      } else {
+        showError(data.error || 'Login failed');
+      }
+    });
+
+    document.getElementById('codeBackBtn').addEventListener('click', () => {
+      pendingToken = '';
+      errorEl.style.display = 'none';
+      codeForm.style.display = 'none';
+      loginForm.style.display = 'block';
     });
   }
 
@@ -2864,6 +2910,202 @@
     typeSelect.addEventListener('change', load);
 
     loadTypes().then(load);
+  }
+
+  // ---- security page (v1.2.17) ----
+  function initSecurityPage() {
+    const $ = (id) => document.getElementById(id);
+    const slug = window.location.pathname.split('/')[1];
+
+    function show(el, text, type) {
+      el.textContent = text;
+      el.className = 'admin-msg admin-msg-' + type;
+      el.style.display = 'block';
+    }
+
+    async function copyText(btn, value) {
+      const label = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(value);
+        btn.textContent = 'Copied';
+      } catch (_err) {
+        btn.textContent = 'Copy failed';
+      }
+      setTimeout(() => { btn.textContent = label; }, 1500);
+    }
+
+    async function post(url, body) {
+      const res = await window.adminFetch(url, { method: 'POST', body: JSON.stringify(body || {}) });
+      let data = {};
+      try { data = await res.json(); } catch (_e) { /* no body */ }
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    function notice(text, type) {
+      const p = document.createElement('p');
+      p.className = 'admin-msg admin-msg-' + type;
+      p.textContent = text;
+      $('securityNotices').appendChild(p);
+    }
+
+    let rawSecret = '';
+    let recoveryText = '';
+
+    function render(st) {
+      // notices
+      $('securityNotices').textContent = '';
+      (st.weakSettings || []).forEach((w) => {
+        notice(w.name + ' ' + w.problem + '. Use a long random value (32 or more characters for secrets, 14 or more for the password) in your hosting environment settings.', 'warning');
+      });
+      if (!st.twoStepEnabled && !st.emergencySwitchActive) {
+        notice('Two-step login is off. Anyone who learns the admin password can sign in. Set it up below.', 'warning');
+      }
+      if (st.emergencySwitchActive) {
+        notice('The emergency switch ADMIN_DISABLE_TWO_STEP is set, so the second step is skipped. Remove it from the environment and restart once you are back in, then set two-step login up again.', 'error');
+      }
+      if (!st.encryptionKeySet) {
+        notice('ENCRYPTION_KEY is not set, so two-step login cannot be set up and saved keys cannot be read.', 'error');
+      }
+      if (st.twoStepEnabled && st.secretReadable === false) {
+        notice('The saved authenticator key cannot be read. ENCRYPTION_KEY is missing or has changed since it was saved. App codes will not work. Log in with a recovery code, turn two-step login off, and set it up again, or use the emergency switch.', 'error');
+      }
+
+      // two-step card
+      const badge = $('twoStepBadge');
+      badge.textContent = st.twoStepEnabled ? 'On' : 'Off';
+      badge.className = 'admin-badge ml-2 ' + (st.twoStepEnabled ? 'admin-badge-active' : 'admin-badge-warn');
+      const setupVisible = $('twoStepSetupPanel').style.display !== 'none';
+      const recoveryVisible = $('twoStepRecoveryPanel').style.display !== 'none';
+      $('twoStepOffPanel').style.display = (!st.twoStepEnabled && !setupVisible && !recoveryVisible) ? 'block' : 'none';
+      $('twoStepOnPanel').style.display = (st.twoStepEnabled && !recoveryVisible) ? 'block' : 'none';
+      $('twoStepRecoveryLeft').textContent = st.twoStepEnabled
+        ? st.recoveryRemaining + ' of ' + st.recoveryTotal + ' recovery codes are unused.'
+        : '';
+
+      // sessions
+      $('sessionSummary').textContent = st.sessionCount + ' signed in device' + (st.sessionCount === 1 ? '' : 's')
+        + '. Idle timeout: ' + st.idleMinutes + ' minutes.';
+
+      // login protection
+      $('throttleSummary').textContent = st.slowModeActive
+        ? 'Slow mode is on: ' + st.recentFailedLogins + ' wrong logins in the last 15 minutes (limit ' + st.slowModeThreshold + ').'
+        : 'Normal. ' + st.recentFailedLogins + ' wrong logins in the last 15 minutes (slow mode starts at ' + st.slowModeThreshold + ').';
+      const noteEl = $('alertChannelNote');
+      if (st.alertChannelCount === 0) {
+        noteEl.textContent = 'No webhook or Gotify channel is active, so security alerts are not delivered anywhere. Add one on the Notifications page.';
+        noteEl.style.display = 'block';
+      } else {
+        noteEl.style.display = 'none';
+      }
+    }
+
+    async function load() {
+      const res = await window.adminFetch('/api/admin/security/status');
+      if (!res.ok) return;
+      render(await res.json());
+    }
+
+    $('twoStepBeginBtn').addEventListener('click', async () => {
+      const r = await post('/api/admin/security/two-step/begin');
+      const statusEl = $('twoStepStatus');
+      if (!r.ok) return show(statusEl, r.data.error || 'Could not start the setup.', 'error');
+      statusEl.style.display = 'none';
+      rawSecret = r.data.rawSecret;
+      $('twoStepSecret').value = r.data.secret;
+      $('twoStepOpenAppLink').setAttribute('href', r.data.otpauthUrl);
+      $('twoStepFirstCode').value = '';
+      $('twoStepOffPanel').style.display = 'none';
+      $('twoStepSetupPanel').style.display = 'block';
+    });
+
+    $('twoStepCopySecretBtn').addEventListener('click', (e) => copyText(e.currentTarget, rawSecret));
+
+    $('twoStepCancelBtn').addEventListener('click', async () => {
+      await post('/api/admin/security/two-step/cancel');
+      rawSecret = '';
+      $('twoStepSecret').value = '';
+      $('twoStepSetupPanel').style.display = 'none';
+      $('twoStepStatus').style.display = 'none';
+      load();
+    });
+
+    $('twoStepEnableBtn').addEventListener('click', async () => {
+      const r = await post('/api/admin/security/two-step/enable', { code: $('twoStepFirstCode').value });
+      const statusEl = $('twoStepStatus');
+      if (!r.ok) return show(statusEl, r.data.error || 'Could not turn it on.', 'error');
+      rawSecret = '';
+      $('twoStepSecret').value = '';
+      $('twoStepSetupPanel').style.display = 'none';
+      recoveryText = r.data.recoveryCodes.join('\n');
+      $('twoStepRecoveryList').textContent = recoveryText;
+      $('twoStepRecoveryPanel').style.display = 'block';
+      show(statusEl, 'Two-step login is on. Save your recovery codes now, they will not be shown again.', 'success');
+      load();
+    });
+
+    $('twoStepCopyRecoveryBtn').addEventListener('click', (e) => copyText(e.currentTarget, recoveryText));
+
+    $('twoStepRecoveryDoneBtn').addEventListener('click', () => {
+      recoveryText = '';
+      $('twoStepRecoveryList').textContent = '';
+      $('twoStepRecoveryPanel').style.display = 'none';
+      $('twoStepStatus').style.display = 'none';
+      load();
+    });
+
+    $('regenBtn').addEventListener('click', async () => {
+      if (!confirm('Make 10 new recovery codes? Every old code stops working.')) return;
+      const r = await post('/api/admin/security/two-step/recovery-codes', {
+        password: $('regenPassword').value,
+        code: $('regenCode').value
+      });
+      const statusEl = $('twoStepStatus');
+      $('regenPassword').value = '';
+      $('regenCode').value = '';
+      if (!r.ok) return show(statusEl, r.data.error || 'Could not make new codes.', 'error');
+      recoveryText = r.data.recoveryCodes.join('\n');
+      $('twoStepRecoveryList').textContent = recoveryText;
+      $('twoStepRecoveryPanel').style.display = 'block';
+      $('twoStepOnPanel').style.display = 'none';
+      show(statusEl, 'New recovery codes made. Save them now, they will not be shown again.', 'success');
+    });
+
+    $('disableBtn').addEventListener('click', async () => {
+      if (!confirm('Turn off two-step login? The admin will be protected by the password alone.')) return;
+      const r = await post('/api/admin/security/two-step/disable', {
+        password: $('disablePassword').value,
+        code: $('disableCode').value
+      });
+      const statusEl = $('twoStepStatus');
+      $('disablePassword').value = '';
+      $('disableCode').value = '';
+      if (!r.ok) return show(statusEl, r.data.error || 'Could not turn it off.', 'error');
+      show(statusEl, 'Two-step login is off.', 'success');
+      load();
+    });
+
+    async function endSessions(path, confirmText, done) {
+      if (!confirm(confirmText)) return;
+      const r = await post(path, { password: $('sessionPassword').value });
+      $('sessionPassword').value = '';
+      const statusEl = $('sessionStatus');
+      if (!r.ok) return show(statusEl, r.data.error || 'Could not end the sessions.', 'error');
+      done(r.data, statusEl);
+    }
+
+    $('logoutOthersBtn').addEventListener('click', () => endSessions(
+      '/api/admin/security/sessions/logout-others',
+      'Sign out every other device? This device stays signed in.',
+      (data, statusEl) => { show(statusEl, data.ended + ' other session(s) ended.', 'success'); load(); }
+    ));
+
+    $('logoutAllBtn').addEventListener('click', () => endSessions(
+      '/api/admin/security/sessions/logout-all',
+      'Sign out everywhere, including this device?',
+      () => { window.location.href = '/' + slug + '/login'; }
+    ));
+
+    load();
   }
 
   // ---- site settings page (v1.0.7) ----
@@ -5641,6 +5883,7 @@
     if (page === 'reviews') initReviewsPage();
     if (page === 'funnel') initFunnelPage();
     if (page === 'site-settings') initSiteSettingsPage();
+    if (page === 'security') initSecurityPage();
     if (page === 'scripts') initScriptsPage();
     if (page === 'landing-page') initLandingPagePage();
     if (page === 'landing-sections') initLandingSectionsPage();
