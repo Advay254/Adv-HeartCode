@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Security | HeartCode Admin</title>
+</head>
+<body data-page="security">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'security' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro"><div><p class="admin-eyebrow">System</p><h1>Security</h1><p>Protect the admin login with a second step from an authenticator app, and control which devices stay signed in. Nothing on this page shows a password, a secret or a key after it is saved.</p></div></section>
+
+    <!-- Notices: weak settings, two-step off, emergency switch, key problems. Same warning message style the other admin pages use. -->
+    <div id="securityNotices"></div>
+
+    <div class="admin-settings-grid">
+
+    <div class="admin-card admin-settings-card" id="twoStepCard">
+      <h2 class="text-sm font-semibold text-hc-ink">Two-step login <span id="twoStepBadge" class="admin-badge ml-2">...</span></h2>
+      <p class="mt-1 text-sm text-gray-500">After the password, the login asks for a 6 digit code from an authenticator app such as Google Authenticator, Microsoft Authenticator or Aegis. Each code works once.</p>
+
+      <!-- Off: start setup -->
+      <div id="twoStepOffPanel" style="display:none;">
+        <button type="button" id="twoStepBeginBtn" class="admin-btn mt-4">Set up two-step login</button>
+      </div>
+
+      <!-- Setup in progress -->
+      <div id="twoStepSetupPanel" style="display:none;">
+        <label class="admin-label" for="twoStepSecret">Setup key</label>
+        <div class="flex items-center gap-2">
+          <input class="admin-input font-mono" type="text" id="twoStepSecret" readonly>
+          <button type="button" id="twoStepCopySecretBtn" class="admin-btn-outline admin-btn-sm shrink-0">Copy</button>
+        </div>
+        <p class="mt-1 text-xs text-gray-500">In your authenticator app choose to add an account with a setup key, paste this key, and keep the type as time based. On this phone you can also use the button below to open the app directly.</p>
+        <a id="twoStepOpenAppLink" class="admin-btn-outline admin-btn-sm mt-3 [&>svg]:h-4 [&>svg]:w-4" href="#" rel="noopener noreferrer">Open in authenticator app <%- getIconSvg('external-link') %></a>
+
+        <label class="admin-label" for="twoStepFirstCode">First code from your app</label>
+        <input class="admin-input" type="text" id="twoStepFirstCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456">
+        <p class="mt-1 text-xs text-gray-500">Two-step login only turns on once this code is right. Make sure the time on your phone is set to automatic.</p>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" id="twoStepEnableBtn" class="admin-btn">Turn on</button>
+          <button type="button" id="twoStepCancelBtn" class="admin-btn-outline">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Recovery codes, shown once -->
+      <div id="twoStepRecoveryPanel" style="display:none;">
+        <h3 class="mt-4 text-sm font-semibold text-hc-ink">Your recovery codes</h3>
+        <p class="mt-1 text-sm text-gray-500">Each code works once if you lose your phone. They will not be shown again. Copy them now and keep them somewhere safe.</p>
+        <pre id="twoStepRecoveryList" class="admin-code-area mt-2 font-mono text-sm whitespace-pre-wrap" style="min-height:0;"></pre>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" id="twoStepCopyRecoveryBtn" class="admin-btn-outline admin-btn-sm">Copy all</button>
+          <button type="button" id="twoStepRecoveryDoneBtn" class="admin-btn admin-btn-sm">I have saved them</button>
+        </div>
+      </div>
+
+      <!-- On: manage -->
+      <div id="twoStepOnPanel" style="display:none;">
+        <p class="mt-3 text-sm text-gray-500" id="twoStepRecoveryLeft"></p>
+
+        <h3 class="mt-4 text-sm font-semibold text-hc-ink">New recovery codes</h3>
+        <p class="mt-1 text-xs text-gray-500">Makes 10 new codes and cancels every old one. Needs your password and a current code.</p>
+        <label class="admin-label" for="regenPassword">Password</label>
+        <input class="admin-input" type="password" id="regenPassword" autocomplete="current-password">
+        <label class="admin-label" for="regenCode">Current code</label>
+        <input class="admin-input" type="text" id="regenCode" autocomplete="one-time-code" maxlength="40">
+        <button type="button" id="regenBtn" class="admin-btn-outline mt-3">Make new recovery codes</button>
+
+        <h3 class="mt-5 text-sm font-semibold text-hc-ink">Turn off two-step login</h3>
+        <p class="mt-1 text-xs text-gray-500">Needs your password and a current code.</p>
+        <label class="admin-label" for="disablePassword">Password</label>
+        <input class="admin-input" type="password" id="disablePassword" autocomplete="current-password">
+        <label class="admin-label" for="disableCode">Current code</label>
+        <input class="admin-input" type="text" id="disableCode" autocomplete="one-time-code" maxlength="40">
+        <button type="button" id="disableBtn" class="admin-btn-danger mt-3">Turn off</button>
+      </div>
+
+      <p id="twoStepStatus" class="admin-msg" style="display:none;"></p>
+
+      <h3 class="mt-5 text-sm font-semibold text-hc-ink">Lost your phone and your recovery codes?</h3>
+      <p class="mt-1 text-xs text-gray-500">In your hosting environment settings add <code>ADMIN_DISABLE_TWO_STEP=true</code> and restart. The second step is then skipped and the saved setup is cleared, so the password alone gets you in. Log in, remove that setting, restart, and set two-step login up again here. The app prints a warning at startup while it is set.</p>
+    </div>
+
+    <div class="admin-card admin-settings-card">
+      <h2 class="text-sm font-semibold text-hc-ink">Signed in devices</h2>
+      <p class="mt-1 text-sm text-gray-500" id="sessionSummary">Loading...</p>
+      <p class="mt-1 text-xs text-gray-500">A session ends after it is idle for the time above, or after 24 hours in total, whichever comes first.</p>
+      <label class="admin-label" for="sessionPassword">Password</label>
+      <input class="admin-input" type="password" id="sessionPassword" autocomplete="current-password">
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" id="logoutOthersBtn" class="admin-btn-outline">Log out other devices</button>
+        <button type="button" id="logoutAllBtn" class="admin-btn-danger">Log out everywhere</button>
+      </div>
+      <p id="sessionStatus" class="admin-msg" style="display:none;"></p>
+    </div>
+
+    <div class="admin-card admin-settings-card">
+      <h2 class="text-sm font-semibold text-hc-ink">Login protection</h2>
+      <p class="mt-1 text-sm text-gray-500" id="throttleSummary">Loading...</p>
+      <p class="mt-1 text-xs text-gray-500">Five wrong tries from one address lock that address out for 15 minutes. If wrong logins pile up across all addresses, every login waits a couple of seconds, but a correct login always still works. Alerts for this, and for security changes, go to your webhook and Gotify channels on the Notifications page.</p>
+      <p id="alertChannelNote" class="admin-msg admin-msg-warning" style="display:none;"></p>
+    </div>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

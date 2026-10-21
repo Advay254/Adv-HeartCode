@@ -28,6 +28,14 @@
 
         <button type="submit" class="admin-btn mt-4 w-full">Log in</button>
       </form>
+      <!-- v1.2.17: shown after a correct password when two-step login is on. -->
+      <form id="codeForm" style="display:none;">
+        <label class="admin-label" for="codeInput">Authentication code</label>
+        <input class="admin-input" type="text" name="code" id="codeInput" autocomplete="one-time-code" maxlength="40" required>
+        <p class="mt-1 text-xs text-gray-500">Enter the 6 digit code from your authenticator app, or one of your recovery codes.</p>
+        <button type="submit" class="admin-btn mt-4 w-full">Verify</button>
+        <button type="button" id="codeBackBtn" class="admin-btn-outline mt-2 w-full">Back</button>
+      </form>
       <p id="error" class="admin-msg admin-msg-error" style="display:none;"></p>
     </div>
   </div>
