@@ -21,6 +21,13 @@ const adminHostingRouter = require('./routes/adminHosting');
 const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
+const adminSecurityRouter = require('./routes/adminSecurity');
+const adminSecurityLib = require('./lib/adminSecurity');
+const loginThrottle = require('./lib/loginThrottle');
+const { logStartupWarnings } = require('./lib/securityWarnings');
+const clientIpConfig = require('./lib/clientIp');
+const { cleanupSessions } = require('./lib/auth');
+const { notifyAdminAlert } = require('./lib/notifications');
 const adminWebsiteTypesRouter = require('./routes/adminWebsiteTypes');
 const adminCategoriesRouter = require('./routes/adminCategories');
 const adminFaqRouter = require('./routes/adminFaq');
@@ -379,6 +386,7 @@ app.use('/api/admin/hosting', adminHostingRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
+app.use('/api/admin/security', adminSecurityRouter);
 app.use('/api/admin/website-types', adminWebsiteTypesRouter);
 app.use('/api/admin/categories', adminCategoriesRouter);
 app.use('/api/admin/faq', adminFaqRouter);
@@ -576,6 +584,15 @@ function startCleanupJob() {
   setInterval(async () => {
     const pool = getPool();
 
+    // v1.2.17: expired and idle admin sessions are deleted here, not only
+    // when someone presents one.
+    try {
+      const removed = await cleanupSessions(pool);
+      if (removed > 0) console.log(`[CLEANUP] Removed ${removed} expired or idle admin session(s).`);
+    } catch (err) {
+      console.error('[CLEANUP] Failed to sweep admin sessions:', err.message);
+    }
+
     try {
       const pendingCutoff = new Date(Date.now() - PENDING_DEPLOYMENT_RETENTION_MS);
       const result = await pool.query(
@@ -674,6 +691,28 @@ async function start() {
   // lib/emailProvider.js's own doc comment for exactly what this does and
   // why it never throws.
   await seedEmailProviderFromEnvIfNeeded();
+
+  // v1.2.17: security setup. None of this can stop the app from starting.
+  let twoStepOn = false;
+  try {
+    const pool = getPool();
+    await adminSecurityLib.applyEmergencySwitchAtStartup(pool);
+    twoStepOn = await adminSecurityLib.isTwoStepActive(pool);
+    const removed = await cleanupSessions(pool);
+    if (removed > 0) console.log(`[CLEANUP] Removed ${removed} expired or idle admin session(s) at startup.`);
+  } catch (err) {
+    console.error('[SECURITY] Startup security checks hit a problem (the app keeps starting):', err.message);
+  }
+  try {
+    logStartupWarnings(twoStepOn);
+    const ipProblems = clientIpConfig.describeConfigProblems();
+    ipProblems.forEach((line) => console.warn(`[SECURITY] ${line}`));
+    const ipInfo = clientIpConfig.describeConfig();
+    console.log(`[SECURITY] Visitor address: Cloudflare header mode "${ipInfo.mode}", ${ipInfo.rangeCount} Cloudflare ranges (${ipInfo.rangesFrom}).`);
+  } catch (err) {
+    console.error('[SECURITY] Could not print startup warnings:', err.message);
+  }
+  loginThrottle.startThrottleSweep((payload) => notifyAdminAlert(payload));
 
   startCleanupJob();
   startExchangeRateRefreshJob();

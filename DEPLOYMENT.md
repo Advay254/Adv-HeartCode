@@ -101,6 +101,10 @@ See the README's environment variables section for what each one does, its failu
 8. **Notifications** (new in v1.1.2) - add up to 3 email addresses, 1 webhook, and 1 Gotify server to get pinged the moment a sale completes. Send a real test notification from each channel's card before relying on it. Optional - the app works fine with zero channels configured, you just won't be alerted.
 9. **Site Settings → Resend site details** (new in v1.1.2) - controls how many times per day a single visitor can use the public `/resend-details` page (default: once). Raise it if 1/day feels too strict for your traffic; effective on the very next request, no redeploy needed.
 
+### Two-step login emergency switch (v1.2.17)
+
+If you lose both your authenticator app and your recovery codes, add `ADMIN_DISABLE_TWO_STEP=true` to the environment and restart. The second step is skipped and its saved setup is cleared. Log in with your password, remove the setting, restart, and set two-step login up again on the Security page. The app prints a warning at startup while the switch is set.
+
 ## Troubleshooting
 
 **Deploy crashes immediately / logs show `[SERVER] Database init failed`**
