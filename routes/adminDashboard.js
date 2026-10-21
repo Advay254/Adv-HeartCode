@@ -6,6 +6,7 @@ const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { createRateLimiter } = require('../lib/rateLimit');
 const dq = require('../lib/deploymentQueries');
+const { getRealClientIp } = require('../lib/clientIp');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -109,7 +110,7 @@ router.get('/deployments/facets', asyncHandler(async (req, res) => {
 const deploymentExportLimiter = createRateLimiter({ max: 6, windowMs: 60 * 1000 });
 
 router.get('/deployments/export', asyncHandler(async (req, res) => {
-  if (!deploymentExportLimiter.tryConsume(req.ip || 'unknown')) {
+  if (!deploymentExportLimiter.tryConsume(getRealClientIp(req))) {
     return res.status(429).json({ error: 'Too many exports. Wait a minute and try again.' });
   }
   const parsed = dq.filtersSchema.safeParse(req.query);

@@ -6,20 +6,22 @@ const {
   timingSafeEqual,
   createSession,
   destroySession,
-  sessionCookieOptions
+  sessionCookieOptions,
+  SESSION_MAX_AGE_SECONDS
 } = require('../lib/auth');
 const { requireAdminSession, COOKIE_NAME, getSessionCookie } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { INTERNAL_ADMIN_PREFIX } = require('../middleware/adminSlug');
-const { getRealClientIp } = require('../lib/clientIp');
+const { getRateLimitKey } = require('../lib/clientIp');
+const throttle = require('../lib/loginThrottle');
+const pendingStep = require('../lib/loginPending');
+const adminSecurity = require('../lib/adminSecurity');
+const { notifyAdminAlert } = require('../lib/notifications');
 
-// v1.1.4: shortened from 7 days to 24 hours -- deliberate security
-// hardening (the admin panel controls real payment and AI provider
-// credentials), not a bug fix. Must stay in lock-step with
-// lib/auth.js's createSession() expiresAt calculation -- both are changed
-// together here so the DB-stored session expiry and the cookie's maxAge
-// never drift apart into a confusing "one expires before the other" state.
-const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;
+// The session lifetime (24 hours) lives in lib/auth.js as
+// SESSION_MAX_AGE_SECONDS and is used for BOTH the database expiry and this
+// cookie's maxAge, so the two cannot drift apart. v1.2.17 adds an idle timeout
+// on top (lib/auth.js getIdleTimeoutMs).
 
 // Gap this closes: previously just `typeof username === 'string'`, with no
 // length bound at all — an unbounded string could be sent as either field
@@ -31,54 +33,14 @@ const loginBodySchema = z.object({
   password: z.string().min(1).max(200)
 });
 
-// ---- brute-force protection (in-memory) ----
-// Resets on server restart, and only scopes per running process — both
-// acceptable at this stage. Move to a DB-backed counter (e.g. a
-// login_attempts table keyed by IP) if this becomes a real concern at scale
-// or once the app runs across multiple instances.
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000;
-const LOCKOUT_MS = 15 * 60 * 1000;
-const attemptsByIp = new Map(); // ip -> { count, firstAttemptAt, lockedUntil }
+// ---- brute-force protection ----
+// All of it lives in lib/loginThrottle.js (per address limit, bounded memory,
+// global slow mode). It is per running copy of the app and resets on restart.
 
-function isLockedOut(ip) {
-  const record = attemptsByIp.get(ip);
-  if (!record) return false;
-
-  const now = Date.now();
-
-  if (record.lockedUntil) {
-    if (now < record.lockedUntil) return true;
-    attemptsByIp.delete(ip);
-    return false;
-  }
-
-  if (now - record.firstAttemptAt > WINDOW_MS) {
-    attemptsByIp.delete(ip);
-    return false;
-  }
-
-  return false;
-}
-
-function recordFailure(ip) {
-  const now = Date.now();
-  const record = attemptsByIp.get(ip);
-
-  if (!record || now - record.firstAttemptAt > WINDOW_MS) {
-    attemptsByIp.set(ip, { count: 1, firstAttemptAt: now, lockedUntil: null });
-    return;
-  }
-
-  record.count += 1;
-  if (record.count >= MAX_ATTEMPTS) {
-    record.lockedUntil = now + LOCKOUT_MS;
-  }
-}
-
-function clearFailures(ip) {
-  attemptsByIp.delete(ip);
-}
+const codeBodySchema = z.object({
+  pendingToken: z.string().min(1).max(200),
+  code: z.string().min(1).max(40)
+});
 
 // ---- page router ----
 // Only ever reached via adminSlugMiddleware — never mounted with app.use(),
@@ -97,19 +59,35 @@ pageRouter.get(`${INTERNAL_ADMIN_PREFIX}/login`, (req, res) => {
 // bind a CSRF token to — see the comment in views/admin/login.ejs).
 const apiRouter = express.Router();
 
-apiRouter.post('/login', asyncHandler(async (req, res) => {
-  // v1.1.9 hotfix Part 2: see lib/clientIp.js -- the lockout must key off
-  // the real visitor IP, not Cloudflare's edge address, or every visitor
-  // behind Cloudflare would share one lockout bucket.
-  const ip = getRealClientIp(req);
+async function startSession(res) {
+  const pool = getPool();
+  const { cookieValue } = await createSession(pool, process.env.SESSION_SECRET);
+  const cookieOptions = sessionCookieOptions(SESSION_MAX_AGE_SECONDS);
 
-  if (isLockedOut(ip)) {
+  // sessionCookieOptions() returns maxAge in seconds (matching its
+  // maxAgeSeconds parameter name); Express's res.cookie() expects
+  // milliseconds, so the conversion happens only here, at the one place
+  // that actually calls res.cookie().
+  res.cookie(COOKIE_NAME, cookieValue, { ...cookieOptions, maxAge: cookieOptions.maxAge * 1000 });
+}
+
+apiRouter.post('/login', asyncHandler(async (req, res) => {
+  // v1.2.17: the counting key comes from lib/clientIp.js, which only believes
+  // the Cloudflare header when the request really arrived from Cloudflare.
+  const key = getRateLimitKey(req);
+
+  if (throttle.isLockedOut(key)) {
     return res.status(429).json({ error: 'Too many attempts, try again later' });
   }
 
+  // Slow mode: when many wrong logins are arriving from anywhere, every
+  // attempt waits a couple of seconds, right or wrong. A correct login still
+  // works. Same wait whatever the outcome, so it reveals nothing.
+  await throttle.applySlowModeDelay();
+
   const parsed = loginBodySchema.safeParse(req.body);
   if (!parsed.success) {
-    recordFailure(ip);
+    throttle.recordFailure(key);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   const { username, password } = parsed.data;
@@ -120,34 +98,88 @@ apiRouter.post('/login', asyncHandler(async (req, res) => {
   // to protect a *stored* credential (e.g. a database of many users'
   // hashed passwords) from offline cracking if that storage leaks. There's
   // no such storage here: this is one admin credential living only in
-  // Render's env vars, never written to a database — if that env var
+  // the host's environment settings, never written to a database. If that env var
   // itself ever leaked, hashing it after the fact wouldn't have protected
-  // the original plaintext sitting in Render's dashboard either way. Rate
+  // the original plaintext sitting in the host's dashboard either way. Rate
   // limiting below is what actually protects against online brute-forcing,
   // which is the threat that applies to this shape of credential.
   //
   // .trim() guards against invisible leading/trailing whitespace ending up
   // in the env var — an easy silent failure mode when values are
-  // copy-pasted on mobile (e.g. into Render's dashboard) rather than typed.
+  // copy-pasted on mobile (e.g. into a host's dashboard) rather than typed.
   const usernameOk = timingSafeEqual(username, (process.env.ADMIN_USERNAME || '').trim());
   const passwordOk = timingSafeEqual(password, (process.env.ADMIN_PASSWORD || '').trim());
 
   if (!usernameOk || !passwordOk) {
-    recordFailure(ip);
+    throttle.recordFailure(key);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  clearFailures(ip);
+  const pool = getPool();
+  let twoStep = false;
+  try {
+    twoStep = await adminSecurity.isTwoStepActive(pool);
+  } catch (err) {
+    // If the setting cannot be read, fail closed: no session, clear message.
+    console.error('[AUTH] Could not read the two-step setting:', err.message);
+    return res.status(503).json({ error: 'Login is temporarily unavailable' });
+  }
+
+  if (twoStep) {
+    // The failure count is NOT cleared here. It is only cleared once the code
+    // step also succeeds, so a correct password cannot be used to reset the
+    // count between wrong code guesses.
+    const step = pendingStep.createPending();
+    return res.json({ success: true, needsCode: true, pendingToken: step.token, expiresInSeconds: step.expiresInSeconds });
+  }
+
+  throttle.clearFailures(key);
+  await startSession(res);
+  res.json({ success: true });
+}));
+
+// Second step. Accepts an app code or an unused recovery code. A wrong code
+// counts as a failed attempt in the same limits as a wrong password.
+apiRouter.post('/login/code', asyncHandler(async (req, res) => {
+  const key = getRateLimitKey(req);
+
+  if (throttle.isLockedOut(key)) {
+    return res.status(429).json({ error: 'Too many attempts, try again later' });
+  }
+  await throttle.applySlowModeDelay();
+
+  const parsed = codeBodySchema.safeParse(req.body);
+  if (!parsed.success || !pendingStep.hasPending(parsed.data.pendingToken)) {
+    if (parsed.success) throttle.recordFailure(key);
+    return res.status(401).json({ error: 'That sign-in step expired. Enter your username and password again.', restart: true });
+  }
+  const { pendingToken, code } = parsed.data;
 
   const pool = getPool();
-  const { cookieValue } = await createSession(pool, process.env.SESSION_SECRET);
-  const cookieOptions = sessionCookieOptions(SESSION_MAX_AGE_SECONDS);
+  const result = await adminSecurity.verifyLoginCode(pool, code);
 
-  // sessionCookieOptions() returns maxAge in seconds (matching its
-  // maxAgeSeconds parameter name); Express's res.cookie() expects
-  // milliseconds, so the conversion happens only here, at the one place
-  // that actually calls res.cookie().
-  res.cookie(COOKIE_NAME, cookieValue, { ...cookieOptions, maxAge: cookieOptions.maxAge * 1000 });
+  if (!result.ok) {
+    throttle.recordFailure(key);
+    pendingStep.recordWrongCode(pendingToken);
+    if (result.reason === 'unreadable') {
+      return res.status(401).json({ error: 'Authenticator codes cannot be read right now (the encryption key may have changed). Use a recovery code instead.' });
+    }
+    return res.status(401).json({ error: 'Invalid code' });
+  }
+
+  pendingStep.consumePending(pendingToken);
+  throttle.clearFailures(key);
+  await startSession(res);
+
+  if (result.method === 'recovery') {
+    const row = await adminSecurity.getRow(pool);
+    notifyAdminAlert({
+      event: 'recovery_code_used',
+      title: 'Recovery code used',
+      message: `A two-step recovery code was used to log in to the admin. ${adminSecurity.recoveryRemaining(row)} unused recovery codes are left.`
+    }).catch(() => {});
+  }
+
   res.json({ success: true });
 }));
 

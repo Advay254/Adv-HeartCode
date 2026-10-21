@@ -186,8 +186,11 @@ router.get('/geo-diagnostic', asyncHandler(async (req, res) => {
       ipSource: usedManualOverride ? 'manual-override' : clientIpInfo.source,
       // The raw CF-Connecting-IP header value, or null if Cloudflare
       // didn't set it on this request at all.
-      cfConnectingIpHeader: (typeof req.headers['cf-connecting-ip'] === 'string' && req.headers['cf-connecting-ip'])
-        || null,
+      cfConnectingIpHeader: clientIpInfo.cfConnectingIpHeader,
+      // v1.2.17: whether the header was believed, which depends on the request
+      // really coming from a Cloudflare address (see lib/clientIp.js).
+      requestFromCloudflare: clientIpInfo.peerIsCloudflare,
+      clientIpMode: clientIpInfo.mode,
       // v1.1.9 hotfix Part 1: raw proxy-chain visibility, added after a
       // real trust-proxy misconfiguration (see server.js's trust proxy
       // comment) made req.ip resolve to a private/internal address for
@@ -198,8 +201,8 @@ router.get('/geo-diagnostic', asyncHandler(async (req, res) => {
       // clear signal that trust proxy isn't trusting enough of the chain.
       // Kept alongside the CF-specific fields above since a regression
       // could in principle come from either layer.
-      rawForwardedFor: req.headers['x-forwarded-for'] || null,
-      trustedHopChain: req.ips
+      rawForwardedFor: clientIpInfo.forwardedForHeader,
+      trustedHopChain: clientIpInfo.trustedHops
     });
   } catch (err) {
     console.error('[ADMIN-SETTINGS] Geo diagnostic failed unexpectedly:', err.message);
