@@ -14,7 +14,7 @@ Before v1.2.19 the build step sent the finished page HTML to the visitor's brows
 ## Limits
 
 - Per address: unchanged, 20 builds an hour (5 for AI types) and 5 checkouts an hour, keyed by the corrected visitor address helper.
-- Stored renders: at most 1000 at once and 250 MB of HTML in total (`RENDER_MAX_STORED`, `RENDER_MAX_TOTAL_MB`), each at most 12 million characters, expiring after 120 minutes (`RENDER_TTL_MINUTES`). Past a cap a build answers "We are very busy building pages right now".
+- Stored renders: at most 1000 at once and 250 MB of HTML in total , each at most 12 million characters, expiring after 120 minutes. Past a cap a build answers "We are very busy building pages right now".
 - The checkout request body limit is 10 KB (it was 16 MB).
 
 ## Dangerous links
