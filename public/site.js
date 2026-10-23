@@ -3,10 +3,13 @@
 
   function draftKey(slug) { return STORAGE_PREFIX + 'draft_' + slug; }
   function previewKey(slug) { return STORAGE_PREFIX + 'preview_' + slug; }
-  // v1.0.9: carries the AI's raw output JSON (when this type is
-  // AI-enabled) from the generate call through to checkout, the same way
-  // previewKey already carries the rendered html — see routes/apiBuild.js
-  // and lib/emailTemplates.js for why the email template needs this too.
+  // v1.2.19: the id of the page the SERVER stored when it built this site.
+  // Checkout sends only this id (never HTML or field values), so what is
+  // deployed is always what the server itself stored. The preview html in
+  // previewKey is only used to show the preview.
+  function renderKey(slug) { return STORAGE_PREFIX + 'render_' + slug; }
+  // Older versions kept the AI output here. It is no longer sent anywhere;
+  // the key is only cleared so no stale value lingers.
   function aiOutputKey(slug) { return STORAGE_PREFIX + 'aiout_' + slug; }
 
   // Deliberately simple — just enough to catch obvious typos before a
@@ -287,13 +290,11 @@
           }
           try {
             sessionStorage.setItem(previewKey(slug), result.data.html);
-            // aiOutputValues is only present for AI-enabled types (see
-            // routes/apiBuild.js) — clear any stale value from a previous
-            // draft/type before conditionally re-setting it, so a
-            // non-AI type never carries forward a leftover value.
             sessionStorage.removeItem(aiOutputKey(slug));
-            if (result.data.aiOutputValues) {
-              sessionStorage.setItem(aiOutputKey(slug), JSON.stringify(result.data.aiOutputValues));
+            if (result.data.renderId) {
+              sessionStorage.setItem(renderKey(slug), result.data.renderId);
+            } else {
+              sessionStorage.removeItem(renderKey(slug));
             }
           } catch (err) {
             showError('Your browser blocked local storage, so the preview can\'t be shown. Please enable storage and try again.');
@@ -465,6 +466,7 @@
     var slug = document.body.dataset.slug;
     var html = sessionStorage.getItem(previewKey(slug));
     var draftRaw = sessionStorage.getItem(draftKey(slug));
+    var renderId = sessionStorage.getItem(renderKey(slug));
 
     // No generated site or no draft in this session — nothing to check
     // out. Send them back to fill in the form rather than showing a
@@ -495,51 +497,45 @@
       payBtn.textContent = 'Pay Now';
     }
 
+    var REBUILD_TEXT = 'Your page preview has expired or was made before an update. Please go back and build your page again, it only takes a moment.';
+
+    // v1.2.19: when the server no longer has this page (expired, or the page
+    // was opened before an update), say so plainly and turn the button into a
+    // way back to the form. The details already typed are still there.
+    function offerRebuild(text) {
+      showError(text || REBUILD_TEXT);
+      try { sessionStorage.removeItem(renderKey(slug)); } catch (err) { /* nothing to clear */ }
+      payBtn.disabled = false;
+      payBtn.textContent = 'Build my page again';
+      payBtn.setAttribute('data-rebuild', '1');
+    }
+
+    if (!renderId) {
+      offerRebuild();
+    }
+
     payBtn.addEventListener('click', function () {
+      if (payBtn.getAttribute('data-rebuild') === '1') {
+        window.location.href = '/build/' + encodeURIComponent(slug);
+        return;
+      }
       errorEl.style.display = 'none';
       payBtn.disabled = true;
       payBtn.textContent = 'Processing…';
 
       var sitePasswordInput = document.getElementById('sitePassword');
-      // v1.0.8 Part B: `draft` already holds every raw field value (it's
-      // the exact object initBuildPage's saveDraft() wrote) — strip out
-      // client_email (sent separately, not a template/slug field) and
-      // forward the rest as rawFieldValues so lib/deploySlug.js has real
-      // data to resolve a custom deploy_slug_pattern against, later, at
-      // actual deploy time.
-      var rawFieldValues = {};
-      Object.keys(draft).forEach(function (key) {
-        if (key !== 'client_email') rawFieldValues[key] = draft[key];
-      });
-
-      // v1.0.9: only present for AI-enabled types (see initBuildPage above)
-      // — omitted from the payload entirely when absent, same as any other
-      // optional field, rather than sending an explicit null.
-      var aiOutputRaw = sessionStorage.getItem(aiOutputKey(slug));
-      var aiOutputValues = null;
-      if (aiOutputRaw) {
-        try {
-          aiOutputValues = JSON.parse(aiOutputRaw);
-        } catch (err) {
-          aiOutputValues = null;
-        }
-      }
-
+      // v1.2.19: only the render id travels to the server, with the email, the
+      // optional site password and the funnel session id. The server loads the
+      // page it stored when it built the site.
       var payload = {
-        renderedHtml: html,
+        renderId: renderId,
         clientEmail: draft.client_email,
-        sitePassword: sitePasswordInput ? sitePasswordInput.value : '',
-        rawFieldValues: rawFieldValues
+        sitePassword: sitePasswordInput ? sitePasswordInput.value : ''
       };
-      if (aiOutputValues) payload.aiOutputValues = aiOutputValues;
       // v1.1.0 Part B: threads this visit's anonymous funnel session id
-      // through to pending_deployments.funnel_session_id, so the
-      // server-side 'payment_completed' event (lib/finalizeDeployment.js
-      // — deliberately never accepted from a client-submitted event, see
-      // routes/events.js) can be attached to the same session as the rest
-      // of this visit's funnel. Guarded the same way as hcTrackEvent
-      // above — omitted entirely if funnel.js somehow isn't loaded, never
-      // a reason to block checkout.
+      // through to pending_deployments.funnel_session_id so the server-side
+      // 'payment_completed' event can be attached to the same session.
+      // Omitted entirely if funnel.js somehow isn't loaded.
       if (typeof window.hcGetSessionId === 'function') {
         payload.sessionId = window.hcGetSessionId();
       }
@@ -554,6 +550,10 @@
         })
         .then(function (result) {
           if (!result.ok) {
+            if (result.data && result.data.rebuild) {
+              offerRebuild(result.data.error);
+              return;
+            }
             showError(result.data.error || 'Could not start checkout. Please try again.');
             resetButton();
             return;
