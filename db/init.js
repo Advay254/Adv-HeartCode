@@ -1611,9 +1611,92 @@ INSERT INTO admin_security (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions (expires_at);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_last_used_at ON admin_sessions (last_used_at);
+
+-- v1.2.18: withdrawals from the Paystack balance.
+-- Recipients hold only a masked number and Paystack's recipient code; the full
+-- number is never stored here. usable_at is fixed when the recipient is added.
+CREATE TABLE IF NOT EXISTS withdrawal_recipients (
+  id SERIAL PRIMARY KEY,
+  label VARCHAR(60) NOT NULL,
+  recipient_type VARCHAR(20) NOT NULL CHECK (recipient_type IN ('mpesa', 'till', 'bank')),
+  bank_code VARCHAR(30) NOT NULL,
+  bank_name VARCHAR(120),
+  currency CHAR(3) NOT NULL,
+  account_name VARCHAR(120) NOT NULL,
+  paystack_recipient_code VARCHAR(60) NOT NULL UNIQUE,
+  masked_number VARCHAR(24) NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  usable_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_recipients_status ON withdrawal_recipients (status, added_at DESC);
+
+-- One row per withdrawal, written BEFORE Paystack is called. amount, fee and
+-- balance_before are whole numbers in the smallest unit. submit_key makes a
+-- repeated submission of the same review a no-op. The recipient columns are a
+-- snapshot, so history survives deleting the recipient.
+CREATE TABLE IF NOT EXISTS withdrawals (
+  id SERIAL PRIMARY KEY,
+  reference VARCHAR(50) NOT NULL UNIQUE,
+  submit_key VARCHAR(64) NOT NULL UNIQUE,
+  recipient_id INTEGER REFERENCES withdrawal_recipients(id) ON DELETE SET NULL,
+  recipient_label VARCHAR(60) NOT NULL,
+  recipient_type VARCHAR(20) NOT NULL,
+  recipient_masked VARCHAR(24) NOT NULL,
+  recipient_name VARCHAR(120) NOT NULL,
+  paystack_recipient_code VARCHAR(60) NOT NULL,
+  currency CHAR(3) NOT NULL,
+  amount BIGINT NOT NULL CHECK (amount > 0),
+  fee BIGINT,
+  balance_before BIGINT,
+  note VARCHAR(100),
+  status VARCHAR(16) NOT NULL DEFAULT 'created'
+    CHECK (status IN ('created', 'awaiting_otp', 'finalizing', 'processing', 'unknown', 'success', 'failed', 'reversed', 'expired')),
+  transfer_code VARCHAR(60),
+  failure_reason TEXT,
+  failed_by_recon BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  otp_expires_at TIMESTAMPTZ,
+  last_checked_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_created_at ON withdrawals (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawals (status, updated_at);
+
+-- Insert-only audit log. The trigger below refuses UPDATE, DELETE and TRUNCATE
+-- for everyone, including this app. It holds no passwords, codes or full numbers.
+CREATE TABLE IF NOT EXISTS withdrawal_audit (
+  id BIGSERIAL PRIMARY KEY,
+  event_type VARCHAR(40) NOT NULL,
+  outcome VARCHAR(10) NOT NULL CHECK (outcome IN ('ok', 'refused', 'failed', 'info')),
+  detail TEXT,
+  withdrawal_id INTEGER,
+  recipient_id INTEGER,
+  reference VARCHAR(50),
+  amount BIGINT,
+  currency CHAR(3),
+  actor VARCHAR(20) NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_audit_created_at ON withdrawal_audit (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_audit_type ON withdrawal_audit (event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_withdrawal_audit_attempts ON withdrawal_audit (event_type, created_at);
+
+CREATE OR REPLACE FUNCTION withdrawal_audit_immutable() RETURNS trigger AS $fn$
+BEGIN
+  RAISE EXCEPTION 'withdrawal_audit is insert-only';
+END;
+$fn$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS withdrawal_audit_no_change ON withdrawal_audit;
+CREATE TRIGGER withdrawal_audit_no_change BEFORE UPDATE OR DELETE ON withdrawal_audit
+  FOR EACH ROW EXECUTE FUNCTION withdrawal_audit_immutable();
+DROP TRIGGER IF EXISTS withdrawal_audit_no_truncate ON withdrawal_audit;
+CREATE TRIGGER withdrawal_audit_no_truncate BEFORE TRUNCATE ON withdrawal_audit
+  FOR EACH STATEMENT EXECUTE FUNCTION withdrawal_audit_immutable();
 `;
 
-const CURRENT_VERSION = '1.2.17';
+const CURRENT_VERSION = '1.2.18';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
