@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Withdrawals | HeartCode Admin</title>
+</head>
+<body data-page="withdrawals">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'withdrawals' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro"><div><p class="admin-eyebrow">Commerce</p><h1>Withdrawals</h1><p>Send money from your Paystack balance to your own M-Pesa number or bank account. Money can only go to a saved recipient, and a new recipient waits before it can be used. Nothing on this page shows a full number or a key after it is saved.</p></div></section>
+
+    <div id="wdNotices"></div>
+
+    <!-- Emergency stop. Same callout style the other admin pages use. Works without a password on purpose. -->
+    <div class="admin-callout is-warn" id="wdStopBar">
+      <p id="wdStateText">Loading...</p>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" id="wdStopBtn" class="admin-btn-danger admin-btn-sm">Emergency stop</button>
+        <span class="text-xs">Switches withdrawals off at once, with no password. Turning them on again needs your password.</span>
+      </div>
+    </div>
+
+    <div class="admin-tabs">
+      <button type="button" class="admin-tab-btn active" data-tab="wd-withdraw">Withdraw</button>
+      <button type="button" class="admin-tab-btn" data-tab="wd-recipients">Recipients</button>
+      <button type="button" class="admin-tab-btn" data-tab="wd-history">History</button>
+      <button type="button" class="admin-tab-btn" data-tab="wd-settings">Settings</button>
+    </div>
+
+    <!-- ============ Withdraw ============ -->
+    <section id="tab-wd-withdraw" class="tab-panel">
+      <div class="admin-settings-grid">
+
+      <div class="admin-card admin-settings-card">
+        <h2 class="text-sm font-semibold text-hc-ink">Paystack balance <span id="wdModeBadge" class="admin-badge admin-badge-brand ml-2" style="display:none;"></span></h2>
+        <p class="mt-1 text-sm text-gray-500" id="wdBalanceRead">Loading...</p>
+        <div class="admin-table-wrap mt-2">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Currency</th><th>Available</th><th>Withdrawals</th></tr></thead>
+            <tbody id="wdBalanceRows"><tr><td colspan="3" data-label="">Loading...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" id="wdBalanceRefresh" class="admin-btn-outline admin-btn-sm">Refresh</button>
+        </div>
+        <p class="mt-3 text-xs text-gray-500">Read live from Paystack each time you press Refresh. Amounts are not converted between currencies. Withdrawals use the one currency chosen in Settings.</p>
+        <p id="wdBalanceStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+
+      <div class="admin-card admin-settings-card" id="wdFormCard">
+        <h2 class="text-sm font-semibold text-hc-ink">New withdrawal</h2>
+
+        <div id="wdStepForm">
+          <label class="admin-label" for="wdRecipient">Recipient</label>
+          <select class="admin-select" id="wdRecipient"></select>
+          <p class="mt-1 text-xs text-gray-500" id="wdRecipientHint"></p>
+
+          <label class="admin-label" for="wdAmount">Amount</label>
+          <input class="admin-input" type="text" id="wdAmount" inputmode="decimal" autocomplete="off" placeholder="0.00">
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button type="button" id="wdMaxBtn" class="admin-btn-outline admin-btn-sm">Withdraw everything available</button>
+            <span class="text-xs text-gray-500" id="wdMaxNote"></span>
+          </div>
+
+          <label class="admin-label" for="wdNote">Note (optional)</label>
+          <input class="admin-input" type="text" id="wdNote" maxlength="100" autocomplete="off">
+
+          <button type="button" id="wdReviewBtn" class="admin-btn mt-3">Review</button>
+        </div>
+
+        <div id="wdStepReview" style="display:none;">
+          <p class="mt-1 text-sm text-gray-500">Nothing has been sent yet. Check the details, then confirm.</p>
+          <div class="admin-table-wrap mt-2">
+            <table class="admin-table is-responsive-stack">
+              <tbody id="wdReviewRows"></tbody>
+            </table>
+          </div>
+          <label class="admin-label" for="wdConfirmPassword">Password</label>
+          <input class="admin-input" type="password" id="wdConfirmPassword" autocomplete="current-password">
+          <div id="wdConfirmCodeWrap" style="display:none;">
+            <label class="admin-label" for="wdConfirmCode">Current code from your authenticator app</label>
+            <input class="admin-input" type="text" id="wdConfirmCode" autocomplete="one-time-code" inputmode="numeric" maxlength="10">
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" id="wdConfirmBtn" class="admin-btn">Confirm and send</button>
+            <button type="button" id="wdBackBtn" class="admin-btn-outline">Back</button>
+          </div>
+        </div>
+
+        <div id="wdStepOtp" style="display:none;">
+          <p class="mt-1 text-sm text-gray-500">Paystack is waiting for its own code before it sends this. It goes to the contact email on your Paystack account. The code must be entered within <span id="wdOtpLeft">10 minutes</span>, or this withdrawal expires and nothing is sent.</p>
+          <label class="admin-label" for="wdOtp">Paystack code</label>
+          <input class="admin-input" type="text" id="wdOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="10">
+          <label class="admin-label" for="wdOtpPassword">Password</label>
+          <input class="admin-input" type="password" id="wdOtpPassword" autocomplete="current-password">
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" id="wdOtpBtn" class="admin-btn">Finish withdrawal</button>
+          </div>
+        </div>
+
+        <div id="wdStepStatus" style="display:none;">
+          <div class="admin-table-wrap mt-2">
+            <table class="admin-table is-responsive-stack">
+              <tbody id="wdStatusRows"></tbody>
+            </table>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" id="wdCheckBtn" class="admin-btn-outline admin-btn-sm">Check now</button>
+            <button type="button" id="wdNewBtn" class="admin-btn admin-btn-sm">New withdrawal</button>
+          </div>
+        </div>
+
+        <p id="wdFormStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+
+      </div>
+    </section>
+
+    <!-- ============ Recipients ============ -->
+    <section id="tab-wd-recipients" class="tab-panel" style="display:none;">
+      <div class="admin-settings-grid">
+
+      <div class="admin-card admin-settings-card">
+        <h2 class="text-sm font-semibold text-hc-ink">Saved recipients</h2>
+        <p class="mt-1 text-sm text-gray-500">Only the last digits of each number are kept here. The full number is held by Paystack.</p>
+        <div class="admin-table-wrap mt-2">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Label</th><th>Type</th><th>Number</th><th>Status</th><th></th></tr></thead>
+            <tbody id="wdRecipientRows"><tr><td colspan="5" data-label="">Loading...</td></tr></tbody>
+          </table>
+        </div>
+        <p id="wdRecipientStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+
+      <div class="admin-card admin-settings-card">
+        <h2 class="text-sm font-semibold text-hc-ink">Add a recipient</h2>
+        <p class="mt-1 text-sm text-gray-500" id="wdAddIntro">A new recipient cannot be used until its waiting period has passed.</p>
+
+        <label class="admin-label" for="wdAddLabel">Label</label>
+        <input class="admin-input" type="text" id="wdAddLabel" maxlength="60" placeholder="My M-Pesa" autocomplete="off">
+
+        <label class="admin-label" for="wdAddType">Type</label>
+        <select class="admin-select" id="wdAddType">
+          <option value="mpesa">M-Pesa mobile number</option>
+          <option value="bank">Kenyan bank account</option>
+          <option value="till" id="wdAddTillOption">Till number</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-500" id="wdAddTypeHint"></p>
+
+        <div id="wdAddBankWrap" style="display:none;">
+          <label class="admin-label" for="wdAddCurrency">Currency</label>
+          <select class="admin-select" id="wdAddCurrency"><option value="KES">KES</option><option value="USD">USD</option></select>
+          <label class="admin-label" for="wdAddBank">Bank</label>
+          <select class="admin-select" id="wdAddBank"><option value="">Loading banks...</option></select>
+        </div>
+
+        <label class="admin-label" for="wdAddNumber" id="wdAddNumberLabel">Mobile number</label>
+        <input class="admin-input" type="text" id="wdAddNumber" autocomplete="off" inputmode="numeric" placeholder="07XX XXX XXX">
+
+        <label class="admin-label" for="wdAddName">Account holder name</label>
+        <input class="admin-input" type="text" id="wdAddName" maxlength="120" autocomplete="off">
+        <p class="mt-1 text-xs text-gray-500">Type it exactly as it is registered. Paystack's documentation does not offer an account name check for Kenyan accounts, so it cannot be looked up for you.</p>
+
+        <label class="admin-label" for="wdAddPassword">Password</label>
+        <input class="admin-input" type="password" id="wdAddPassword" autocomplete="current-password">
+        <div id="wdAddCodeWrap" style="display:none;">
+          <label class="admin-label" for="wdAddCode">Current code from your authenticator app</label>
+          <input class="admin-input" type="text" id="wdAddCode" autocomplete="one-time-code" inputmode="numeric" maxlength="10">
+        </div>
+        <button type="button" id="wdAddBtn" class="admin-btn mt-3">Add recipient</button>
+        <p id="wdAddStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+
+      </div>
+    </section>
+
+    <!-- ============ History ============ -->
+    <section id="tab-wd-history" class="tab-panel" style="display:none;">
+      <section class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">This month</p><h2>Totals</h2></div></div>
+        <div class="admin-table-wrap">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Currency</th><th>Sent</th><th>Transfers</th><th>In progress</th><th>Not sent</th><th>Fees</th></tr></thead>
+            <tbody id="wdTotalsRows"><tr><td colspan="6" data-label="">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-card">
+        <div class="admin-section-heading"><div><p class="admin-eyebrow">Withdrawals</p><h2>All withdrawals</h2></div></div>
+        <div class="admin-table-wrap">
+          <table class="admin-table is-responsive-stack">
+            <thead><tr><th>Time</th><th>Status</th><th>Recipient</th><th>Amount</th><th>Reference</th><th>Reason</th></tr></thead>
+            <tbody id="wdWithdrawalRows"><tr><td colspan="6" data-label="">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-card">
+        <div class="admin-section-heading">
+          <div><p class="admin-eyebrow">Audit log</p><h2>Everything that happened</h2></div>
+          <select class="admin-select" id="wdAuditType" aria-label="Filter by type"><option value="">All types</option></select>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="admin-label" for="wdAuditFrom">From</label>
+          <input class="admin-input" type="date" id="wdAuditFrom">
+          <label class="admin-label" for="wdAuditTo">To</label>
+          <input class="admin-input" type="date" id="wdAuditTo">
+        </div>
+        <p class="admin-form-hint mt-2">This log can only be added to. The app cannot change or delete it, and it never holds passwords, codes or full numbers.</p>
+        <div id="wdAuditList" class="admin-entry-list" aria-live="polite"></div>
+        <div class="admin-pagination">
+          <p id="wdAuditInfo"></p>
+          <div class="admin-pagination-controls">
+            <button type="button" id="wdAuditRefresh" class="admin-btn-outline admin-btn-sm">Refresh</button>
+            <button type="button" id="wdAuditMore" class="admin-btn-outline admin-btn-sm">Older</button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ============ Settings ============ -->
+    <section id="tab-wd-settings" class="tab-panel" style="display:none;">
+      <div class="admin-settings-grid">
+      <div class="admin-card admin-settings-card">
+        <h2 class="text-sm font-semibold text-hc-ink">Withdrawal settings</h2>
+        <p class="mt-1 text-sm text-gray-500">Saving needs your password. Every change is written to the audit log and sent to your webhook and Gotify channels.</p>
+
+        <label class="admin-checkbox-label mt-3"><input type="checkbox" id="wdSetEnabled"> Withdrawals enabled</label>
+
+        <label class="admin-label" for="wdSetCurrency">Currency to withdraw</label>
+        <select class="admin-select" id="wdSetCurrency"><option value="KES">KES</option><option value="USD">USD</option></select>
+        <p class="mt-1 text-xs text-gray-500">The limits below are in this currency. Recipients must use the same currency.</p>
+
+        <label class="admin-label" for="wdSetMaxOne">Maximum per withdrawal</label>
+        <input class="admin-input" type="text" id="wdSetMaxOne" inputmode="decimal" autocomplete="off">
+        <label class="admin-label" for="wdSetMaxDay">Maximum per day (any 24 hours)</label>
+        <input class="admin-input" type="text" id="wdSetMaxDay" inputmode="decimal" autocomplete="off">
+        <label class="admin-label" for="wdSetReserve">Amount to keep in the balance</label>
+        <input class="admin-input" type="text" id="wdSetReserve" inputmode="decimal" autocomplete="off">
+        <p class="mt-1 text-xs text-gray-500">A withdrawal can never take the balance below this. Keep money here for refunds and disputes.</p>
+        <label class="admin-label" for="wdSetWait">Waiting period for new recipients (hours)</label>
+        <input class="admin-input" type="number" id="wdSetWait" min="1" max="720" step="1">
+        <p class="mt-1 text-xs text-gray-500">Applies to recipients added from now on. A recipient already waiting keeps its own time.</p>
+
+        <label class="admin-label" for="wdSetPassword">Password</label>
+        <input class="admin-input" type="password" id="wdSetPassword" autocomplete="current-password">
+        <button type="button" id="wdSetSave" class="admin-btn mt-3">Save settings</button>
+        <p id="wdSetStatus" class="admin-msg" style="display:none;"></p>
+      </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>
