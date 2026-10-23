@@ -3,6 +3,9 @@
   "version": "1.2.19",
   "description": "HeartCode — client-facing website builder (foundation)",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.23.4 <23 || >=24.22.1 <25"
+  },
   "scripts": {
     "start": "node server.js",
     "postinstall": "npm run build:css",

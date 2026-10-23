@@ -380,7 +380,7 @@ function adminJsonBodyParser(req, res, next) {
   // '/api/admin/website-types/12/template'.
   const isLargeHtmlRoute = req.method === 'PUT' && LARGE_HTML_ADMIN_ROUTE_RE.test(req.path);
   const limit = isLargeHtmlRoute ? ADMIN_LARGE_HTML_JSON_LIMIT : ADMIN_DEFAULT_JSON_LIMIT;
-  express.json({ limit })(req, res, next);
+  express.json({ limit, inflate: false })(req, res, next);
 }
 
 app.use('/api/admin', adminJsonBodyParser);
@@ -442,6 +442,9 @@ app.use('/api/admin/test-deploy', adminTestDeployRouter);
 // failure mode Part B's own fix could otherwise reintroduce (a request
 // that exceeds even the new 10mb limit, or sends malformed JSON).
 app.use('/api/admin', (err, req, res, next) => {
+  if (err && err.type === 'encoding.unsupported') {
+    return res.status(415).json({ error: 'Compressed request bodies are not accepted.' });
+  }
   if (err && err.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Content too large, please reduce it or contact support.' });
   }
@@ -519,6 +522,10 @@ app.use((err, req, res, next) => {
   // is the one and only place that detail is ever written down anywhere
   // for an unhandled error -- neither response branch below includes any
   // of it.
+  // v1.2.16.1: a compressed request body is refused by the body readers; answer plainly, no log noise.
+  if (err && err.type === 'encoding.unsupported' && !res.headersSent) {
+    return res.status(415).json({ error: 'Compressed request bodies are not accepted.' });
+  }
   console.error('[UNHANDLED ERROR]', err && err.stack ? err.stack : err);
 
   // Express itself can only safely finish a response that hasn't been
@@ -767,6 +774,7 @@ async function start() {
   startWithdrawalReconcileJob();
 
   app.listen(PORT, () => {
+    console.log(`[SERVER] Node.js ${process.version}`);
     console.log(`[SERVER] HeartCode listening on port ${PORT}`);
   });
 }
