@@ -4,7 +4,7 @@
 
 <br>
 
-![Version](https://img.shields.io/badge/version-1.2.19-183fad?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.2.20-183fad?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2018-F1BF0A?style=for-the-badge&labelColor=14151d)
 ![Express](https://img.shields.io/badge/express-4-183fad?style=for-the-badge)
 ![Postgres](https://img.shields.io/badge/postgres-ready-F1BF0A?style=for-the-badge&labelColor=14151d)
@@ -97,7 +97,7 @@ docs/        documentation
 
 ## Latest release
 
-**Security patch on v1.2.19:** body-parser 1.20.9, compressed request bodies refused, Node 22.23.4 or later requested. **v1.2.19** makes checkout deploy only what the server itself built ([docs/RENDER-INTEGRITY.md](docs/RENDER-INTEGRITY.md)). **v1.2.18** adds Withdrawals: send money from the Paystack balance to your own saved M-Pesa number or bank account, with waiting periods, limits, a reserve and an audit log ([docs/WITHDRAWALS.md](docs/WITHDRAWALS.md)). **v1.2.17** hardens the admin login: a safe visitor address on any host, bounded login throttling with slow mode, two-step login and idle sessions ([docs/SECURITY.md](docs/SECURITY.md)). **v1.2.16** adds optional Umami analytics ([docs/ANALYTICS.md](docs/ANALYTICS.md)). **v1.2.14** makes promotions reliable (no rate limits on delivery, one-request script, edge caching) and card only. **v1.2.15** makes client reviews text only and adds ad cards with linked media ([docs/AD-CARDS.md](docs/AD-CARDS.md)). **v1.2.13** added the Promotion page and embeddable script. See [docs/VERSIONS.md](docs/VERSIONS.md) and [docs/PROMOTIONS.md](docs/PROMOTIONS.md).
+**v1.2.20** reworks how the admin feels to use: grouped navigation with icons, sortable and paged lists (newest first), a Saved popup beside every save button, and Add forms that open on demand. **Security patch on v1.2.19:** body-parser 1.20.9, compressed request bodies refused, Node 22.23.4 or later requested. **v1.2.19** makes checkout deploy only what the server itself built ([docs/RENDER-INTEGRITY.md](docs/RENDER-INTEGRITY.md)). **v1.2.18** adds Withdrawals: send money from the Paystack balance to your own saved M-Pesa number or bank account, with waiting periods, limits, a reserve and an audit log ([docs/WITHDRAWALS.md](docs/WITHDRAWALS.md)). **v1.2.17** hardens the admin login: a safe visitor address on any host, bounded login throttling with slow mode, two-step login and idle sessions ([docs/SECURITY.md](docs/SECURITY.md)). **v1.2.16** adds optional Umami analytics ([docs/ANALYTICS.md](docs/ANALYTICS.md)). **v1.2.14** makes promotions reliable (no rate limits on delivery, one-request script, edge caching) and card only. **v1.2.15** makes client reviews text only and adds ad cards with linked media ([docs/AD-CARDS.md](docs/AD-CARDS.md)). **v1.2.13** added the Promotion page and embeddable script. See [docs/VERSIONS.md](docs/VERSIONS.md) and [docs/PROMOTIONS.md](docs/PROMOTIONS.md).
 
 <img src="docs/assets/divider.svg" alt="" width="100%">
 
