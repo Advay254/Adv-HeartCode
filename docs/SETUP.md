@@ -11,7 +11,7 @@ Two ways to run HeartCode: deploy it on Render (the normal route, works entirely
 3. Build command `npm install`, start command `npm start`.
 4. Add the variables from [ENVIRONMENT.md](ENVIRONMENT.md) on the **Environment** tab.
 5. Create a Postgres database (Supabase or Aiven) and paste its pooled connection string into `DATABASE_URL`.
-6. Deploy, then open `https://<your-app>.onrender.com/health`. You should see `"status": "ok"` and `"db": "connected"`.
+6. Deploy, then open `https://<your-app>.onrender.com/health`. You should see `{"status":"ok"}`.
 7. Open `https://<your-app>.onrender.com/<ADMIN_PATH_SLUG>/login` and sign in.
 8. In the dashboard set up **Hosting**, **Payments**, an **Email provider** and optionally an **AI provider**. See [CONFIGURATION.md](CONFIGURATION.md).
 
@@ -40,6 +40,6 @@ After changing a Tailwind source, a config file or adding new classes to a view,
 
 ## First checks after any deploy
 
-- `/health` reports the version and database status.
+- `/health` answers ok or error (the version and any detail are only in the server log).
 - The dashboard loads and the Reviews and Promotion pages open.
 - **Hosting, Send test deploy** succeeds before you accept real payments.

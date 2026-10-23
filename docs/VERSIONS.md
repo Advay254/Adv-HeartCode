@@ -2,7 +2,7 @@
 
 The short story of every release, newest first. The full original notes, with every test and every bug story, live in [archive/README-full-original.md](archive/README-full-original.md).
 
-Two numbers exist on purpose. The **app version** is in `package.json` and `/health`. The **schema version** (`CURRENT_VERSION` in `db/init.js`) only moves when the database changes, so the two can differ.
+Two numbers exist on purpose. The **app version** is in `package.json`. The **schema version** (`CURRENT_VERSION` in `db/init.js`) only moves when the database changes, so the two can differ.
 
 ![](assets/divider.svg)
 
@@ -14,6 +14,7 @@ Two numbers exist on purpose. The **app version** is in `package.json` and `/hea
 
 | Version | What changed |
 |---|---|
+| **1.2.19** | **Server-side render integrity.** The build step stores the rendered page, raw field values and AI output on the server under a long random id (2 hour expiry); checkout accepts only that id, the email, the optional site password and the funnel session id, so what is deployed is always what the server stored. Old or expired pages get a friendly "build again" message. The 16 MB checkout body is now 10 KB. Links in rendered pages that would run script (`javascript:`, `vbscript:`, non-image `data:`) become `#`. Startup warning for customer placeholders inside script or event code. Optional `DATABASE_CA_CERT` to verify the database certificate. `/health` shows only ok or error. Schema 1.2.19. See [RENDER-INTEGRITY.md](RENDER-INTEGRITY.md). |
 | **1.2.18** | **Secure withdrawals.** A Withdrawals section (Withdraw, Recipients, History, Settings) that sends money from the Paystack balance to saved recipients only, using the Paystack Transfers API. New recipients wait (default 24 hours), every step re-asks the password (and a two-step code when it is on), with per withdrawal and daily limits, a reserve, one record per withdrawal before Paystack is called, no automatic retries, Paystack OTP support, transfer webhooks, a reconcile job, an emergency stop, automatic switch-off after 3 wrong tries, and an insert-only audit log. Schema 1.2.18. See [WITHDRAWALS.md](WITHDRAWALS.md). |
 | **1.2.17** | **Admin login hardening.** The visitor address helper believes `CF-Connecting-IP` only when the request really came from Cloudflare's published ranges (works the same on any host). Login throttling is bounded and has a global slow mode with alerts. Two-step login with an authenticator app, recovery codes and an emergency environment switch. Session idle timeout, scheduled cleanup, and log out everywhere. Startup warnings for weak settings. New Security page. See [SECURITY.md](SECURITY.md). |
 | **1.2.16** | **Umami analytics.** An Analytics card in Site Settings (off by default): script address, website ID, allowed domains, Do Not Track, count after first interaction, page speed data, heatmap recorder and "serve through this site". Query strings reduced to `utm_` tags, eight named events, server-side `payment_success` revenue, UTM tags on promotion links. No database change. See [ANALYTICS.md](ANALYTICS.md). |
