@@ -4,16 +4,38 @@ let pool = null;
 
 /**
  * Lazily creates and returns a single shared pg.Pool instance.
- * ssl.rejectUnauthorized is disabled to support Supabase/Aiven pooled connections.
+ * ssl.rejectUnauthorized is disabled to support Supabase/Aiven pooled connections, unless DATABASE_CA_CERT is set (v1.2.19).
  */
 function getPool() {
   if (!pool) {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: getSslConfig()
     });
   }
   return pool;
+}
+
+/**
+ * v1.2.19: DATABASE_CA_CERT is optional. When it is set to the database
+ * provider's certificate (PEM text, PEM with \n written as two characters, or
+ * the same PEM base64 encoded) the connection is properly verified. When it is
+ * absent or unreadable the behaviour is exactly what it always was: encrypted,
+ * but the certificate is not checked.
+ */
+function getSslConfig() {
+  const raw = String(process.env.DATABASE_CA_CERT || '').trim();
+  if (!raw) return { rejectUnauthorized: false };
+  let pem = raw.replace(/\\n/g, '\n');
+  if (!pem.includes('-----BEGIN')) {
+    try { pem = Buffer.from(raw, 'base64').toString('utf8'); } catch (_e) { pem = ''; }
+  }
+  if (!pem.includes('-----BEGIN CERTIFICATE-----')) {
+    console.error('[DB] DATABASE_CA_CERT is set but is not a certificate, so the certificate is NOT being checked. Paste the PEM text (starting with -----BEGIN CERTIFICATE-----) or its base64.');
+    return { rejectUnauthorized: false };
+  }
+  console.log('[DB] Verifying the database certificate with DATABASE_CA_CERT.');
+  return { ca: pem, rejectUnauthorized: true };
 }
 
 // Bootstrap tables only. Anything beyond these two belongs in a later version.
@@ -1694,9 +1716,26 @@ CREATE TRIGGER withdrawal_audit_no_change BEFORE UPDATE OR DELETE ON withdrawal_
 DROP TRIGGER IF EXISTS withdrawal_audit_no_truncate ON withdrawal_audit;
 CREATE TRIGGER withdrawal_audit_no_truncate BEFORE TRUNCATE ON withdrawal_audit
   FOR EACH STATEMENT EXECUTE FUNCTION withdrawal_audit_immutable();
+
+-- v1.2.19: the server keeps what it built. A render is the site HTML the build
+-- step produced, plus the raw field values and AI output it was made from, held
+-- under a long random id. Checkout takes only that id. Expired rows are removed
+-- by the scheduled cleanup (and before a new one is stored).
+CREATE TABLE IF NOT EXISTS build_renders (
+  id TEXT PRIMARY KEY,
+  website_type_id INTEGER NOT NULL REFERENCES website_types(id) ON DELETE CASCADE,
+  rendered_html TEXT NOT NULL,
+  raw_field_values JSONB DEFAULT NULL,
+  ai_output_values JSONB DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_build_renders_expires_at ON build_renders (expires_at);
+-- Which render a pending deployment was made from, so the render is deleted once that deployment succeeds.
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS render_id TEXT DEFAULT NULL;
 `;
 
-const CURRENT_VERSION = '1.2.18';
+const CURRENT_VERSION = '1.2.19';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
