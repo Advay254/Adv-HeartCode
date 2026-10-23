@@ -844,6 +844,10 @@
   font-weight: 650;
 }
 
+.admin-nav-child-icon { width:16px; height:16px; flex:0 0 16px; display:inline-flex; color:#98a2b3; }
+.admin-nav-child-icon svg { width:16px; height:16px; }
+.admin-nav-child:hover .admin-nav-child-icon,
+.admin-nav-child.is-active .admin-nav-child-icon { color:#183fad; }
 .admin-nav-child-dot {
   width: 5px;
   height: 5px;
@@ -1419,3 +1423,65 @@ a.admin-stat-card-link { color:inherit; text-decoration:none; }
   .activity-row { flex-wrap:wrap; }
   .activity-time { margin-left:21px; }
 }
+
+/* v1.2.20: save feedback on buttons, the popup beside them, and list controls.
+   Same colours, fonts and radii as the rest of the admin: nothing new. */
+.admin-btn, .admin-btn-outline, .admin-btn-danger { position: relative; }
+.is-saving { pointer-events: none; opacity: .85; }
+.is-saving::before {
+  content: ""; width: 14px; height: 14px; flex: 0 0 14px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent;
+  animation: admin-spin .7s linear infinite;
+}
+.admin-btn.is-saved, .admin-btn-outline.is-saved { background: #039855; border-color: #039855; color: #fff; }
+.admin-btn.is-saved::before, .admin-btn-outline.is-saved::before {
+  content: ""; width: 12px; height: 7px; flex: 0 0 12px; margin-top: -3px;
+  border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg);
+}
+.admin-btn.is-failed, .admin-btn-outline.is-failed, .admin-btn-danger.is-failed { background: #fef3f2; border-color: #fda29b; color: #b42318; animation: admin-shake .3s ease; }
+@keyframes admin-spin { to { transform: rotate(360deg); } }
+@keyframes admin-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+.admin-save-pop {
+  position: fixed; z-index: 60; display: flex; align-items: center; gap: 8px; max-width: min(320px, calc(100vw - 16px));
+  padding: 9px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; line-height: 1.35;
+  box-shadow: 0 6px 18px rgba(16, 24, 40, .12); opacity: 0; transform: translateY(2px);
+  transition: opacity .16s ease, transform .16s ease; pointer-events: none;
+}
+.admin-save-pop.is-in { opacity: 1; transform: none; }
+.admin-save-pop svg { flex: 0 0 16px; }
+.admin-save-pop.is-success { background: #ecfdf3; color: #027a48; border: 1px solid #a6f4c5; }
+.admin-save-pop.is-error { background: #fef3f2; color: #b42318; border: 1px solid #fda29b; }
+
+.admin-list-top { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.admin-list-search { position: relative; display: block; width: 100%; max-width: 280px; }
+.admin-list-search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #98a2b3; pointer-events: none; }
+.admin-list-search input { padding-left: 34px; }
+.admin-list-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; font-size: 13px; color: #667085; }
+.admin-list-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.admin-list-pager .admin-select { width: auto; padding-top: 6px; padding-bottom: 6px; font-size: 13px; }
+.admin-list-pager .admin-btn-outline svg { width: 14px; height: 14px; }
+.admin-list-page { min-width: 84px; text-align: center; }
+.admin-list-top[hidden], .admin-list-bar[hidden] { display: none; }
+th.is-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.is-sortable:hover, th.is-sorted { color: #183fad; }
+.admin-sort-ico { display: inline-flex; vertical-align: middle; margin-left: 4px; opacity: .45; }
+.admin-sort-ico svg { width: 13px; height: 13px; }
+th.is-sorted .admin-sort-ico { opacity: 1; }
+@media (max-width: 639px) { .admin-list-top { justify-content: stretch; } .admin-list-search { max-width: none; } .admin-list-bar { justify-content: center; } }
+@media (prefers-reduced-motion: reduce) { .is-saving::before, .admin-btn.is-failed { animation: none; } .admin-save-pop { transition: none; } }
+
+.admin-add-layout { display: block; }
+.admin-add-layout > .admin-card { position: static; max-height: none; overflow: visible; max-width: 640px; margin-bottom: 20px; }
+.admin-add-layout > .admin-card[hidden] { display: none; }
+.admin-list-actions { display: flex; justify-content: flex-end; margin: -6px 0 16px; }
+.admin-list-actions .admin-btn svg { width: 16px; height: 16px; }
+
+/* v1.2.20: dashboard summary cards sit in one compact row. */
+@media (min-width: 1100px) { .admin-stat-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.admin-stat-grid-4 .admin-stat-card { min-height: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; column-gap: 14px; padding: 16px; }
+.admin-stat-grid-4 .admin-stat-card .admin-stat-icon { grid-row: span 2; margin: 0; }
+.admin-stat-grid-4 .admin-stat-card .admin-stat-row { margin: 0; }
+.admin-stat-grid-4 .admin-stat-card .admin-stat-value { font-size: 22px; line-height: 1.2; }
+.admin-stat-grid-4 .admin-stat-card .admin-stat-caption { margin: 2px 0 0; grid-column: 2; }
+.admin-stat-grid-4 .admin-stat-card .admin-stat-row { flex-wrap: wrap; justify-content: flex-start; gap: 4px 8px; }
