@@ -46,7 +46,7 @@ const eventLimiter = createRateLimiter({ max: 60, windowMs: 60 * 60 * 1000 });
 // this or feel slower because of it. That cuts both ways here too — this
 // route does the minimum necessary work and returns 204 with no body,
 // rather than anything a beacon-style caller would never read anyway.
-router.post('/', express.json(), asyncHandler(async (req, res) => {
+router.post('/', express.json({ inflate: false }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   if (!eventLimiter.tryConsume(getRealClientIp(req))) {

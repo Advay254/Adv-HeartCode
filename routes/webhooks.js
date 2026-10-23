@@ -24,7 +24,7 @@ const webhookEventSchema = z.object({
 // bytes Paystack actually sent — re-serializing parsed JSON before
 // verifying could produce different bytes (key order, whitespace) and
 // break verification even for a genuine, unmodified request.
-router.use(express.raw({ type: 'application/json', limit: '1mb' }));
+router.use(express.raw({ type: 'application/json', limit: '1mb', inflate: false }));
 
 router.post('/paystack', asyncHandler(async (req, res) => {
   const signature = req.headers['x-paystack-signature'];

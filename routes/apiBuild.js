@@ -26,7 +26,7 @@ const router = express.Router();
 const aiGenerateLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60 * 1000 });
 const basicGenerateLimiter = createRateLimiter({ max: 20, windowMs: 60 * 60 * 1000 });
 
-router.post('/:slug/generate', handleImageUpload, express.json(), asyncHandler(async (req, res) => {
+router.post('/:slug/generate', handleImageUpload, express.json({ inflate: false }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   const ip = getRealClientIp(req);

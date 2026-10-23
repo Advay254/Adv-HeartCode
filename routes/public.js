@@ -972,7 +972,7 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
 // payment is confirmed, via the webhook or the callback page below.
 // v1.2.19: the body is now tiny (a render id, an email and a password), so the
 // 16mb allowance that existed only to carry the HTML back is gone.
-router.post('/build/:slug/checkout', express.json({ limit: '10kb' }), asyncHandler(async (req, res) => {
+router.post('/build/:slug/checkout', express.json({ limit: '10kb', inflate: false }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   const ip = getRealClientIp(req);
@@ -1278,7 +1278,7 @@ const resendDetailsBodySchema = z.object({
 const RESEND_DETAILS_GENERIC_MESSAGE =
   "If that email matches a site we've deployed, we've sent the details to it. Check your spam folder if it doesn't arrive shortly.";
 
-router.post('/api/resend-details', express.json({ limit: '10kb' }), asyncHandler(async (req, res) => {
+router.post('/api/resend-details', express.json({ limit: '10kb', inflate: false }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   if (!(await resendDetailsLimiter.tryConsume(getRealClientIp(req)))) {

@@ -136,7 +136,7 @@ router.get('/review/:token', asyncHandler(async (req, res) => {
 
 // The form posts a tiny JSON body. The parser is scoped to this one route
 // and capped, per the project rule that body parsers are never router-wide.
-const parseJson = express.json({ limit: '8kb' });
+const parseJson = express.json({ limit: '8kb', inflate: false });
 
 // ---- POST /api/review/:token ----
 router.post('/api/review/:token', parseJson, asyncHandler(async (req, res) => {
