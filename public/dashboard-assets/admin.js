@@ -1013,7 +1013,7 @@
       const res = await window.adminFetch('/api/admin/website-types');
       const types = await res.json();
       document.getElementById('typesTableBody').innerHTML = types.map(t => `
-        <tr>
+        <tr data-id="${t.id}">
           <td data-label="Name"><a href="/${slug}/website-types/${t.id}" class="font-medium text-brand-500">${escapeHtml(t.name)}</a></td>
           <td data-label="Status"><span class="admin-badge ${t.isActive ? 'admin-badge-active' : 'admin-badge-error'}">${t.isActive ? 'active' : 'inactive'}</span></td>
           <td data-label="Fields">${t.fieldCount}</td>
