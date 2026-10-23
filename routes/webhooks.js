@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const { z } = require('zod');
 const { getActivePaystackKeys } = require('../lib/paystack');
 const { finalizeDeployment } = require('../lib/finalizeDeployment');
+const { getPool } = require('../db/init');
+const withdrawals = require('../lib/withdrawals');
 
 const router = express.Router();
 
@@ -78,6 +80,18 @@ router.post('/paystack', asyncHandler(async (req, res) => {
   // guarantees this is safe even if Paystack's retry logic ALSO fires a
   // duplicate delivery for the same event.
   res.status(200).json({ received: true });
+
+  // v1.2.18: transfer results for withdrawals. Reached only after the signature
+  // check above passed. Matched by our own reference; safe to receive twice or
+  // out of order (see lib/withdrawals.js applyPaystackStatus).
+  if (event.event === 'transfer.success' || event.event === 'transfer.failed' || event.event === 'transfer.reversed') {
+    try {
+      await withdrawals.handleTransferWebhook(getPool(), event);
+    } catch (err) {
+      console.error('[WEBHOOK] Could not apply a transfer event:', err.message);
+    }
+    return;
+  }
 
   if (event.event !== 'charge.success') {
     return;

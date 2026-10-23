@@ -204,6 +204,14 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/funnel`, (req, res) => {
   res.render('admin/funnel');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/withdrawals`, (req, res) => {
+  res.render('admin/withdrawals');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/security`, (req, res) => {
+  res.render('admin/security');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/site-settings`, (req, res) => {
   res.render('admin/site-settings');
 });
