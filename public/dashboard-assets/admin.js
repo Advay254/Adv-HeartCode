@@ -1862,6 +1862,489 @@
     load();
   }
 
+  // v1.2.18: Withdrawals page. Modelled on the Security page (cards, inline
+  // status messages, password fields) and the Activity page (log list).
+  // Everything dynamic is written with textContent, never as HTML.
+  function initWithdrawalsPage() {
+    const $ = (id) => document.getElementById(id);
+    const STATUS = {
+      created: ['Sending', 'admin-badge-warn'], awaiting_otp: ['Waiting for Paystack code', 'admin-badge-warn'],
+      finalizing: ['Finishing', 'admin-badge-warn'], processing: ['Processing at Paystack', 'admin-badge-brand'],
+      unknown: ['Unclear, being checked', 'admin-badge-warn'], success: ['Sent', 'admin-badge-active'],
+      failed: ['Failed', 'admin-badge-error'], reversed: ['Reversed', 'admin-badge-error'], expired: ['Expired', 'admin-badge-error']
+    };
+    const TYPE_LABEL = { mpesa: 'M-Pesa', till: 'Till', bank: 'Bank account' };
+    const AUDIT_LABEL = {
+      recipient_added: 'Recipient added', recipient_disabled: 'Recipient disabled', recipient_deleted: 'Recipient deleted',
+      settings_changed: 'Settings changed', withdrawals_enabled: 'Withdrawals switched on', withdrawals_disabled: 'Withdrawals switched off',
+      withdrawals_auto_off: 'Switched off automatically', emergency_stop: 'Emergency stop', withdrawal_attempt: 'Withdrawal attempt',
+      withdrawal_sent: 'Sent to Paystack', otp_attempt: 'Paystack code', password_failed: 'Wrong password or code', paystack_result: 'Result from Paystack'
+    };
+
+    let overview = null;
+    let review = null;
+    let submitKey = '';
+    let current = null;
+    let pollTimer = null;
+    let otpTimer = null;
+    let auditBefore = null;
+    let auditCursors = [];
+
+    function show(el, text, type) {
+      el.textContent = text;
+      el.className = 'admin-msg admin-msg-' + type;
+      el.style.display = 'block';
+    }
+    function hide(el) { el.style.display = 'none'; }
+    async function api(method, url, body) {
+      const opts = { method };
+      if (body) opts.body = JSON.stringify(body);
+      let res;
+      try { res = await window.adminFetch(url, opts); } catch (_e) { return { ok: false, status: 0, data: { error: 'Could not reach the server.' }, network: true }; }
+      let data = {};
+      try { data = await res.json(); } catch (_e) { /* no body */ }
+      return { ok: res.ok, status: res.status, data };
+    }
+    function cell(tr, label, text, cls) {
+      const td = document.createElement('td');
+      td.setAttribute('data-label', label);
+      if (cls) { const b = document.createElement('span'); b.className = cls; b.textContent = text; td.appendChild(b); } else td.textContent = text;
+      tr.appendChild(td);
+      return td;
+    }
+    function kvRows(tbody, pairs) {
+      tbody.textContent = '';
+      pairs.forEach((p) => {
+        const tr = document.createElement('tr');
+        cell(tr, 'Item', p[0]);
+        cell(tr, 'Value', p[1], p[2]);
+        tbody.appendChild(tr);
+      });
+    }
+    function emptyRow(tbody, cols, text) {
+      tbody.textContent = '';
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = cols; td.setAttribute('data-label', ''); td.textContent = text;
+      tr.appendChild(td); tbody.appendChild(tr);
+    }
+    function when(iso) { return new Date(iso).toLocaleString(); }
+    function randomKey() {
+      const a = new Uint8Array(16);
+      crypto.getRandomValues(a);
+      return Array.from(a).map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // ---- tabs (same behaviour as the Legal Pages tabs) ----
+    document.querySelectorAll('.admin-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach((p) => { p.style.display = 'none'; });
+        btn.classList.add('active');
+        $('tab-' + btn.dataset.tab).style.display = 'block';
+        if (btn.dataset.tab === 'wd-history') loadHistory(true);
+      });
+    });
+
+    // ---- overview: state, recipients, settings ----
+    function notice(text, type) {
+      const p = document.createElement('p');
+      p.className = 'admin-msg admin-msg-' + type;
+      p.textContent = text;
+      $('wdNotices').appendChild(p);
+    }
+    function renderOverview() {
+      const o = overview;
+      const s = o.settings;
+      $('wdNotices').textContent = '';
+      if (!o.paystackConfigured) notice('Paystack is not set up yet. Add your keys on the Payments page first.', 'error');
+      if (o.mode === 'test') notice('Paystack is in test mode. Transfers made now use test money and are not real.', 'warning');
+      $('wdStateText').textContent = s.enabled
+        ? 'Withdrawals are ON. Up to ' + s.maxPerWithdrawal + ' ' + s.currency + ' per withdrawal and ' + s.maxPerDay + ' ' + s.currency + ' per day. Reserve kept: ' + s.reserve + ' ' + s.currency + '.'
+        : 'Withdrawals are OFF. Nothing can be sent until you turn them on in Settings.';
+      $('wdAddCodeWrap').style.display = o.twoStepActive ? 'block' : 'none';
+      $('wdConfirmCodeWrap').style.display = o.twoStepActive ? 'block' : 'none';
+      $('wdAddTillOption').style.display = o.tillEnabled ? '' : 'none';
+      if (!o.tillEnabled) $('wdAddTillOption').disabled = true;
+      $('wdAddIntro').textContent = 'A new recipient cannot be used until its waiting period (' + s.waitHours + ' hours) has passed.' + (o.twoStepActive ? ' Adding one also asks for a code from your authenticator app.' : '');
+
+      $('wdSetEnabled').checked = s.enabled;
+      $('wdSetCurrency').value = s.currency;
+      $('wdSetMaxOne').value = s.maxPerWithdrawal;
+      $('wdSetMaxDay').value = s.maxPerDay;
+      $('wdSetReserve').value = s.reserve;
+      $('wdSetWait').value = s.waitHours;
+
+      // recipient select on the Withdraw tab: only usable ones
+      const sel = $('wdRecipient');
+      sel.textContent = '';
+      const usable = o.recipients.filter((r) => r.usable && r.currency === s.currency);
+      usable.forEach((r) => {
+        const opt = document.createElement('option');
+        opt.value = String(r.id);
+        opt.textContent = r.label + ' (' + r.masked + ')';
+        sel.appendChild(opt);
+      });
+      if (!usable.length) {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = 'No recipient is ready';
+        sel.appendChild(opt);
+      }
+      const waiting = o.recipients.filter((r) => r.waiting);
+      $('wdRecipientHint').textContent = waiting.length
+        ? 'Waiting period: ' + waiting.map((r) => r.label + ' until ' + when(r.usableAt)).join('; ') + '.'
+        : (usable.length ? '' : 'Add a recipient on the Recipients tab. It can be used once its waiting period ends.');
+
+      // recipients table
+      const tb = $('wdRecipientRows');
+      if (!o.recipients.length) emptyRow(tb, 5, 'No recipients yet.');
+      else {
+        tb.textContent = '';
+        o.recipients.forEach((r) => {
+          const tr = document.createElement('tr');
+          cell(tr, 'Label', r.label);
+          cell(tr, 'Type', (TYPE_LABEL[r.type] || r.type) + (r.bankName ? ' (' + r.bankName + ')' : '') + ', ' + r.currency);
+          cell(tr, 'Number', r.masked + ' ' + r.name);
+          if (r.status === 'disabled') cell(tr, 'Status', 'Disabled', 'admin-badge admin-badge-error');
+          else if (r.waiting) {
+            const td = cell(tr, 'Status', 'Waiting period', 'admin-badge admin-badge-warn');
+            const small = document.createElement('p');
+            small.className = 'text-xs text-gray-500';
+            small.textContent = 'Usable ' + when(r.usableAt);
+            td.appendChild(small);
+          } else cell(tr, 'Status', 'Ready', 'admin-badge admin-badge-active');
+          const act = document.createElement('td');
+          act.setAttribute('data-label', '');
+          if (r.status === 'active') {
+            const d = document.createElement('button');
+            d.type = 'button'; d.className = 'admin-btn-outline admin-btn-sm'; d.textContent = 'Disable';
+            d.addEventListener('click', () => recipientAction(r, 'disable'));
+            act.appendChild(d); act.appendChild(document.createTextNode(' '));
+          }
+          const x = document.createElement('button');
+          x.type = 'button'; x.className = 'admin-btn-danger admin-btn-sm'; x.textContent = 'Delete';
+          x.addEventListener('click', () => recipientAction(r, 'delete'));
+          act.appendChild(x);
+          tr.appendChild(act);
+          tb.appendChild(tr);
+        });
+      }
+    }
+    async function loadOverview() {
+      const r = await api('GET', '/api/admin/withdrawals/overview');
+      if (!r.ok) { notice('Could not load withdrawals. Reload the page or sign in again.', 'error'); return; }
+      overview = r.data;
+      renderOverview();
+    }
+    async function recipientAction(r, action) {
+      const text = action === 'delete' ? 'Delete ' + r.label + '? It can no longer be used.' : 'Disable ' + r.label + '? It can no longer be used.';
+      if (!confirm(text)) return;
+      const res = await api('POST', '/api/admin/withdrawals/recipients/' + r.id + '/' + action, {});
+      const st = $('wdRecipientStatus');
+      if (res.ok) {
+        show(st, action === 'delete' ? 'Recipient deleted.' + (res.data.paystackUpdated === false ? ' Paystack could not be told, so it may still be active there.' : '') : 'Recipient disabled.', 'success');
+        loadOverview();
+      } else show(st, res.data.error || 'That did not work.', 'error');
+    }
+
+    // ---- balance ----
+    async function loadBalance(force) {
+      const btn = $('wdBalanceRefresh');
+      btn.disabled = true;
+      const r = await api('GET', '/api/admin/withdrawals/balance' + (force ? '?refresh=1' : ''));
+      btn.disabled = false;
+      const tb = $('wdBalanceRows');
+      if (!r.ok) {
+        emptyRow(tb, 3, 'Not available');
+        $('wdBalanceRead').textContent = 'The balance could not be read, so none is shown.';
+        show($('wdBalanceStatus'), r.data.error || 'Could not read the balance.', 'error');
+        return;
+      }
+      hide($('wdBalanceStatus'));
+      const d = r.data;
+      if (d.mode) { $('wdModeBadge').textContent = d.mode; $('wdModeBadge').style.display = ''; }
+      $('wdBalanceRead').textContent = 'Last read from Paystack at ' + new Date(d.readAt).toLocaleTimeString() + (d.cached ? ' (a few seconds ago, press Refresh for a new reading).' : '.');
+      if (!d.balances.length) { emptyRow(tb, 3, 'Paystack reports no balance.'); return; }
+      tb.textContent = '';
+      d.balances.forEach((b) => {
+        const tr = document.createElement('tr');
+        cell(tr, 'Currency', b.currency);
+        cell(tr, 'Available', b.text);
+        cell(tr, 'Withdrawals', b.currency === d.withdrawCurrency ? 'Used here' : 'Not used here');
+        tb.appendChild(tr);
+      });
+    }
+    $('wdBalanceRefresh').addEventListener('click', () => loadBalance(true));
+
+    // ---- the withdrawal steps ----
+    function step(name) {
+      ['Form', 'Review', 'Otp', 'Status'].forEach((n) => { $('wdStep' + n).style.display = n === name ? 'block' : 'none'; });
+      hide($('wdFormStatus'));
+    }
+    $('wdMaxBtn').addEventListener('click', async () => {
+      const r = await api('GET', '/api/admin/withdrawals/max');
+      if (!r.ok) { show($('wdFormStatus'), r.data.error || 'Could not work out the largest amount.', 'error'); return; }
+      $('wdAmount').value = r.data.amount;
+      $('wdMaxNote').textContent = 'Limited by ' + r.data.limitedBy + '.';
+    });
+    $('wdReviewBtn').addEventListener('click', async () => {
+      const id = Number($('wdRecipient').value);
+      if (!id) { show($('wdFormStatus'), 'Choose a recipient that is ready.', 'error'); return; }
+      const btn = $('wdReviewBtn');
+      btn.disabled = true;
+      const r = await api('POST', '/api/admin/withdrawals/review', { recipientId: id, amount: $('wdAmount').value });
+      btn.disabled = false;
+      if (!r.ok) { show($('wdFormStatus'), r.data.error || 'That cannot be sent.', 'error'); return; }
+      review = { recipientId: id, amount: $('wdAmount').value, note: $('wdNote').value.trim() };
+      submitKey = randomKey();
+      const d = r.data;
+      kvRows($('wdReviewRows'), [
+        ['Recipient', d.recipient.label], ['Account', d.recipient.masked], ['Account holder', d.recipient.name],
+        ['Amount', d.amountText], ['Balance now (read at ' + new Date(d.readAt).toLocaleTimeString() + ')', d.balanceText],
+        ['Balance after', d.balanceAfterText], ['Reserve kept', d.reserveText], ['Fee', d.feeNote]
+      ].concat(review.note ? [['Note', review.note]] : []));
+      $('wdConfirmPassword').value = ''; $('wdConfirmCode').value = '';
+      step('Review');
+    });
+    $('wdBackBtn').addEventListener('click', () => step('Form'));
+    $('wdConfirmBtn').addEventListener('click', async () => {
+      if (!review) return;
+      const btn = $('wdConfirmBtn');
+      btn.disabled = true;
+      const body = { recipientId: review.recipientId, amount: review.amount, submitKey, password: $('wdConfirmPassword').value };
+      if (review.note) body.note = review.note;
+      if (overview && overview.twoStepActive) body.code = $('wdConfirmCode').value;
+      const r = await api('POST', '/api/admin/withdrawals/withdraw', body);
+      btn.disabled = false;
+      if (r.network || r.status >= 500) {
+        show($('wdFormStatus'), 'The answer was not received, so it is not known whether this was sent. Press Confirm again to find out: the same request can never send twice. You can also check the History tab.', 'warning');
+        return;
+      }
+      if (!r.ok) {
+        show($('wdFormStatus'), r.data.error || 'That did not work.', 'error');
+        loadOverview();
+        return;
+      }
+      $('wdConfirmPassword').value = ''; $('wdConfirmCode').value = '';
+      showWithdrawal(r.data.withdrawal);
+      loadBalance(false);
+    });
+
+    function stopTimers() { clearTimeout(pollTimer); clearInterval(otpTimer); }
+    function showWithdrawal(w) {
+      stopTimers();
+      current = w;
+      if (w.status === 'awaiting_otp') {
+        $('wdOtp').value = ''; $('wdOtpPassword').value = '';
+        step('Otp');
+        const tick = () => {
+          const ms = new Date(w.otpExpiresAt).getTime() - Date.now();
+          if (ms <= 0) { clearInterval(otpTimer); refreshCurrent(); return; }
+          $('wdOtpLeft').textContent = Math.floor(ms / 60000) + ' min ' + String(Math.floor(ms / 1000) % 60).padStart(2, '0') + ' s';
+        };
+        tick(); otpTimer = setInterval(tick, 1000);
+        return;
+      }
+      const meta = STATUS[w.status] || [w.status, ''];
+      const rows = [
+        ['Status', meta[0], 'admin-badge ' + meta[1]], ['Recipient', w.label + ' (' + w.masked + ')'], ['Amount', w.amountText],
+        ['Reference', w.reference], ['Started', when(w.createdAt)]
+      ];
+      if (w.feeText) rows.push(['Fee charged', w.feeText]);
+      if (w.failureReason) rows.push(['Reason', w.failureReason]);
+      kvRows($('wdStatusRows'), rows);
+      step('Status');
+      const open = ['created', 'finalizing', 'processing', 'unknown'].includes(w.status);
+      if (open) {
+        let n = 0;
+        const poll = async () => {
+          if (++n > 60 || !current || current.id !== w.id) return;
+          const r = await api('GET', '/api/admin/withdrawals/withdrawals/' + w.id);
+          if (r.ok && r.data.withdrawal.status !== w.status) { showWithdrawal(r.data.withdrawal); return; }
+          pollTimer = setTimeout(poll, 5000);
+        };
+        pollTimer = setTimeout(poll, 5000);
+      }
+    }
+    async function refreshCurrent() {
+      if (!current) return;
+      const r = await api('POST', '/api/admin/withdrawals/withdrawals/' + current.id + '/refresh', {});
+      if (r.ok) showWithdrawal(r.data.withdrawal);
+      else show($('wdFormStatus'), r.data.error || 'Could not check.', 'error');
+    }
+    $('wdCheckBtn').addEventListener('click', refreshCurrent);
+    $('wdNewBtn').addEventListener('click', () => {
+      stopTimers(); current = null; review = null; submitKey = '';
+      $('wdAmount').value = ''; $('wdNote').value = ''; $('wdMaxNote').textContent = '';
+      step('Form'); loadOverview();
+    });
+    $('wdOtpBtn').addEventListener('click', async () => {
+      if (!current) return;
+      const btn = $('wdOtpBtn');
+      btn.disabled = true;
+      const r = await api('POST', '/api/admin/withdrawals/withdrawals/' + current.id + '/otp', { otp: $('wdOtp').value, password: $('wdOtpPassword').value });
+      btn.disabled = false;
+      if (r.data && r.data.withdrawal && (r.ok || r.status === 409 || r.status === 502)) {
+        if (!r.ok) show($('wdFormStatus'), r.data.error, 'warning');
+        showWithdrawal(r.data.withdrawal);
+        if (!r.ok) show($('wdFormStatus'), r.data.error, 'warning');
+        loadOverview();
+        return;
+      }
+      show($('wdFormStatus'), (r.data && r.data.error) || 'That did not work.', 'error');
+      loadOverview();
+    });
+
+    // ---- recipients: add ----
+    const addType = $('wdAddType');
+    let banksLoaded = '';
+    async function loadBanks() {
+      const cur = $('wdAddCurrency').value;
+      if (banksLoaded === cur) return;
+      const sel = $('wdAddBank');
+      sel.textContent = '';
+      const first = document.createElement('option'); first.value = ''; first.textContent = 'Loading banks...'; sel.appendChild(first);
+      const r = await api('GET', '/api/admin/withdrawals/banks?currency=' + cur);
+      sel.textContent = '';
+      if (!r.ok) {
+        const o = document.createElement('option'); o.value = ''; o.textContent = 'Banks could not be loaded'; sel.appendChild(o);
+        show($('wdAddStatus'), r.data.error || 'Banks could not be loaded.', 'error');
+        return;
+      }
+      banksLoaded = cur;
+      const o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Choose a bank'; sel.appendChild(o0);
+      r.data.banks.forEach((b) => { const o = document.createElement('option'); o.value = b.code; o.textContent = b.name; sel.appendChild(o); });
+    }
+    function syncType() {
+      const t = addType.value;
+      $('wdAddBankWrap').style.display = t === 'bank' ? 'block' : 'none';
+      $('wdAddNumberLabel').textContent = t === 'mpesa' ? 'Mobile number' : t === 'till' ? 'Till number' : 'Account number';
+      $('wdAddNumber').placeholder = t === 'mpesa' ? '07XX XXX XXX' : '';
+      $('wdAddTypeHint').textContent = t === 'mpesa' ? 'Kenyan numbers only, such as 0712345678 or +254712345678.'
+        : t === 'till' ? 'Paystack does not document what a Till transfer needs as its account reference, so check with Paystack before relying on this.'
+        : 'Paystack lists Kenyan bank accounts as KES or USD. Its documentation does not give the full bank list or required fields, so test with a small amount first.';
+      if (t === 'bank') loadBanks();
+    }
+    addType.addEventListener('change', syncType);
+    $('wdAddCurrency').addEventListener('change', () => { banksLoaded = ''; loadBanks(); });
+    $('wdAddBtn').addEventListener('click', async () => {
+      const t = addType.value;
+      const body = { label: $('wdAddLabel').value, type: t, number: $('wdAddNumber').value, name: $('wdAddName').value, password: $('wdAddPassword').value };
+      if (t === 'bank') {
+        const sel = $('wdAddBank');
+        body.bankCode = sel.value;
+        body.bankName = sel.value ? sel.options[sel.selectedIndex].textContent : '';
+        body.currency = $('wdAddCurrency').value;
+      }
+      if (overview && overview.twoStepActive) body.code = $('wdAddCode').value;
+      const btn = $('wdAddBtn');
+      btn.disabled = true;
+      const r = await api('POST', '/api/admin/withdrawals/recipients', body);
+      btn.disabled = false;
+      if (r.ok) {
+        show($('wdAddStatus'), 'Recipient added. It can be used from ' + when(r.data.recipient.usableAt) + '.', 'success');
+        ['wdAddLabel', 'wdAddNumber', 'wdAddName', 'wdAddPassword', 'wdAddCode'].forEach((id) => { $(id).value = ''; });
+        loadOverview();
+      } else show($('wdAddStatus'), r.data.error || 'That did not work.', 'error');
+    });
+
+    // ---- settings ----
+    $('wdSetSave').addEventListener('click', async () => {
+      const btn = $('wdSetSave');
+      btn.disabled = true;
+      const r = await api('POST', '/api/admin/withdrawals/settings', {
+        enabled: $('wdSetEnabled').checked, currency: $('wdSetCurrency').value,
+        maxPerWithdrawal: $('wdSetMaxOne').value, maxPerDay: $('wdSetMaxDay').value, reserve: $('wdSetReserve').value,
+        waitHours: Number($('wdSetWait').value), password: $('wdSetPassword').value
+      });
+      btn.disabled = false;
+      $('wdSetPassword').value = '';
+      if (r.ok) { show($('wdSetStatus'), 'Settings saved.', 'success'); loadOverview(); loadBalance(false); }
+      else { show($('wdSetStatus'), r.data.error || 'That did not work.', 'error'); loadOverview(); }
+    });
+
+    // ---- emergency stop ----
+    $('wdStopBtn').addEventListener('click', async () => {
+      if (!confirm('Switch off withdrawals now?')) return;
+      const r = await api('POST', '/api/admin/withdrawals/emergency-stop', {});
+      if (r.ok) { loadOverview(); } else notice(r.data.error || 'The stop did not work. Try again.', 'error');
+    });
+
+    // ---- history ----
+    function renderAudit(list, events, append) {
+      if (!append) list.textContent = '';
+      if (!events.length && !append) {
+        const p = document.createElement('p'); p.className = 'admin-form-hint'; p.textContent = 'Nothing logged yet.'; list.appendChild(p); return;
+      }
+      events.forEach((e) => {
+        const row = document.createElement('div'); row.className = 'activity-row';
+        const dot = document.createElement('span'); dot.className = 'activity-dot';
+        const body = document.createElement('div'); body.className = 'activity-body';
+        const title = document.createElement('p'); title.className = 'activity-title';
+        title.textContent = (AUDIT_LABEL[e.type] || e.type) + (e.outcome === 'refused' ? ' (refused)' : e.outcome === 'failed' ? ' (failed)' : '') + (e.amountText ? ' ' + e.amountText : '');
+        body.appendChild(title);
+        if (e.detail) { const d = document.createElement('p'); d.className = 'activity-detail'; d.textContent = e.detail; body.appendChild(d); }
+        if (e.reference) { const d = document.createElement('p'); d.className = 'activity-detail'; d.textContent = 'Reference ' + e.reference; body.appendChild(d); }
+        const time = document.createElement('span'); time.className = 'activity-time';
+        time.textContent = formatRelativeTime(e.createdAt); time.title = when(e.createdAt);
+        row.append(dot, body, time);
+        list.appendChild(row);
+      });
+    }
+    async function loadHistory(reset) {
+      if (reset) { auditBefore = null; }
+      const p = new URLSearchParams();
+      if ($('wdAuditType').value) p.set('type', $('wdAuditType').value);
+      if ($('wdAuditFrom').value) p.set('from', $('wdAuditFrom').value);
+      if ($('wdAuditTo').value) p.set('to', $('wdAuditTo').value);
+      if (!reset && auditBefore) p.set('before', String(auditBefore));
+      const r = await api('GET', '/api/admin/withdrawals/history?' + p.toString());
+      if (!r.ok) { show($('wdAuditInfo'), 'Could not load the history.', 'error'); return; }
+      const d = r.data;
+      const sel = $('wdAuditType');
+      if (sel.options.length === 1) d.types.forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = AUDIT_LABEL[t] || t; sel.appendChild(o); });
+      renderAudit($('wdAuditList'), d.events, !reset);
+      auditBefore = d.nextBefore;
+      $('wdAuditMore').disabled = !d.nextBefore;
+      $('wdAuditInfo').textContent = '';
+      $('wdAuditInfo').className = '';
+
+      const tt = $('wdTotalsRows');
+      if (!d.totals.length) emptyRow(tt, 6, 'No withdrawals this month.');
+      else {
+        tt.textContent = '';
+        d.totals.forEach((t) => {
+          const tr = document.createElement('tr');
+          cell(tr, 'Currency', t.currency); cell(tr, 'Sent', t.sent); cell(tr, 'Transfers', String(t.sentCount));
+          cell(tr, 'In progress', t.pending); cell(tr, 'Not sent', String(t.notSentCount)); cell(tr, 'Fees', t.fees);
+          tt.appendChild(tr);
+        });
+      }
+      const wt = $('wdWithdrawalRows');
+      if (!d.withdrawals.length) emptyRow(wt, 6, 'No withdrawals yet.');
+      else {
+        wt.textContent = '';
+        d.withdrawals.forEach((w) => {
+          const meta = STATUS[w.status] || [w.status, ''];
+          const tr = document.createElement('tr');
+          cell(tr, 'Time', when(w.createdAt)); cell(tr, 'Status', meta[0], 'admin-badge ' + meta[1]);
+          cell(tr, 'Recipient', w.label + ' (' + w.masked + ')'); cell(tr, 'Amount', w.amountText);
+          cell(tr, 'Reference', w.reference); cell(tr, 'Reason', w.failureReason || '');
+          wt.appendChild(tr);
+        });
+      }
+    }
+    $('wdAuditType').addEventListener('change', () => loadHistory(true));
+    $('wdAuditFrom').addEventListener('change', () => loadHistory(true));
+    $('wdAuditTo').addEventListener('change', () => loadHistory(true));
+    $('wdAuditRefresh').addEventListener('click', () => loadHistory(true));
+    $('wdAuditMore').addEventListener('click', () => loadHistory(false));
+
+    syncType();
+    loadOverview();
+    loadBalance(false);
+  }
+
   function initOverviewPage() {
     // ---- configuration cards (unchanged: /api/admin/dashboard/stats) ----
     const paymentsValue = document.getElementById('statPaymentsValue');
@@ -5884,6 +6367,7 @@
     if (page === 'funnel') initFunnelPage();
     if (page === 'site-settings') initSiteSettingsPage();
     if (page === 'security') initSecurityPage();
+    if (page === 'withdrawals') initWithdrawalsPage();
     if (page === 'scripts') initScriptsPage();
     if (page === 'landing-page') initLandingPagePage();
     if (page === 'landing-sections') initLandingSectionsPage();
