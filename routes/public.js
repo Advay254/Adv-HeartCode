@@ -7,6 +7,7 @@ const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { getActivePaystackKeys } = require('../lib/paystack');
 const { finalizeDeployment } = require('../lib/finalizeDeployment');
+const { loadRender, REBUILD_MESSAGE, ID_RE } = require('../lib/buildRenders');
 const sitePasswordCache = require('../lib/sitePasswordCache');
 const { createRateLimiter, createDynamicRateLimiter } = require('../lib/rateLimit');
 const { getCurrencyForIp } = require('../lib/geolocation');
@@ -97,65 +98,20 @@ router.use(async (req, res, next) => {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Gap this closes: renderedHtml/sitePassword previously had no length
-// bound at all beyond the router's blanket 2MB body limit, and sitePassword
-// had no type check before being hashed.
-//
-// v1.2.6: raised from 1,000,000 to 15,000,000 chars (paired with this
-// route's own express.json() limit below, per this project's "paired
-// constants must change together" convention — see HANDOFF.md) now that a
-// rendered page can embed one or more base64 'image' field values (see
-// lib/imageProcessing.js). Sized generously above a real measured worst
-// case: a 1600px-max-side WebP at quality 85 against a genuinely busy
-// synthetic 4000x3000 test photo came out to ~950KB of base64 — even five
-// image fields on one website type (an explicit "several image fields for
-// a gallery" use case) stays well under half this ceiling alongside the
-// rest of a real page's markup.
+// v1.2.19: checkout takes ONLY a render id (see lib/buildRenders.js), the
+// client's email, the optional site password and the funnel session id. The
+// page HTML, the raw field values and the AI output are never accepted from the
+// browser: the server loads what it stored when it built the page. .strict()
+// makes any extra field (for example the old renderedHtml) a failed parse.
 const checkoutBodySchema = z.object({
-  renderedHtml: z.string().min(1).max(15000000),
+  renderId: z.string().regex(ID_RE),
   clientEmail: z.string().trim().email().max(254),
   sitePassword: z.string().max(200).optional(),
-  // v1.0.8 Part B: the raw form field values from the build page, kept
-  // around through checkout so lib/deploySlug.js's pattern resolution has
-  // something to substitute {{field_key}} tokens with at actual deploy
-  // time (see lib/finalizeDeployment.js) — previously these only existed
-  // transiently during the /api/build/:slug/generate call and were never
-  // persisted anywhere past that point. Same shape as apiBuild.js's own
-  // generateBodySchema catchall: a string for every field type except
-  // checkboxes, which submits an array of strings.
-  rawFieldValues: z.record(
-    z.string(),
-    z.union([z.string().max(5000), z.array(z.string().max(500)).max(50)])
-  ).optional(),
-  // v1.0.9: the AI's own raw output for this submission (present only for
-  // AI-enabled types — see routes/apiBuild.js), carried through checkout
-  // for the same reason rawFieldValues is: lib/finalizeDeployment.js needs
-  // it at deploy time to build the merged variable set a custom email
-  // template can reference, and by then the original /generate response is
-  // long gone. Shape mirrors ai_output_fields' three possible output
-  // types: a flat string, an array of strings, or an array of objects with
-  // string sub-properties (object_shape is admin-defined but always
-  // string-valued — see routes/adminWebsiteTypes.js's AI output field
-  // validation). Note this is, like renderedHtml and rawFieldValues above
-  // it, client-supplied and not re-verified against what the AI actually
-  // produced — the same trust boundary this whole endpoint has always had
-  // for the rendered site content itself, not a new one introduced here.
-  aiOutputValues: z.record(
-    z.string(),
-    z.union([
-      z.string().max(5000),
-      z.array(z.string().max(2000)).max(200),
-      z.array(z.record(z.string(), z.string().max(2000))).max(200)
-    ])
-  ).optional(),
   // v1.1.0 Part B: the client's anonymous funnel session_id
   // (public/funnel.js), carried through checkout so lib/finalizeDeployment.js
-  // can attach it to the server-side 'payment_completed' funnel event —
-  // see db/init.js's migration comment on pending_deployments.funnel_session_id
-  // for the full "why". Not personally identifying — just an opaque,
-  // client-generated string living in sessionStorage.
+  // can attach it to the server-side 'payment_completed' funnel event.
   sessionId: z.string().trim().min(1).max(200).optional()
-});
+}).strict();
 
 // Separate budget from the AI-generate limiter — different action,
 // different cost, an abusive run on one shouldn't block legitimate use of
@@ -1014,10 +970,9 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
 // asks Paystack to initialize a transaction; returns the URL to redirect
 // the browser to. Nothing is deployed yet — that only happens once
 // payment is confirmed, via the webhook or the callback page below.
-// v1.2.6: raised from 2mb to 16mb alongside checkoutBodySchema's
-// renderedHtml max above -- the same paired-constant change, for the same
-// reason (embedded 'image' field values).
-router.post('/build/:slug/checkout', express.json({ limit: '16mb' }), asyncHandler(async (req, res) => {
+// v1.2.19: the body is now tiny (a render id, an email and a password), so the
+// 16mb allowance that existed only to carry the HTML back is gone.
+router.post('/build/:slug/checkout', express.json({ limit: '10kb' }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
   const ip = getRealClientIp(req);
@@ -1035,13 +990,29 @@ router.post('/build/:slug/checkout', express.json({ limit: '16mb' }), asyncHandl
   }
   const websiteType = typeResult.rows[0];
 
-  const parsed = checkoutBodySchema.safeParse(req.body);
+  // v1.2.19: a page opened before this update still sends the old shape
+  // (renderedHtml and friends). It gets a friendly "build again" message, never
+  // a crash, and nothing from that request is used.
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  if (typeof body.renderId !== 'string' || 'renderedHtml' in body || 'rawFieldValues' in body || 'aiOutputValues' in body) {
+    return res.status(409).json({ error: REBUILD_MESSAGE, rebuild: true });
+  }
+  const parsed = checkoutBodySchema.safeParse(body);
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
     const field = firstIssue ? firstIssue.path[0] : 'request';
+    if (field === 'renderId') return res.status(409).json({ error: REBUILD_MESSAGE, rebuild: true });
     return res.status(400).json({ error: `Invalid ${field}` });
   }
-  const { renderedHtml, clientEmail: email, sitePassword, rawFieldValues, aiOutputValues, sessionId } = parsed.data;
+  const { renderId, clientEmail: email, sitePassword, sessionId } = parsed.data;
+
+  const loaded = await loadRender(renderId, websiteType.id);
+  if (!loaded.ok) {
+    return res.status(loaded.reason === 'expired' || loaded.reason === 'missing' ? 410 : 409).json({ error: REBUILD_MESSAGE, rebuild: true });
+  }
+  const renderedHtml = loaded.render.rendered_html;
+  const rawFieldValues = loaded.render.raw_field_values;
+  const aiOutputValues = loaded.render.ai_output_values;
 
   if (!EMAIL_RE.test(email)) {
     // zod's .email() already validated this; the house regex is kept as
@@ -1085,13 +1056,13 @@ router.post('/build/:slug/checkout', express.json({ limit: '16mb' }), asyncHandl
     `INSERT INTO pending_deployments
        (reference, website_type_id, client_email, site_password_hash, rendered_html,
         charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values,
-        ai_output_values, funnel_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        ai_output_values, funnel_session_id, render_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [reference, websiteType.id, email, sitePasswordHash, renderedHtml,
       charge.currency, charge.amount, charge.rate, expiresAt,
       rawFieldValues ? JSON.stringify(rawFieldValues) : null,
       aiOutputValues ? JSON.stringify(aiOutputValues) : null,
-      sessionId || null]
+      sessionId || null, renderId]
   );
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/build/${websiteType.slug}/checkout/callback`;

@@ -4,6 +4,7 @@ const { getPool } = require('../db/init');
 const { createRateLimiter } = require('../lib/rateLimit');
 const { getRealClientIp } = require('../lib/clientIp');
 const { generateSite, handleImageUpload } = require('../lib/buildGeneration');
+const { createRender } = require('../lib/buildRenders');
 
 const router = express.Router();
 
@@ -66,15 +67,24 @@ router.post('/:slug/generate', handleImageUpload, express.json(), asyncHandler(a
     return res.status(result.status).json(result.body);
   }
 
-  // v1.0.9: aiOutputValues (the AI's raw parsed JSON, unescaped) is handed
-  // back alongside the rendered html ONLY when AI actually ran -- the
-  // client carries it through checkout so the email template can use it
-  // (see public/site.js and lib/emailTemplates.js). A non-AI build returns
-  // just { html }, exactly as before.
-  if (result.aiOutputValues) {
-    return res.json({ html: result.html, aiOutputValues: result.aiOutputValues });
+  // v1.2.19: the server keeps what it built. The rendered page, the raw field
+  // values and the AI output are stored under a long random id (see
+  // lib/buildRenders.js). The browser gets the html to show the preview and the
+  // id, and checkout accepts only that id. aiOutputValues is no longer sent to
+  // the browser at all, since nothing in the browser needs it any more.
+  const stored = await createRender({
+    websiteTypeId: websiteType.id,
+    html: result.html,
+    rawFieldValues: result.rawFieldValues || null,
+    aiOutputValues: result.aiOutputValues || null
+  });
+  if (!stored.ok) {
+    if (stored.reason === 'too_large') {
+      return res.status(413).json({ error: 'Your page is too large to preview. Try smaller images or shorter text.' });
+    }
+    return res.status(503).json({ error: 'We are very busy building pages right now. Please try again in a few minutes.' });
   }
-  res.json({ html: result.html });
+  res.json({ html: result.html, renderId: stored.id, expiresAt: stored.expiresAt.toISOString() });
 }));
 
 module.exports = router;
