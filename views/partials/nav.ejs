@@ -1,44 +1,50 @@
 <%
   const navGroups = [
     {
-      label: 'Content',
+      label: 'Website',
       icon: 'layout-template',
       items: [
-        { page: 'website-types', href: `/${slug}/website-types`, label: 'Website Types' },
-        { page: 'categories', href: `/${slug}/categories`, label: 'Categories' },
-        { page: 'landing-page', href: `/${slug}/landing-page`, label: 'Explore Footer' },
-        { page: 'landing-sections', href: `/${slug}/landing-sections`, label: 'Landing Sections' },
-        { page: 'seo-pages', href: `/${slug}/seo-pages`, label: 'SEO Pages' },
-        { page: 'faq', href: `/${slug}/faq`, label: 'FAQ' },
-        { page: 'legal-pages', href: `/${slug}/legal-pages`, label: 'Legal Pages' },
-        { page: 'site-settings', href: `/${slug}/site-settings`, label: 'Site Settings' },
-        { page: 'scripts', href: `/${slug}/scripts`, label: 'Scripts' },
-        { page: 'promotion', href: `/${slug}/promotion`, label: 'Promotion' },
-        { page: 'ad-cards', href: `/${slug}/ad-cards`, label: 'Ad Cards' }
+        { page: 'website-types', href: `/${slug}/website-types`, label: 'Website Types', icon: 'layout-template' },
+        { page: 'categories', href: `/${slug}/categories`, label: 'Categories', icon: 'tags' },
+        { page: 'landing-sections', href: `/${slug}/landing-sections`, label: 'Landing Sections', icon: 'panels-top-left' },
+        { page: 'landing-page', href: `/${slug}/landing-page`, label: 'Explore Footer', icon: 'panel-bottom' },
+        { page: 'seo-pages', href: `/${slug}/seo-pages`, label: 'SEO Pages', icon: 'search' },
+        { page: 'faq', href: `/${slug}/faq`, label: 'FAQ', icon: 'circle-help' },
+        { page: 'legal-pages', href: `/${slug}/legal-pages`, label: 'Legal Pages', icon: 'scale' }
       ]
     },
     {
-      label: 'Commerce',
+      label: 'Marketing',
+      icon: 'megaphone',
+      items: [
+        { page: 'promotion', href: `/${slug}/promotion`, label: 'Promotion', icon: 'megaphone' },
+        { page: 'ad-cards', href: `/${slug}/ad-cards`, label: 'Ad Cards', icon: 'newspaper' },
+        { page: 'reviews', href: `/${slug}/reviews`, label: 'Reviews', icon: 'star', badge: 'pendingReviews' },
+        { page: 'funnel', href: `/${slug}/funnel`, label: 'Funnel', icon: 'funnel' }
+      ]
+    },
+    {
+      label: 'Sales',
       icon: 'credit-card',
       items: [
-        { page: 'submissions', href: `/${slug}/submissions`, label: 'Deployments & Subscribers' },
-        { page: 'activity', href: `/${slug}/activity`, label: 'Activity' },
-        { page: 'reviews', href: `/${slug}/reviews`, label: 'Reviews', badge: 'pendingReviews' },
-        { page: 'payments', href: `/${slug}/payments`, label: 'Payments' },
-        { page: 'withdrawals', href: `/${slug}/withdrawals`, label: 'Withdrawals' },
-        { page: 'recovery', href: `/${slug}/recovery`, label: 'Recovery' },
-        { page: 'funnel', href: `/${slug}/funnel`, label: 'Funnel' }
+        { page: 'submissions', href: `/${slug}/submissions`, label: 'Deployments & Subscribers', icon: 'rocket' },
+        { page: 'payments', href: `/${slug}/payments`, label: 'Payments', icon: 'credit-card' },
+        { page: 'withdrawals', href: `/${slug}/withdrawals`, label: 'Withdrawals', icon: 'wallet' },
+        { page: 'recovery', href: `/${slug}/recovery`, label: 'Recovery', icon: 'history' },
+        { page: 'activity', href: `/${slug}/activity`, label: 'Activity', icon: 'activity' }
       ]
     },
     {
-      label: 'System',
-      icon: 'wrench',
+      label: 'Settings',
+      icon: 'settings',
       items: [
-        { page: 'ai-provider', href: `/${slug}/ai-provider`, label: 'AI Provider' },
-        { page: 'hosting', href: `/${slug}/hosting`, label: 'Hosting' },
-        { page: 'email-providers', href: `/${slug}/email-providers`, label: 'Email Providers' },
-        { page: 'notifications', href: `/${slug}/notifications`, label: 'Notifications' },
-        { page: 'security', href: `/${slug}/security`, label: 'Security' }
+        { page: 'site-settings', href: `/${slug}/site-settings`, label: 'Site Settings', icon: 'settings' },
+        { page: 'scripts', href: `/${slug}/scripts`, label: 'Scripts', icon: 'code' },
+        { page: 'ai-provider', href: `/${slug}/ai-provider`, label: 'AI Provider', icon: 'sparkles' },
+        { page: 'hosting', href: `/${slug}/hosting`, label: 'Hosting', icon: 'server' },
+        { page: 'email-providers', href: `/${slug}/email-providers`, label: 'Email Providers', icon: 'mail' },
+        { page: 'notifications', href: `/${slug}/notifications`, label: 'Notifications', icon: 'bell' },
+        { page: 'security', href: `/${slug}/security`, label: 'Security', icon: 'shield-check' }
       ]
     }
   ];
@@ -134,7 +140,7 @@
           <% group.items.forEach(function (item) { %>
             <% const itemActive = activePage === item.page; %>
             <a href="<%= item.href %>" class="admin-nav-child <%= itemActive ? 'is-active' : '' %>">
-              <span class="admin-nav-child-dot"></span>
+              <span class="admin-nav-child-icon"><%- getIconSvg(item.icon) %></span>
               <span><%= item.label %></span>
               <% if (item.badge === 'pendingReviews' && typeof pendingReviewCount !== 'undefined' && pendingReviewCount > 0) { %>
                 <span class="admin-badge admin-badge-brand ml-auto" aria-label="<%= pendingReviewCount %> pending review<%= pendingReviewCount === 1 ? '' : 's' %>"><%= pendingReviewCount %></span>
