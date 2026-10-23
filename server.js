@@ -24,6 +24,8 @@ const adminNotificationsRouter = require('./routes/adminNotifications');
 const adminSecurityRouter = require('./routes/adminSecurity');
 const adminWithdrawalsRouter = require('./routes/adminWithdrawals');
 const withdrawalsLib = require('./lib/withdrawals');
+const { deleteExpiredRenders } = require('./lib/buildRenders');
+const { findUnsafePlaceholders } = require('./lib/siteSanitizer');
 const adminSecurityLib = require('./lib/adminSecurity');
 const loginThrottle = require('./lib/loginThrottle');
 const { logStartupWarnings } = require('./lib/securityWarnings');
@@ -467,10 +469,12 @@ app.get('/health', async (req, res) => {
   try {
     const pool = getPool();
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', version: APP_VERSION });
+    // v1.2.19: the public answer is only ok or error. The version and the
+    // detail are not shown to visitors; a failure is explained in the server log.
+    res.json({ status: 'ok' });
   } catch (err) {
-    console.error('[HEALTH] DB check failed:', err.message);
-    res.status(500).json({ status: 'error', db: 'disconnected', version: APP_VERSION });
+    console.error(`[HEALTH] DB check failed (app ${APP_VERSION}):`, err.message);
+    res.status(500).json({ status: 'error' });
   }
 });
 // Not wrapped in asyncHandler (see lib/asyncHandler.js, applied everywhere
@@ -609,6 +613,14 @@ function startCleanupJob() {
       console.error('[CLEANUP] Failed to sweep old pending_deployments:', err.message);
     }
 
+    // v1.2.19: stored renders past their expiry (default 2 hours) are removed.
+    try {
+      const removedRenders = await deleteExpiredRenders();
+      if (removedRenders > 0) console.log(`[CLEANUP] Removed ${removedRenders} expired stored render(s).`);
+    } catch (err) {
+      console.error('[CLEANUP] Failed to sweep expired stored renders:', err.message);
+    }
+
     try {
       const funnelCutoff = new Date(Date.now() - FUNNEL_EVENT_RETENTION_MS);
       const funnelResult = await pool.query(
@@ -719,6 +731,24 @@ async function start() {
     if (removed > 0) console.log(`[CLEANUP] Removed ${removed} expired or idle admin session(s) at startup.`);
   } catch (err) {
     console.error('[SECURITY] Startup security checks hit a problem (the app keeps starting):', err.message);
+  }
+  // v1.2.19: names the website types whose active template puts a customer
+  // placeholder inside a script block or an on... attribute, where escaping
+  // alone cannot protect. Names only, never values. Never stops startup.
+  try {
+    const tpl = await getPool().query(
+      `SELECT wt.slug, t.html_content FROM templates t
+       JOIN website_types wt ON wt.id = t.website_type_id
+       WHERE t.is_active = true AND wt.is_active = true`
+    );
+    for (const row of tpl.rows) {
+      const hits = findUnsafePlaceholders(row.html_content);
+      if (hits.length > 0) {
+        console.warn(`[SECURITY] Template for "${row.slug}" puts customer fields inside script or event code: ${hits.map((h) => `{{${h.key}}} in ${h.where}`).join(', ')}. Escaping cannot fully protect those places, so move the value into the page text or a data- attribute.`);
+      }
+    }
+  } catch (err) {
+    console.error('[SECURITY] Could not check templates for script placeholders:', err.message);
   }
   try {
     logStartupWarnings(twoStepOn);
