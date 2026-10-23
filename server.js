@@ -22,6 +22,8 @@ const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
 const adminSecurityRouter = require('./routes/adminSecurity');
+const adminWithdrawalsRouter = require('./routes/adminWithdrawals');
+const withdrawalsLib = require('./lib/withdrawals');
 const adminSecurityLib = require('./lib/adminSecurity');
 const loginThrottle = require('./lib/loginThrottle');
 const { logStartupWarnings } = require('./lib/securityWarnings');
@@ -387,6 +389,7 @@ app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
 app.use('/api/admin/security', adminSecurityRouter);
+app.use('/api/admin/withdrawals', adminWithdrawalsRouter);
 app.use('/api/admin/website-types', adminWebsiteTypesRouter);
 app.use('/api/admin/categories', adminCategoriesRouter);
 app.use('/api/admin/faq', adminFaqRouter);
@@ -678,6 +681,20 @@ function startReviewJob() {
   setInterval(run, REVIEW_JOB_INTERVAL_MS);
 }
 
+// v1.2.18: settles withdrawals whose state is unclear (pending, unknown or
+// waiting for a Paystack code for too long) by looking them up with Paystack by
+// reference. It only reads from Paystack and never sends money.
+const WITHDRAWAL_RECONCILE_INTERVAL_MS = 2 * 60 * 1000;
+function startWithdrawalReconcileJob() {
+  const run = () => {
+    withdrawalsLib.reconcile(getPool()).then((r) => {
+      if (r.fixed > 0) console.log(`[WITHDRAWALS] Reconcile settled ${r.fixed} of ${r.checked} checked withdrawal(s).`);
+    }).catch((err) => console.error('[WITHDRAWALS] Reconcile run failed:', err.message));
+  };
+  setTimeout(run, 30 * 1000);
+  setInterval(run, WITHDRAWAL_RECONCILE_INTERVAL_MS);
+}
+
 async function start() {
   try {
     await initDB();
@@ -717,6 +734,7 @@ async function start() {
   startCleanupJob();
   startExchangeRateRefreshJob();
   startReviewJob();
+  startWithdrawalReconcileJob();
 
   app.listen(PORT, () => {
     console.log(`[SERVER] HeartCode listening on port ${PORT}`);
