@@ -184,6 +184,40 @@
     @apply mt-3 h-32 w-32 rounded-xl border border-black/10 object-cover;
   }
 
+  /* v1.2.24: the photo picker. A soft dashed card with an icon and a Browse
+     pill instead of the browser's own file control (which some phones draw
+     dark). The real input stays inside the label, visually hidden but still
+     focusable and fully functional. */
+  .hc-file-drop {
+    @apply relative flex cursor-pointer items-center gap-3 rounded-xl border
+           border-dashed border-hc-blue/40 bg-hc-blue/5 px-4 py-3
+           transition-colors duration-200 hover:bg-hc-blue/10
+           focus-within:ring-2 focus-within:ring-hc-blue/20;
+  }
+  .hc-file-drop.has-file {
+    @apply border-solid border-hc-blue/60 bg-white;
+  }
+  .hc-file-native {
+    @apply sr-only;
+  }
+  .hc-file-icon {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full
+           bg-white text-hc-blue [&>svg]:h-4 [&>svg]:w-4;
+  }
+  .hc-file-text {
+    @apply flex min-w-0 flex-1 flex-col;
+  }
+  .hc-file-title {
+    @apply truncate text-sm font-medium text-hc-ink;
+  }
+  .hc-file-sub {
+    @apply text-xs text-hc-ink/50;
+  }
+  .hc-file-btn {
+    @apply shrink-0 rounded-full border border-hc-blue/30 bg-white px-3 py-1.5
+           text-xs font-semibold text-hc-blue;
+  }
+
   /* Radio/checkbox option rows — a bordered "chip" per option rather than
      a bare native input, so every field type (including the two that
      previously had no styling at all) reads as one consistent system.
