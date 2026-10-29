@@ -41,6 +41,19 @@
         '<div class="admin-stat-card"><p class="admin-stat-label">Link emails today</p><p class="admin-stat-value">' + data.today.emailsSent + ' / ' + s.verifyDailyMax + '</p></div>' +
         '<div class="admin-stat-card"><p class="admin-stat-label">Free sites ever</p><p class="admin-stat-value">' + data.totalVerified + '</p></div>';
 
+      var ins = data.insights;
+      if (ins) {
+        document.getElementById('insightsGrid').innerHTML =
+          '<div class="admin-stat-card"><p class="admin-stat-label">Reviews from free sites</p><p class="admin-stat-value">' + ins.freeReviews + '</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Review rate (free)</p><p class="admin-stat-value">' + ins.freeReviewRate + '%</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Average rating</p><p class="admin-stat-value">' + (ins.freeReviews ? ins.freeAvgRating.toFixed(1) : 'None') + '</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Review rate (paid, for comparison)</p><p class="admin-stat-value">' + ins.paidReviewRate + '%</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Badge visits, last 7 days</p><p class="admin-stat-value">' + ins.referral.last7 + '</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Badge visits, last 30 days</p><p class="admin-stat-value">' + ins.referral.last30 + '</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Badge visits, all time</p><p class="admin-stat-value">' + ins.referral.total + '</p></div>' +
+          '<div class="admin-stat-card"><p class="admin-stat-label">Free sites built</p><p class="admin-stat-value">' + ins.freeSites + '</p></div>';
+      }
+
       var rows = document.getElementById('freeRows');
       rows.innerHTML = data.recent.map(function (r) {
         var status = r.status === 'verified' ? 'Published' : (new Date(r.linkExpiresAt) < new Date() ? 'Link expired' : 'Waiting for link');
@@ -88,13 +101,20 @@
     }
 
     function renderList(coupons) {
+      var orders = 0, revenue = 0, discount = 0;
+      coupons.forEach(function (c) { orders += c.orders; revenue += c.revenueUsd; discount += c.discountUsd; });
+      document.getElementById('couponStats').innerHTML =
+        '<div class="admin-stat-card"><p class="admin-stat-label">Orders with a coupon</p><p class="admin-stat-value">' + orders + '</p></div>' +
+        '<div class="admin-stat-card"><p class="admin-stat-label">Revenue from them</p><p class="admin-stat-value">$' + revenue.toFixed(2) + '</p></div>' +
+        '<div class="admin-stat-card"><p class="admin-stat-label">Discount given</p><p class="admin-stat-value">$' + discount.toFixed(2) + '</p></div>' +
+        '<div class="admin-stat-card"><p class="admin-stat-label">Active coupons</p><p class="admin-stat-value">' + coupons.filter(function (c) { return c.isActive; }).length + '</p></div>';
       var rows = document.getElementById('couponRows');
       rows.innerHTML = coupons.map(function (c) {
         var types = c.websiteTypeIds.length ? c.websiteTypeIds.map(function (id) { return typeNames[id] || ('#' + id); }).join(', ') : 'All above $2';
         var used = c.usesCount + (c.maxUses ? ' / ' + c.maxUses : '');
         var expired = c.expiresAt && new Date(c.expiresAt) < new Date();
         var status = !c.isActive ? 'Off' : (expired ? 'Expired' : (c.maxUses && c.usesCount >= c.maxUses ? 'Used up' : 'Active'));
-        return '<tr data-id="' + c.id + '"><td data-label="Code"><strong>' + esc(c.code) + '</strong></td><td data-label="Off">' + c.percent + '%</td><td data-label="Used">' + esc(used) + '</td><td data-label="Expires">' + esc(c.expiresAt ? fmt(c.expiresAt) : 'Never') + '</td><td data-label="Types">' + esc(types) + '</td><td data-label="Status">' + status + '</td>' +
+        return '<tr data-id="' + c.id + '"><td data-label="Code"><strong>' + esc(c.code) + '</strong></td><td data-label="Off">' + c.percent + '%</td><td data-label="Orders">' + c.orders + '</td><td data-label="Revenue">$' + c.revenueUsd.toFixed(2) + '</td><td data-label="Discount given">$' + c.discountUsd.toFixed(2) + '</td><td data-label="Uses">' + esc(used) + '</td><td data-label="Expires">' + esc(c.expiresAt ? fmt(c.expiresAt) : 'Never') + '</td><td data-label="Types">' + esc(types) + '</td><td data-label="Status">' + status + '</td>' +
           '<td data-label=""><button type="button" class="admin-btn-outline admin-btn-sm" data-act="toggle" data-active="' + (c.isActive ? '1' : '0') + '">' + (c.isActive ? 'Turn off' : 'Turn on') + '</button> ' +
           '<button type="button" class="admin-btn-danger admin-btn-sm" data-act="delete">Delete</button></td></tr>';
       }).join('');
@@ -143,8 +163,65 @@
     load();
   }
 
+  /* ---------------- Email budget meter ---------------- */
+  function initEmailBudget() {
+    var body = document.getElementById('emailBudgetBody');
+    var input = document.getElementById('emailQuotaInput');
+    var msg = document.getElementById('emailBudgetMsg');
+    if (!body || !input) return;
+
+    function render(d) {
+      input.value = d.quota == null ? '' : d.quota;
+      if (d.quota == null) {
+        body.innerHTML = '<p style="margin:0;color:#667085;font-size:13.5px;">Enter your daily email limit below to see how much of it you have used today.</p>';
+        return;
+      }
+      var pct = Math.min(100, Math.round((d.sentToday / d.quota) * 100));
+      var cls = d.sentToday >= d.quota ? 'is-full' : (pct >= 80 ? 'is-warn' : '');
+      var days = (d.lastDays || []).map(function (x) { return '<li><span>' + esc(x.day) + '</span><span>' + x.count + '</span></li>'; }).join('');
+      body.innerHTML =
+        '<div class="eb-meter"><div class="eb-fill ' + cls + '" style="width:' + pct + '%;"></div></div>' +
+        '<div class="eb-line"><span><strong>' + d.sentToday + '</strong> of ' + d.quota + ' used today (' + pct + '%)</span><span>' + d.remaining + ' left</span></div>' +
+        (d.failedToday ? '<div class="eb-line"><span>' + d.failedToday + ' failed today (not counted above)</span></div>' : '') +
+        (days ? '<ul class="eb-days">' + days + '</ul>' : '');
+    }
+
+    function load() {
+      return window.adminFetch('/api/admin/email-budget').then(function (r) { return r.json(); }).then(render);
+    }
+
+    document.getElementById('emailBudgetForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = input.value.trim();
+      window.adminFetch('/api/admin/email-budget', { method: 'PUT', body: JSON.stringify({ quota: v === '' ? null : v }) })
+        .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+        .then(function (r) {
+          if (r.ok) { render(r.d); say(msg, v === '' ? 'Meter turned off.' : 'Saved.', 'success'); }
+          else say(msg, r.d.error || 'Could not save.', 'error');
+        })
+        .catch(function () { say(msg, 'Network error. Please try again.', 'error'); });
+    });
+
+    load();
+  }
+
+  /* ---------------- Test deploy cleanup setting ---------------- */
+  function initTestCleanup() {
+    var input = document.getElementById('testExpiryDays');
+    var msg = document.getElementById('testExpiryMsg');
+    if (!input) return;
+    window.adminFetch('/api/admin/test-deploy/_settings').then(function (r) { return r.json(); }).then(function (d) { input.value = d.expiryDays; });
+    document.getElementById('testExpirySave').addEventListener('click', function () {
+      window.adminFetch('/api/admin/test-deploy/_settings', { method: 'PUT', body: JSON.stringify({ expiryDays: input.value }) })
+        .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+        .then(function (r) { msg.textContent = r.ok ? 'Saved' : (r.d.error || 'Could not save'); });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var page = document.body.dataset.page;
+    initEmailBudget();
+    if (page === 'test-deploy') initTestCleanup();
     if (page === 'free') initFree();
     if (page === 'coupons') initCoupons();
   });
