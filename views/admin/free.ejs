@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Free Deployments | HeartCode Admin</title>
+</head>
+<body data-page="free">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'free' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Sales</p>
+        <h1>Free Deployments</h1>
+        <p>A website type priced at $0 is free. The visitor confirms their email with a one-time link before the site is deployed. Each email gets one free site, free sites are kept out of revenue, and they delete themselves after the days you set below.</p>
+      </div>
+    </section>
+
+    <section class="admin-stat-grid" id="freeStats"></section>
+
+    <section class="admin-card max-w-xl">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Limits</p><h2>Settings</h2></div></div>
+      <form id="freeForm">
+        <label class="admin-label" for="dailyCap">Free deployments per day</label>
+        <input class="admin-input" type="number" id="dailyCap" min="0" max="1000" step="1" required>
+        <p class="admin-hint" style="margin:4px 0 14px;color:#667085;font-size:12.5px;line-height:1.55;">Counted when the email link is opened. Once this is reached, visitors are told to try again tomorrow. Set 0 to close free deployments. The day resets at midnight UTC.</p>
+
+        <label class="admin-label" for="verifyDailyMax">Confirmation emails per day</label>
+        <input class="admin-input" type="number" id="verifyDailyMax" min="0" max="5000" step="1" required>
+        <p class="admin-hint" style="margin:4px 0 14px;color:#667085;font-size:12.5px;line-height:1.55;">A hard ceiling on link emails, so free requests can never use up your daily email allowance. Each free site also sends one "site ready" email.</p>
+
+        <label class="admin-label" for="expiryDays">Free site lasts (days)</label>
+        <input class="admin-input" type="number" id="expiryDays" min="1" max="30" step="1" required>
+        <p class="admin-hint" style="margin:4px 0 14px;color:#667085;font-size:12.5px;line-height:1.55;">1 to 30. After this the site stops loading and is deleted from ClarityHeart. Applies to sites deployed from now on.</p>
+
+        <label class="admin-label" for="linkMinutes">Email link works for (minutes)</label>
+        <input class="admin-input" type="number" id="linkMinutes" min="5" max="120" step="1" required>
+
+        <label class="admin-label" for="blockedList">Extra blocked emails and domains</label>
+        <textarea class="admin-textarea" id="blockedList" rows="8" placeholder="one per line, for example:&#10;spammer@example.com&#10;throwaway-mail.net"></textarea>
+        <p class="admin-hint" style="margin:4px 0 14px;color:#667085;font-size:12.5px;line-height:1.55;">Paste as many as you like, one per line. An address blocks just that address, a domain blocks everyone on it. Duplicates and blank lines are removed when you save. About <span id="builtInCount">100</span> well-known disposable domains are already blocked for you.</p>
+
+        <div class="mt-4"><button type="submit" class="admin-btn">Save</button></div>
+      </form>
+      <p id="freeMsg" class="admin-msg" style="display:none;"></p>
+    </section>
+
+    <section class="admin-card" style="margin-top:1.5rem;">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Latest</p><h2>Recent free requests</h2></div></div>
+      <div class="admin-table-wrap">
+        <table class="admin-table is-responsive-stack" id="freeTable">
+          <thead><tr><th>Email</th><th>Status</th><th>Requested</th><th>Site</th><th>Site ends</th></tr></thead>
+          <tbody id="freeRows"></tbody>
+        </table>
+      </div>
+      <p id="freeEmpty" class="admin-hint" style="display:none;margin:12px 0 0;color:#667085;font-size:13px;">No free requests yet.</p>
+    </section>
+  </main>
+</div>
+<script src="/dashboard-assets/admin-free.js" defer></script>
+</body>
+</html>

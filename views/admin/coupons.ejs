@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('../partials/head') %>
+<title>Coupons | HeartCode Admin</title>
+</head>
+<body data-page="coupons">
+<div class="admin-shell">
+  <%- include('../partials/nav', { activePage: 'coupons' }) %>
+  <main class="admin-main">
+    <section class="admin-page-intro">
+      <div>
+        <p class="admin-eyebrow">Marketing</p>
+        <h1>Coupons</h1>
+        <p>Promo codes for paid sites. A code can take off at most 25%, and only works on a website type priced above $2. Each email address can use a given code once. A code is counted when the payment completes, not when someone types it.</p>
+      </div>
+    </section>
+
+    <section class="admin-card max-w-xl">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">New</p><h2>Create a coupon</h2></div></div>
+      <form id="couponForm">
+        <label class="admin-label" for="couponCode">Code</label>
+        <input class="admin-input" type="text" id="couponCode" maxlength="32" placeholder="WELCOME10" autocomplete="off" required>
+
+        <label class="admin-label" for="couponPercent">Discount (%)</label>
+        <input class="admin-input" type="number" id="couponPercent" min="1" max="25" step="1" value="10" required>
+        <p class="admin-hint" style="margin:4px 0 14px;color:#667085;font-size:12.5px;line-height:1.55;">1 to 25.</p>
+
+        <label class="admin-label" for="couponExpires">Expires <span>(optional)</span></label>
+        <input class="admin-input" type="date" id="couponExpires">
+
+        <label class="admin-label" for="couponMax">Total uses allowed <span>(optional)</span></label>
+        <input class="admin-input" type="number" id="couponMax" min="1" step="1" placeholder="Unlimited">
+
+        <label class="admin-label">Only for these website types <span>(none ticked = every type above $2)</span></label>
+        <div id="couponTypes" class="admin-option-list"></div>
+
+        <div class="mt-4"><button type="submit" class="admin-btn">Create coupon</button></div>
+      </form>
+      <p id="couponMsg" class="admin-msg" style="display:none;"></p>
+    </section>
+
+    <section class="admin-card" style="margin-top:1.5rem;">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">All</p><h2>Your coupons</h2></div></div>
+      <div class="admin-table-wrap">
+        <table class="admin-table is-responsive-stack" id="couponTable">
+          <thead><tr><th>Code</th><th>Off</th><th>Used</th><th>Expires</th><th>Types</th><th>Status</th><th></th></tr></thead>
+          <tbody id="couponRows"></tbody>
+        </table>
+      </div>
+      <p id="couponEmpty" class="admin-hint" style="display:none;margin:12px 0 0;color:#667085;font-size:13px;">No coupons yet.</p>
+    </section>
+  </main>
+</div>
+<script src="/dashboard-assets/admin-free.js" defer></script>
+</body>
+</html>
