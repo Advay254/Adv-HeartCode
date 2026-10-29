@@ -21,6 +21,8 @@ const adminHostingRouter = require('./routes/adminHosting');
 const adminFreeRouter = require('./routes/adminFree');
 const adminCouponsRouter = require('./routes/adminCoupons');
 const { purgeStaleFreeClaims } = require('./lib/freeDeployments');
+const { purgeOldEmailLog } = require('./lib/emailBudget');
+const adminEmailBudgetRouter = require('./routes/adminEmailBudget');
 const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
@@ -391,6 +393,7 @@ app.use('/api/admin', adminAuthApiRouter);
 app.use('/api/admin/paystack', adminPaystackRouter);
 app.use('/api/admin/hosting', adminHostingRouter);
 app.use('/api/admin/free', adminFreeRouter);
+app.use('/api/admin/email-budget', adminEmailBudgetRouter);
 app.use('/api/admin/coupons', adminCouponsRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
@@ -631,6 +634,13 @@ function startCleanupJob() {
       if (droppedClaims > 0) console.log(`[CLEANUP] Removed ${droppedClaims} lapsed free deployment request(s).`);
     } catch (err) {
       console.error('[CLEANUP] Failed to sweep free claims:', err.message);
+    }
+
+    // v1.2.23: the email counter keeps 40 days.
+    try {
+      await purgeOldEmailLog();
+    } catch (err) {
+      console.error('[CLEANUP] Failed to trim the email log:', err.message);
     }
 
     // v1.2.19: stored renders past their expiry (default 2 hours) are removed.
