@@ -18,6 +18,9 @@ const { pageRouter: adminLoginPageRouter, apiRouter: adminAuthApiRouter } = requ
 const adminPagesRouter = require('./routes/adminPages');
 const adminPaystackRouter = require('./routes/adminPaystack');
 const adminHostingRouter = require('./routes/adminHosting');
+const adminFreeRouter = require('./routes/adminFree');
+const adminCouponsRouter = require('./routes/adminCoupons');
+const { purgeStaleFreeClaims } = require('./lib/freeDeployments');
 const adminAiProvidersRouter = require('./routes/adminAiProviders');
 const adminEmailProvidersRouter = require('./routes/adminEmailProviders');
 const adminNotificationsRouter = require('./routes/adminNotifications');
@@ -387,6 +390,8 @@ app.use('/api/admin', adminJsonBodyParser);
 app.use('/api/admin', adminAuthApiRouter);
 app.use('/api/admin/paystack', adminPaystackRouter);
 app.use('/api/admin/hosting', adminHostingRouter);
+app.use('/api/admin/free', adminFreeRouter);
+app.use('/api/admin/coupons', adminCouponsRouter);
 app.use('/api/admin/ai-providers', adminAiProvidersRouter);
 app.use('/api/admin/email-providers', adminEmailProvidersRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
@@ -618,6 +623,14 @@ function startCleanupJob() {
       }
     } catch (err) {
       console.error('[CLEANUP] Failed to sweep old pending_deployments:', err.message);
+    }
+
+    // v1.2.21: free-deployment requests whose link was never opened.
+    try {
+      const droppedClaims = await purgeStaleFreeClaims();
+      if (droppedClaims > 0) console.log(`[CLEANUP] Removed ${droppedClaims} lapsed free deployment request(s).`);
+    } catch (err) {
+      console.error('[CLEANUP] Failed to sweep free claims:', err.message);
     }
 
     // v1.2.19: stored renders past their expiry (default 2 hours) are removed.
