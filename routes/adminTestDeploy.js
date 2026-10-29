@@ -162,7 +162,7 @@ router.post('/:slug', requireCsrf, handleImageUpload, asyncHandler(async (req, r
   // ---- deploy: the existing function, no new deploy logic ----
   let deployResult;
   try {
-    deployResult = await deployToClarityHeart(requestedSlug, htmlToDeploy);
+    deployResult = await deployToClarityHeart(requestedSlug, htmlToDeploy, { folder: 'Test' });
   } catch (err) {
     console.error(`[TEST-DEPLOY] Deploy failed for "${websiteType.slug}":`, err.message);
     return res.status(502).json({ error: `Deployment failed: ${err.message}` });

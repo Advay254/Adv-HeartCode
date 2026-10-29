@@ -134,7 +134,7 @@ router.post('/test', requireCsrf, asyncHandler(async (req, res) => {
     + 'confirming the ClarityHeart connection works.</p></body></html>';
 
   try {
-    const result = await deployToClarityHeart(testSlug, testHtml);
+    const result = await deployToClarityHeart(testSlug, testHtml, { folder: 'Test' });
     res.json({ success: true, url: result.url, slug: result.slug });
   } catch (err) {
     console.error('[HOSTING] Test deploy failed:', err.message);

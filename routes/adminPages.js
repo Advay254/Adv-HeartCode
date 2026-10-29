@@ -61,6 +61,14 @@ router.get(`${INTERNAL_ADMIN_PREFIX}/payments`, (req, res) => {
   res.render('admin/paystack');
 });
 
+router.get(`${INTERNAL_ADMIN_PREFIX}/free`, (req, res) => {
+  res.render('admin/free');
+});
+
+router.get(`${INTERNAL_ADMIN_PREFIX}/coupons`, (req, res) => {
+  res.render('admin/coupons');
+});
+
 router.get(`${INTERNAL_ADMIN_PREFIX}/hosting`, (req, res) => {
   res.render('admin/hosting');
 });

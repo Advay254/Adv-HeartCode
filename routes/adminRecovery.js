@@ -40,10 +40,12 @@ router.get('/', asyncHandler(async (req, res) => {
 
   const pool = getPool();
   const params = [];
-  let whereClause = '';
+  // v1.2.21: free deployments waiting on their emailed link are not unpaid
+  // checkouts, so they are never listed here.
+  let whereClause = 'WHERE pd.is_free = false';
   if (search) {
     params.push(`%${search}%`);
-    whereClause = 'WHERE pd.client_email ILIKE $1 OR pd.reference ILIKE $1';
+    whereClause = 'WHERE pd.is_free = false AND (pd.client_email ILIKE $1 OR pd.reference ILIKE $1)';
   }
 
   const countResult = await pool.query(`SELECT COUNT(*) FROM pending_deployments pd ${whereClause}`, params);

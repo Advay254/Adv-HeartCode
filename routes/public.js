@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { z } = require('zod');
 const { getPool } = require('../db/init');
 const { getActivePaystackKeys } = require('../lib/paystack');
+const { getActiveEmailProvider } = require('../lib/emailProvider');
 const { finalizeDeployment } = require('../lib/finalizeDeployment');
 const { loadRender, REBUILD_MESSAGE, ID_RE } = require('../lib/buildRenders');
 const sitePasswordCache = require('../lib/sitePasswordCache');
@@ -21,8 +22,11 @@ const { getLandingContent } = require('../lib/landingContent');
 const { getLandingSections } = require('../lib/landingSections');
 const { DEFAULT_CONTENT } = require('../lib/landingSectionTypes');
 const { escapeHtml } = require('../lib/template');
-const { sendResendDetailsEmail } = require('../lib/email');
-const { getRealClientIp } = require('../lib/clientIp');
+const { sendResendDetailsEmail, sendFreeVerificationEmail } = require('../lib/email');
+const { getRealClientIp, getRateLimitKey } = require('../lib/clientIp');
+const { createFreeClaim, verifyFreeClaim, getFreeSettings } = require('../lib/freeDeployments');
+const { findApplicableCoupon } = require('../lib/coupons');
+const { resolvePublicBaseUrl } = require('../lib/publicUrl');
 const { getActiveLegalPage } = require('../lib/legalPages');
 const { getFooterExtras } = require('../lib/footerExtras');
 const { logEvent } = require('../lib/activityEvents');
@@ -110,13 +114,17 @@ const checkoutBodySchema = z.object({
   // v1.1.0 Part B: the client's anonymous funnel session_id
   // (public/funnel.js), carried through checkout so lib/finalizeDeployment.js
   // can attach it to the server-side 'payment_completed' funnel event.
-  sessionId: z.string().trim().min(1).max(200).optional()
+  sessionId: z.string().trim().min(1).max(200).optional(),
+  // v1.2.21: optional promo code, checked again on the server.
+  couponCode: z.string().trim().max(40).optional()
 }).strict();
 
 // Separate budget from the AI-generate limiter — different action,
 // different cost, an abusive run on one shouldn't block legitimate use of
 // the other.
 const checkoutLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60 * 1000 });
+// v1.2.21: promo code checks (the preview and the checkout itself). Keeps anyone from guessing codes.
+const couponLimiter = createRateLimiter({ max: 20, windowMs: 60 * 60 * 1000 });
 
 function round2(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -959,9 +967,17 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
 
   analytics.addPageEvent(res, 'checkout_started', { type: t.slug, currency: charge.currency, value: charge.amount });
 
+  // v1.2.21: a $0 type is a free deployment (emailed link, no payment); a coupon box
+  // shows only above the minimum price.
+  const isFree = priceUsd === 0;
+  const freeSettings = isFree ? await getFreeSettings() : null;
   res.render('public/checkout', {
     pageTitle: `Checkout, ${t.name}`,
-    websiteType: { id: t.id, slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) }
+    websiteType: { id: t.id, slug: t.slug, name: t.name, chargeDisplay: formatMoney(charge.amount, charge.currency) },
+    isFree,
+    freeExpiryDays: freeSettings ? freeSettings.expiryDays : 0,
+    freeLinkMinutes: freeSettings ? freeSettings.linkMinutes : 0,
+    couponAllowed: priceUsd > 2
   });
 }));
 
@@ -972,6 +988,120 @@ router.get('/build/:slug/checkout', asyncHandler(async (req, res) => {
 // payment is confirmed, via the webhook or the callback page below.
 // v1.2.19: the body is now tiny (a render id, an email and a password), so the
 // 16mb allowance that existed only to carry the HTML back is gone.
+// v1.2.21: the free path. Stores the pending deployment and a one-time link
+// claim, emails the link, and tells the page to show "check your email". The
+// site is only deployed when the link is opened (GET /free/verify/:token).
+async function startFreeCheckout(req, res, { websiteType, email, sitePassword, sessionId, renderId, renderedHtml, rawFieldValues, aiOutputValues }) {
+  const pool = getPool();
+
+  const provider = await getActiveEmailProvider();
+  if (!provider) {
+    return res.status(503).json({ error: 'Free sites are not available right now. Please try again later.' });
+  }
+
+  const reference = `hc-${crypto.randomBytes(8).toString('hex')}`;
+  const claim = await createFreeClaim({ email, ip: getRateLimitKey(req), websiteTypeId: websiteType.id, reference });
+  if (!claim.ok) {
+    const status = claim.code === 'exhausted' || claim.code === 'closed' ? 429 : 400;
+    return res.status(status).json({ error: claim.message, code: claim.code });
+  }
+
+  const trimmedPassword = typeof sitePassword === 'string' ? sitePassword.trim() : '';
+  let sitePasswordHash = null;
+  if (trimmedPassword) {
+    sitePasswordHash = crypto.createHash('sha256').update(trimmedPassword).digest('hex');
+    sitePasswordCache.store(reference, trimmedPassword);
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO pending_deployments
+         (reference, website_type_id, client_email, site_password_hash, rendered_html,
+          charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values,
+          ai_output_values, funnel_session_id, render_id, is_free)
+       VALUES ($1, $2, $3, $4, $5, 'USD', 0, 1, $6, $7, $8, $9, $10, true)`,
+      [reference, websiteType.id, email, sitePasswordHash, renderedHtml, claim.expiresAt,
+        rawFieldValues ? JSON.stringify(rawFieldValues) : null,
+        aiOutputValues ? JSON.stringify(aiOutputValues) : null,
+        sessionId || null, renderId]
+    );
+    const verifyUrl = `${resolvePublicBaseUrl(req).url}/free/verify/${claim.token}`;
+    await sendFreeVerificationEmail(email, verifyUrl, claim.linkMinutes, claim.expiryDays);
+  } catch (err) {
+    // Nothing was emailed, so free the address to try again.
+    console.error('[FREE] Could not start a free deployment:', err.message);
+    await pool.query('DELETE FROM free_claims WHERE reference = $1', [reference]).catch(() => {});
+    await pool.query('DELETE FROM pending_deployments WHERE reference = $1', [reference]).catch(() => {});
+    return res.status(502).json({ error: 'We could not send your confirmation email. Please try again in a moment.' });
+  }
+
+  return res.json({ freeLinkSent: true, message: `We sent a confirmation link to ${email}. Open it within ${claim.linkMinutes} minutes to publish your free site.` });
+}
+
+// Preview of a promo code on the checkout page. The same rules run again, for real, at checkout.
+router.post('/build/:slug/coupon', express.json({ limit: '2kb', inflate: false }), asyncHandler(async (req, res) => {
+  if (!couponLimiter.tryConsume(getRateLimitKey(req))) {
+    return res.status(429).json({ error: 'Too many promo code attempts, please try again later' });
+  }
+  const parsed = z.object({ code: z.string().trim().min(1).max(40), clientEmail: z.string().trim().email().max(254).optional() }).strict().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Enter a promo code.' });
+
+  const pool = getPool();
+  const typeResult = await pool.query('SELECT * FROM website_types WHERE slug = $1 AND is_active = true', [req.params.slug]);
+  if (typeResult.rowCount === 0) return res.status(404).json({ error: 'Website type not found' });
+  const t = typeResult.rows[0];
+  const priceUsd = Number(t.price_usd) || 0;
+
+  const applied = await findApplicableCoupon({ code: parsed.data.code, websiteTypeId: t.id, priceUsd, email: parsed.data.clientEmail });
+  if (!applied.ok) return res.status(400).json({ error: applied.message });
+  const before = await resolveChargeForCheckout(req, priceUsd);
+  const after = await resolveChargeForCheckout(req, applied.discountedUsd);
+  res.json({
+    valid: true,
+    percent: applied.percent,
+    beforeDisplay: formatMoney(before.amount, before.currency),
+    afterDisplay: formatMoney(after.amount, after.currency)
+  });
+}));
+
+// The emailed link for a free deployment. One use. Shows the same result page as a paid checkout.
+router.get('/free/verify/:token', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Referrer-Policy', 'no-referrer');
+  const verified = await verifyFreeClaim(req.params.token);
+
+  let outcome = 'error';
+  let siteUrl = null;
+  let slug = '';
+  if (verified.status === 'ready' || verified.status === 'already') {
+    const result = await finalizeDeployment(verified.reference, { source: 'free_link' });
+    if (result.status === 'deployed' || result.status === 'already_deployed') {
+      outcome = 'success';
+      siteUrl = result.site.site_url;
+    } else if (result.status === 'expired') {
+      outcome = 'free_expired';
+    } else {
+      console.error(`[FREE] finalizeDeployment returned ${result.status} for ${verified.reference}:`, result.error || '');
+    }
+  } else if (verified.status === 'expired') {
+    outcome = 'free_expired';
+  } else if (verified.status === 'exhausted') {
+    outcome = 'free_exhausted';
+  } else if (verified.status === 'invalid') {
+    outcome = 'not_found';
+  }
+
+  res.render('public/checkout-callback', {
+    pageTitle: 'Your free site',
+    outcome,
+    siteUrl,
+    reference: null,
+    slug,
+    checkoutScripts: [],
+    isFree: true
+  });
+}));
+
 router.post('/build/:slug/checkout', express.json({ limit: '10kb', inflate: false }), asyncHandler(async (req, res) => {
   // v1.1.9 hotfix Part 2: see lib/clientIp.js -- keyed off the real
   // visitor IP, not Cloudflare's edge address.
@@ -1021,6 +1151,12 @@ router.post('/build/:slug/checkout', express.json({ limit: '10kb', inflate: fals
     return res.status(400).json({ error: 'A valid clientEmail is required' });
   }
 
+  // v1.2.21: a $0 type never reaches Paystack. It goes through the emailed-link
+  // flow instead (see lib/freeDeployments.js).
+  if ((Number(websiteType.price_usd) || 0) === 0) {
+    return startFreeCheckout(req, res, { websiteType, email, sitePassword, sessionId, renderId, renderedHtml, rawFieldValues, aiOutputValues });
+  }
+
   const keys = await getActivePaystackKeys();
   if (!keys) {
     return res.status(503).json({ error: 'Payments are not configured yet' });
@@ -1050,19 +1186,38 @@ router.post('/build/:slug/checkout', express.json({ limit: '10kb', inflate: fals
   // between now and webhook/callback time, since neither of those paths
   // ever re-derives the amount — they only read what's stored here.
   const priceUsd = Number(websiteType.price_usd) || 0;
-  const charge = await resolveChargeForCheckout(req, priceUsd);
+
+  // v1.2.21: an optional promo code lowers the USD price BEFORE it is converted
+  // and snapshotted, so the amount Paystack charges and the amount checked when
+  // the payment is verified are both the discounted one.
+  let chargeUsd = priceUsd;
+  let couponId = null;
+  let couponCode = null;
+  let discountPercent = null;
+  if (parsed.data.couponCode) {
+    if (!couponLimiter.tryConsume(getRateLimitKey(req))) {
+      return res.status(429).json({ error: 'Too many promo code attempts, please try again later' });
+    }
+    const applied = await findApplicableCoupon({ code: parsed.data.couponCode, websiteTypeId: websiteType.id, priceUsd, email });
+    if (!applied.ok) return res.status(400).json({ error: applied.message });
+    chargeUsd = applied.discountedUsd;
+    couponId = applied.coupon.id;
+    couponCode = applied.coupon.code;
+    discountPercent = applied.percent;
+  }
+  const charge = await resolveChargeForCheckout(req, chargeUsd);
 
   await pool.query(
     `INSERT INTO pending_deployments
        (reference, website_type_id, client_email, site_password_hash, rendered_html,
         charge_currency, charge_amount, exchange_rate_snapshot, expires_at, raw_field_values,
-        ai_output_values, funnel_session_id, render_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        ai_output_values, funnel_session_id, render_id, coupon_id, coupon_code, discount_percent)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     [reference, websiteType.id, email, sitePasswordHash, renderedHtml,
       charge.currency, charge.amount, charge.rate, expiresAt,
       rawFieldValues ? JSON.stringify(rawFieldValues) : null,
       aiOutputValues ? JSON.stringify(aiOutputValues) : null,
-      sessionId || null, renderId]
+      sessionId || null, renderId, couponId, couponCode, discountPercent]
   );
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/build/${websiteType.slug}/checkout/callback`;
