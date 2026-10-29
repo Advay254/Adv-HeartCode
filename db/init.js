@@ -1733,9 +1733,68 @@ CREATE TABLE IF NOT EXISTS build_renders (
 CREATE INDEX IF NOT EXISTS idx_build_renders_expires_at ON build_renders (expires_at);
 -- Which render a pending deployment was made from, so the render is deleted once that deployment succeeds.
 ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS render_id TEXT DEFAULT NULL;
+
+-- v1.2.21: free deployments and coupons.
+-- A free deployment is a normal pending deployment with is_free = true. It is
+-- only finalised after the visitor clicks the emailed link (see free_claims).
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS is_free BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS coupon_id INTEGER DEFAULT NULL;
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
+ALTER TABLE pending_deployments ADD COLUMN IF NOT EXISTS discount_percent INTEGER DEFAULT NULL;
+-- Free sites are kept out of revenue, sales counts and the Deployment Center
+-- exactly like test deployments (see lib/analyticsQueries.js, lib/deploymentQueries.js).
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS is_free BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
+ALTER TABLE deployed_sites ADD COLUMN IF NOT EXISTS discount_percent INTEGER DEFAULT NULL;
+
+-- One row per free-deployment request. email_key is the normalised address
+-- (lowercase, no +tag, gmail dots removed) so one person cannot claim twice by
+-- varying the spelling. A verified claim is kept for good: one free
+-- deployment per email, ever. Unverified ones are cleaned up after a couple of days.
+CREATE TABLE IF NOT EXISTS free_claims (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL,
+  email_key TEXT NOT NULL,
+  ip_hash TEXT NOT NULL DEFAULT '',
+  reference TEXT UNIQUE NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  website_type_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  verified_at TIMESTAMPTZ DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_free_claims_verified_email ON free_claims (email_key) WHERE status = 'verified';
+CREATE INDEX IF NOT EXISTS idx_free_claims_email_key ON free_claims (email_key);
+CREATE INDEX IF NOT EXISTS idx_free_claims_created_at ON free_claims (created_at);
+
+-- Promotional coupons. The 25 percent ceiling is enforced here, in the
+-- admin route and again at checkout, so no single mistake can exceed it.
+CREATE TABLE IF NOT EXISTS coupons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL,
+  percent INTEGER NOT NULL CHECK (percent BETWEEN 1 AND 25),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  expires_at TIMESTAMPTZ DEFAULT NULL,
+  max_uses INTEGER DEFAULT NULL CHECK (max_uses IS NULL OR max_uses >= 1),
+  uses_count INTEGER NOT NULL DEFAULT 0,
+  website_type_ids INTEGER[] DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coupons_code ON coupons (UPPER(code));
+
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id SERIAL PRIMARY KEY,
+  coupon_id INTEGER NOT NULL REFERENCES coupons(id) ON DELETE CASCADE,
+  email_key TEXT NOT NULL,
+  reference TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (coupon_id, email_key)
+);
 `;
 
-const CURRENT_VERSION = '1.2.19';
+const CURRENT_VERSION = '1.2.21';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
