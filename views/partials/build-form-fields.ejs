@@ -29,14 +29,22 @@
         <%# Fixed on every website type, regardless of template_fields:
             this is how the client receives their site later, so it's a
             permanent part of the form rather than a configurable field. %>
+        <% var show = ui.show || 'all'; %>
+        <% if (show === 'all' || show === 'required') { %>
+        <% if (ui.fieldWrap) { %><div class="<%= ui.fieldWrap %>"><% } %>
         <label class="<%= ui.label %>" for="client_email">
           <% if (ui.icons) { %><span class="hc-label-icon"><%- getIconSvg('mail') %></span><% } %>
           <%= ui.emailLabel %> <span class="<%= ui.required %>">*</span>
         </label>
         <input class="<%= ui.input %>" type="email" name="client_email" id="client_email" required placeholder="you@example.com">
+        <% if (ui.fieldWrap) { %></div><% } %>
+        <% } %>
 
         <% fields.forEach(function (f) { %>
+          <% if (show === 'required' && !f.isRequired) { return; } %>
+          <% if (show === 'optional' && f.isRequired) { return; } %>
           <% var fieldIcon = iconForFieldType(f.fieldType); %>
+          <% if (ui.fieldWrap) { %><div class="<%= ui.fieldWrap %>"><% } %>
           <label class="<%= ui.label %>">
             <% if (ui.icons && fieldIcon) { %><span class="hc-label-icon"><%- getIconSvg(fieldIcon) %></span><% } %>
             <%= f.fieldLabel %><% if (f.isRequired) { %> <span class="<%= ui.required %>">*</span><% } %>
@@ -82,9 +90,10 @@
                 HTML comment here would ship in every rendered page.) %>
             <input class="<%= ui.file %>" type="file" accept="image/jpeg,image/png,image/webp" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
             <img class="<%= ui.imagePreview %>" id="preview_<%= f.fieldKey %>" style="display:none;" alt="">
-            <p class="<%= ui.hint %>">JPEG, PNG, or WebP, up to 10MB — resized and compressed automatically.</p>
+            <p class="<%= ui.hint %>">JPEG, PNG, or WebP, up to 10MB, resized and compressed automatically.</p>
           <% } else { %>
             <input class="<%= ui.input %>" type="<%= f.fieldType %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>">
           <% } %>
+          <% if (ui.fieldWrap) { %></div><% } %>
         <% }); %>
 
