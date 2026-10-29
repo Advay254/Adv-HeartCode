@@ -37,3 +37,11 @@ Also built in: about 135 disposable domains blocked, one free site per person (l
 ## ClarityHeart folders
 
 HeartCode files each deployment automatically: **Free**, **Paid**, **Test**. Manual deploys stay Unassigned.
+
+## Measuring (v1.2.23)
+
+- **Free Deployments page, Reviews and referrals:** reviews from free sites, review rate (free and paid), average rating, and visits that came through the "Built with HeartCode" button (`/?ref=free-site`), counted once per person per day.
+- **Daily email budget:** on the Free Deployments and Email Providers pages. Type your plan's daily limit; the meter stays hidden until you do. Every email is counted, test emails included. The day is a UTC day.
+- **Coupons page:** orders, revenue and discount given per code.
+- **Test sites:** delete themselves from ClarityHeart after the days set on the Test Deploy page (default 1, 0 keeps them).
+- Demo sites are deployed by hand in ClarityHeart, so HeartCode does not touch that folder.
