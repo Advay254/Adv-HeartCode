@@ -19,6 +19,9 @@
         <a href="<%= siteUrl %>" class="hc-site-link break-all text-sm font-semibold text-hc-blue hover:underline" aria-disabled="true" tabindex="-1"><%= siteUrl %></a>
       </div>
       <p class="mt-4 text-sm text-hc-ink/60">We've also emailed you this link (and your site password, if you set one).</p>
+      <% if (typeof isFree !== 'undefined' && isFree) { %>
+      <p class="mt-2 text-sm text-hc-ink/60">This is a free site. It stays online for a limited time, and your email shows the exact end date. This link only works once, so keep the site link above.</p>
+      <% } %>
       <a href="<%= siteUrl %>" id="visitSiteBtn" class="hc-site-link hc-pill-btn mt-6" aria-disabled="true" tabindex="-1">Visit your site</a>
       <p id="siteLinkCountdown" class="mt-2 text-xs font-medium uppercase tracking-wide text-hc-ink/50">Finishing up… <span id="siteLinkCountdownSeconds">20</span>s</p>
       <p class="mt-6 text-xs text-hc-ink/50">
@@ -36,6 +39,14 @@
       <h1 class="font-display text-3xl uppercase text-hc-ink">This checkout session expired</h1>
       <p class="hc-msg hc-msg-warning">Checkout sessions are only valid for an hour. Please start over.</p>
       <% if (slug) { %><a href="/build/<%= slug %>" class="hc-pill-btn-outline mt-6">Start over</a><% } %>
+    <% } else if (outcome === 'free_expired') { %>
+      <h1 class="font-display text-3xl uppercase text-hc-ink">This link has expired</h1>
+      <p class="hc-msg hc-msg-warning">Free site links only work for a short time. Go back and request a new one.</p>
+      <a href="/" class="hc-pill-btn-outline mt-6">← Back home</a>
+    <% } else if (outcome === 'free_exhausted') { %>
+      <h1 class="font-display text-3xl uppercase text-hc-ink">Today's free sites are gone</h1>
+      <p class="hc-msg hc-msg-warning">Today's free deployments have been used up. Please try again early tomorrow.</p>
+      <a href="/" class="hc-pill-btn-outline mt-6">← Back home</a>
     <% } else if (outcome === 'not_found') { %>
       <h1 class="font-display text-3xl uppercase text-hc-ink">We couldn't find this checkout</h1>
       <p class="hc-msg hc-msg-error">This reference doesn't match anything on file.</p>
