@@ -55,10 +55,29 @@ router.get('/', asyncHandler(async (req, res) => {
   const types = await pool.query(
     'SELECT id, name, price_usd FROM website_types WHERE is_active = true AND NOT is_deleted_placeholder ORDER BY display_order, name'
   );
+  // v1.2.23: what each code actually brought in. The discount is worked back from
+  // the amount paid: paid = full * (1 - pct/100), so discount = paid * pct / (100 - pct).
+  const stats = await pool.query(
+    `SELECT UPPER(coupon_code) AS code, COUNT(*)::int AS orders,
+            COALESCE(SUM(charge_amount_usd), 0)::float AS revenue_usd,
+            COALESCE(SUM(charge_amount_usd * discount_percent / NULLIF(100.0 - discount_percent, 0)), 0)::float AS discount_usd
+       FROM deployed_sites
+      WHERE coupon_code IS NOT NULL AND is_test = false AND is_free = false
+      GROUP BY 1`
+  );
+  const byCode = {};
+  for (const r of stats.rows) byCode[r.code] = r;
   res.json({
     maxPercent: MAX_PERCENT,
     minPriceUsd: MIN_PRICE_USD,
-    coupons: coupons.rows.map(serialize),
+    coupons: coupons.rows.map(c => {
+      const s = byCode[String(c.code).toUpperCase()] || {};
+      return Object.assign(serialize(c), {
+        orders: s.orders || 0,
+        revenueUsd: Math.round((s.revenue_usd || 0) * 100) / 100,
+        discountUsd: Math.round((s.discount_usd || 0) * 100) / 100
+      });
+    }),
     types: types.rows.map(t => ({ id: t.id, name: t.name, priceUsd: Number(t.price_usd) || 0 }))
   });
 }));

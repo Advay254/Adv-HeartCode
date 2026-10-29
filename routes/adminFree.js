@@ -6,7 +6,7 @@ const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { logEvent } = require('../lib/activityEvents');
 const { DISPOSABLE_DOMAINS } = require('../lib/disposableDomains');
-const { getFreeSettings, saveFreeSettings, freeDeploymentsToday, MAX_EXPIRY_DAYS } = require('../lib/freeDeployments');
+const { getFreeSettings, saveFreeSettings, freeDeploymentsToday, getFreeInsights, MAX_EXPIRY_DAYS } = require('../lib/freeDeployments');
 
 // v1.2.21: settings and a read-only overview for free deployments.
 const router = express.Router();
@@ -46,6 +46,7 @@ async function overview() {
     builtInBlockedCount: DISPOSABLE_DOMAINS.length,
     today: { deployed: todayDeployed, emailsSent: sent.rows[0].n },
     totalVerified: total.rows[0].n,
+    insights: await getFreeInsights(),
     recent: recent.rows.map(r => ({
       email: r.email,
       status: r.status,

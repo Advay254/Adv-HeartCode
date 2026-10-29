@@ -8,6 +8,7 @@ const { requireCsrf } = require('../middleware/requireCsrf');
 const { generateSite, handleImageUpload } = require('../lib/buildGeneration');
 const { resolveDeploySeed, forceTestSuffix, TEST_SLUG_SUFFIX } = require('../lib/deploySlug');
 const { deployToClarityHeart } = require('../lib/clarityheart');
+const { testDeployOptions, getTestExpiryDays, setTestExpiryDays } = require('../lib/testSettings');
 const { injectPasswordGate } = require('../lib/finalizeDeployment');
 const { sendDeploymentConfirmationEmail } = require('../lib/deploymentEmail');
 const { addTargetBlankToExternalLinks } = require('../lib/externalLinks');
@@ -107,6 +108,18 @@ async function pickTestSlug(pool, seed) {
   return candidate;
 }
 
+// v1.2.23: how long test sites live in ClarityHeart before deleting themselves.
+router.get('/_settings', asyncHandler(async (req, res) => {
+  res.json({ expiryDays: await getTestExpiryDays() });
+}));
+
+router.put('/_settings', requireCsrf, asyncHandler(async (req, res) => {
+  const parsed = z.object({ expiryDays: z.coerce.number().int().min(0).max(30) }).strict().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Use 0 (keep forever) or 1 to 30 days.' });
+  await setTestExpiryDays(parsed.data.expiryDays);
+  res.json({ expiryDays: parsed.data.expiryDays });
+}));
+
 router.post('/:slug', requireCsrf, handleImageUpload, asyncHandler(async (req, res) => {
   const slugParsed = slugParamSchema.safeParse(req.params);
   if (!slugParsed.success) {
@@ -162,7 +175,7 @@ router.post('/:slug', requireCsrf, handleImageUpload, asyncHandler(async (req, r
   // ---- deploy: the existing function, no new deploy logic ----
   let deployResult;
   try {
-    deployResult = await deployToClarityHeart(requestedSlug, htmlToDeploy, { folder: 'Test' });
+    deployResult = await deployToClarityHeart(requestedSlug, htmlToDeploy, await testDeployOptions());
   } catch (err) {
     console.error(`[TEST-DEPLOY] Deploy failed for "${websiteType.slug}":`, err.message);
     return res.status(502).json({ error: `Deployment failed: ${err.message}` });

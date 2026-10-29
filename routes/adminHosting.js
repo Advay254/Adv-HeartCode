@@ -7,6 +7,7 @@ const { requireAdminSession } = require('../middleware/requireAdminSession');
 const { requireCsrf } = require('../middleware/requireCsrf');
 const { logEvent } = require('../lib/activityEvents');
 const { deployToClarityHeart } = require('../lib/clarityheart');
+const { testDeployOptions } = require('../lib/testSettings');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -134,7 +135,7 @@ router.post('/test', requireCsrf, asyncHandler(async (req, res) => {
     + 'confirming the ClarityHeart connection works.</p></body></html>';
 
   try {
-    const result = await deployToClarityHeart(testSlug, testHtml, { folder: 'Test' });
+    const result = await deployToClarityHeart(testSlug, testHtml, await testDeployOptions());
     res.json({ success: true, url: result.url, slug: result.slug });
   } catch (err) {
     console.error('[HOSTING] Test deploy failed:', err.message);

@@ -24,7 +24,7 @@ const { DEFAULT_CONTENT } = require('../lib/landingSectionTypes');
 const { escapeHtml } = require('../lib/template');
 const { sendResendDetailsEmail, sendFreeVerificationEmail } = require('../lib/email');
 const { getRealClientIp, getRateLimitKey } = require('../lib/clientIp');
-const { createFreeClaim, verifyFreeClaim, getFreeSettings } = require('../lib/freeDeployments');
+const { createFreeClaim, verifyFreeClaim, getFreeSettings, recordReferralHit } = require('../lib/freeDeployments');
 const { findApplicableCoupon } = require('../lib/coupons');
 const { resolvePublicBaseUrl } = require('../lib/publicUrl');
 const { getActiveLegalPage } = require('../lib/legalPages');
@@ -735,6 +735,8 @@ async function renderLandingPage(req, res, { pageSlug, pageTitle, pageDescriptio
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  // v1.2.23: visits that came from the "Built with HeartCode" badge on a free site.
+  if (req.query.ref === 'free-site') recordReferralHit(getRealClientIp(req));
   await renderLandingPage(req, res, { pageSlug: 'home', pageTitle: null, pageDescription: null, isHomepage: true });
 }));
 
