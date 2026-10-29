@@ -90,6 +90,7 @@
                 HTML comment here would ship in every rendered page.) %>
             <input class="<%= ui.file %>" type="file" accept="image/jpeg,image/png,image/webp" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
             <img class="<%= ui.imagePreview %>" id="preview_<%= f.fieldKey %>" style="display:none;" alt="">
+            <% if (f.placeholderText) { %><p class="<%= ui.hint %>"><%= f.placeholderText %></p><% } %>
             <p class="<%= ui.hint %>">JPEG, PNG, or WebP, up to 10MB, resized and compressed automatically.</p>
           <% } else { %>
             <input class="<%= ui.input %>" type="<%= f.fieldType %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>">

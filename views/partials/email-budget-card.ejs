@@ -1,0 +1,11 @@
+<section class="admin-card" id="emailBudgetCard" style="margin-top:1.5rem;">
+  <div class="admin-section-heading"><div><p class="admin-eyebrow">Email</p><h2>Daily email budget</h2></div></div>
+  <div id="emailBudgetBody"></div>
+  <form id="emailBudgetForm" style="margin-top:14px;">
+    <label class="admin-label" for="emailQuotaInput" style="margin-top:0;">Emails you can send per day</label>
+    <input class="admin-input" type="number" id="emailQuotaInput" min="1" step="1" placeholder="For example 300" style="max-width:240px;">
+    <p style="margin:6px 0 12px;color:#667085;font-size:12.5px;line-height:1.55;">Type the daily limit of your email plan. Every email HeartCode sends is counted, including test emails. The day resets at midnight UTC. Leave it empty to hide the meter.</p>
+    <button type="submit" class="admin-btn">Save limit</button>
+  </form>
+  <p id="emailBudgetMsg" class="admin-msg" style="display:none;"></p>
+</section>
