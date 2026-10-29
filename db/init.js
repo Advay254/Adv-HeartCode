@@ -1792,9 +1792,28 @@ CREATE TABLE IF NOT EXISTS coupon_redemptions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (coupon_id, email_key)
 );
+
+-- v1.2.23: every email HeartCode sends is counted, so the admin can see usage
+-- against the daily limit of whatever email plan they have.
+CREATE TABLE IF NOT EXISTS email_log (
+  id BIGSERIAL PRIMARY KEY,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ok BOOLEAN NOT NULL DEFAULT true
+);
+CREATE INDEX IF NOT EXISTS idx_email_log_sent_at ON email_log (sent_at);
+
+-- v1.2.23: visits that arrived through the "Built with HeartCode" badge. One
+-- row per visitor per day (a hashed address, never the address itself).
+CREATE TABLE IF NOT EXISTS free_referral_hits (
+  id BIGSERIAL PRIMARY KEY,
+  day DATE NOT NULL,
+  ip_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (day, ip_hash)
+);
 `;
 
-const CURRENT_VERSION = '1.2.21';
+const CURRENT_VERSION = '1.2.23';
 
 /**
  * v1.2.3: trigram indexes for the Deployments page's partial-match search
