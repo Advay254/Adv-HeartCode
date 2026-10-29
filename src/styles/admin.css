@@ -1537,3 +1537,13 @@ th.is-sorted .admin-sort-ico { opacity: 1; }
   .tdp-bar .admin-btn, .tdp-bar .admin-btn-outline { flex:1 1 auto; }
 }
 .admin-page-intro p.tdp-lead { margin:8px 0 0; max-width:720px; color:#6b7280; font-size:14px; line-height:1.6; }
+.tdp-cleanup { margin-top:20px; padding-top:18px; border-top:1px solid #eef0f3; }
+.tdp-cleanup h3 { margin:0 0 4px; color:#111827; font-size:14px; font-weight:700; }
+.tdp-cleanup-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:10px; }
+.eb-meter { height:12px; border-radius:999px; background:#eef0f3; overflow:hidden; }
+.eb-fill { height:100%; border-radius:999px; background:#12b76a; transition:width .3s; }
+.eb-fill.is-warn { background:#f79009; }
+.eb-fill.is-full { background:#f04438; }
+.eb-line { display:flex; justify-content:space-between; gap:12px; margin-top:8px; color:#475467; font-size:13px; }
+.eb-days { margin:12px 0 0; padding:0; list-style:none; color:#475467; font-size:12.5px; }
+.eb-days li { display:flex; justify-content:space-between; padding:5px 0; border-top:1px solid #eef0f3; }
