@@ -24,7 +24,7 @@
       <p id="priceDisplay" class="mt-1 font-display text-4xl text-hc-ink"><%= isFree ? 'Free' : websiteType.chargeDisplay %></p>
       <% if (isFree) { %>
       <p class="mt-2 text-sm text-hc-ink/70">
-        We will email you a one-time link. Open it within <%= freeLinkMinutes %> minutes and your site goes live. A free site stays online for <%= freeExpiryDays %> days and carries a small "Built with HeartCode" badge. One free site per email address.
+        We will email you a one-time link. Open it within <%= freeLinkMinutes %> minutes and your site goes live.
       </p>
       <% } %>
       <% if (couponAllowed) { %>
@@ -42,7 +42,7 @@
       </label>
       <input class="hc-input" type="password" id="sitePassword" placeholder="Leave blank for no password">
       <p class="mt-2 text-xs text-hc-ink/50">
-        This is a simple visitor gate, not strong security. Anyone who views the page source can still see the content.
+        Pick something simple and memorable, like "iloveyou". They type it to open their surprise.
       </p>
 
       <p id="checkoutError" class="hc-msg hc-msg-error" style="display:none;"></p>

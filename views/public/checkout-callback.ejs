@@ -20,7 +20,7 @@
       </div>
       <p class="mt-4 text-sm text-hc-ink/60">We've also emailed you this link (and your site password, if you set one).</p>
       <% if (typeof isFree !== 'undefined' && isFree) { %>
-      <p class="mt-2 text-sm text-hc-ink/60">This is a free site. It stays online for a limited time, and your email shows the exact end date. This link only works once, so keep the site link above.</p>
+      <p class="mt-2 text-sm text-hc-ink/60">This confirmation link only works once, so keep the site link above.</p>
       <% } %>
       <a href="<%= siteUrl %>" id="visitSiteBtn" class="hc-site-link hc-pill-btn mt-6" aria-disabled="true" tabindex="-1">Visit your site</a>
       <p id="siteLinkCountdown" class="mt-2 text-xs font-medium uppercase tracking-wide text-hc-ink/50">Finishing up… <span id="siteLinkCountdownSeconds">20</span>s</p>
