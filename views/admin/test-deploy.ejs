@@ -88,10 +88,20 @@
           <div class="tdp-empty"><strong>Nothing deployed yet</strong>Fill in the form and run a test. The live link shows up here.</div>
         </div>
         <div id="testDeployError" class="tdp-err" style="display:none;"></div>
+        <div class="tdp-cleanup">
+          <h3>Automatic cleanup</h3>
+          <p class="tdp-hint">Test sites delete themselves from ClarityHeart after this many days, so the Test folder stays tidy. 0 keeps them forever.</p>
+          <div class="tdp-cleanup-row">
+            <input class="admin-input" type="number" id="testExpiryDays" min="0" max="30" step="1" style="max-width:110px;">
+            <button type="button" class="admin-btn-outline" id="testExpirySave">Save</button>
+            <span class="tdp-hint" id="testExpiryMsg" style="margin:0;"></span>
+          </div>
+        </div>
       </aside>
     </div>
   </main>
 </div>
+<script src="/dashboard-assets/admin-free.js" defer></script>
 <script type="application/json" id="fieldKeysData"><%- JSON.stringify(fields.map(function (f) { return { key: f.fieldKey, type: f.fieldType, required: f.isRequired, options: f.dropdownOptions || [] }; })) %></script>
 </body>
 </html>

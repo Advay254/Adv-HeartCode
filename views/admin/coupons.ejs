@@ -12,9 +12,11 @@
       <div>
         <p class="admin-eyebrow">Marketing</p>
         <h1>Coupons</h1>
-        <p>Promo codes for paid sites. A code can take off at most 25%, and only works on a website type priced above $2. Each email address can use a given code once. A code is counted when the payment completes, not when someone types it.</p>
+        <p>Promo codes for paid sites. A code can take off at most 25%, and only works on a website type priced above $2. Each email address can use a given code once. A code is counted when the payment completes, not when someone types it. Revenue and discount figures come from completed orders only.</p>
       </div>
     </section>
+
+    <section class="admin-stat-grid" id="couponStats" style="margin-bottom:1.5rem;"></section>
 
     <section class="admin-card max-w-xl">
       <div class="admin-section-heading"><div><p class="admin-eyebrow">New</p><h2>Create a coupon</h2></div></div>
@@ -44,7 +46,7 @@
       <div class="admin-section-heading"><div><p class="admin-eyebrow">All</p><h2>Your coupons</h2></div></div>
       <div class="admin-table-wrap">
         <table class="admin-table is-responsive-stack" id="couponTable">
-          <thead><tr><th>Code</th><th>Off</th><th>Used</th><th>Expires</th><th>Types</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Code</th><th>Off</th><th>Orders</th><th>Revenue</th><th>Discount given</th><th>Uses</th><th>Expires</th><th>Types</th><th>Status</th><th></th></tr></thead>
           <tbody id="couponRows"></tbody>
         </table>
       </div>

@@ -18,6 +18,12 @@
 
     <section class="admin-stat-grid" id="freeStats"></section>
 
+    <section class="admin-card" id="insightsCard" style="margin-bottom:1.5rem;">
+      <div class="admin-section-heading"><div><p class="admin-eyebrow">Is it working?</p><h2>Reviews and referrals</h2></div></div>
+      <div class="admin-stat-grid" id="insightsGrid"></div>
+      <p style="margin:12px 0 0;color:#667085;font-size:12.5px;line-height:1.55;">Reviews are counted from free sites only. Referral visits are people who opened HeartCode from the "Built with HeartCode" button, counted once per person per day.</p>
+    </section>
+
     <section class="admin-card max-w-xl">
       <div class="admin-section-heading"><div><p class="admin-eyebrow">Limits</p><h2>Settings</h2></div></div>
       <form id="freeForm">
@@ -44,6 +50,8 @@
       </form>
       <p id="freeMsg" class="admin-msg" style="display:none;"></p>
     </section>
+
+    <%- include('../partials/email-budget-card') %>
 
     <section class="admin-card" style="margin-top:1.5rem;">
       <div class="admin-section-heading"><div><p class="admin-eyebrow">Latest</p><h2>Recent free requests</h2></div></div>
