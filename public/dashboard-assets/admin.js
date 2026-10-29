@@ -5233,6 +5233,9 @@
     var errorEl = document.getElementById('testDeployError');
     var submitBtn = document.getElementById('testDeploySubmit');
     var resultEl = document.getElementById('testDeployResult');
+    var savedEl = document.getElementById('tdpSaved');
+    var STORE_KEY = 'tdp:' + typeSlug;
+    var EMPTY_HTML = '<div class="tdp-empty"><strong>Nothing deployed yet</strong>Fill in the form and run a test. The live link shows up here.</div>';
 
     function getFieldValue(key, type) {
       if (type === 'image') return '';
@@ -5248,10 +5251,79 @@
       return el ? el.value.trim() : '';
     }
 
-    // v1.2.6-style local thumbnail — identical approach to public/site.js's
-    // build page (see that file's own comment on why not
-    // URL.createObjectURL: the admin CSP is img-src 'self' data: https:
-    // too, see server.js's helmet config).
+    function setFieldValue(key, type, value) {
+      if (type === 'image') return;
+      if (type === 'radio') {
+        Array.prototype.forEach.call(document.querySelectorAll('input[name="field_' + key + '"]'), function (el) { el.checked = el.value === value; });
+        return;
+      }
+      if (type === 'checkboxes') {
+        var list = Array.isArray(value) ? value : [];
+        Array.prototype.forEach.call(document.querySelectorAll('input[name="field_' + key + '"]'), function (el) { el.checked = list.indexOf(el.value) !== -1; });
+        return;
+      }
+      var el = document.getElementById('field_' + key);
+      if (el) el.value = value == null ? '' : value;
+    }
+
+    // Remembers what was typed (never the password, never images) in this
+    // browser only, so a second test of the same type does not start empty.
+    function saveDraft() {
+      try {
+        var data = { client_email: document.getElementById('client_email').value };
+        fieldMeta.forEach(function (f) { if (f.type !== 'image') data[f.key] = getFieldValue(f.key, f.type); });
+        localStorage.setItem(STORE_KEY, JSON.stringify(data));
+        savedEl.textContent = 'Draft saved on this device';
+      } catch (e) { /* storage unavailable, nothing to do */ }
+    }
+
+    function loadDraft() {
+      try {
+        var raw = localStorage.getItem(STORE_KEY);
+        if (!raw) return;
+        var data = JSON.parse(raw);
+        document.getElementById('client_email').value = data.client_email || '';
+        fieldMeta.forEach(function (f) { if (f.key in data) setFieldValue(f.key, f.type, data[f.key]); });
+        savedEl.textContent = 'Draft restored';
+      } catch (e) { /* ignore a broken draft */ }
+    }
+
+    function sampleFor(f) {
+      if (f.type === 'email') return 'test@example.com';
+      if (f.type === 'textarea') return 'This is sample text for a test deployment.';
+      if (f.type === 'date') return new Date().toISOString().slice(0, 10);
+      if (f.type === 'number') return '5';
+      if (f.type === 'password') return 'TestPass123';
+      return 'Sample';
+    }
+
+    document.getElementById('tdpSample').addEventListener('click', function () {
+      var email = document.getElementById('client_email');
+      if (!email.value.trim()) email.value = 'test@example.com';
+      fieldMeta.forEach(function (f) {
+        if (!f.required || f.type === 'image') return;
+        if (getFieldValue(f.key, f.type).length) return;
+        if (f.type === 'dropdown') { if (f.options.length) setFieldValue(f.key, f.type, f.options[0]); return; }
+        if (f.type === 'radio') { if (f.options.length) setFieldValue(f.key, f.type, f.options[0]); return; }
+        if (f.type === 'checkboxes') { if (f.options.length) setFieldValue(f.key, f.type, [f.options[0]]); return; }
+        setFieldValue(f.key, f.type, sampleFor(f));
+      });
+      saveDraft();
+    });
+
+    document.getElementById('tdpClear').addEventListener('click', function () {
+      form.reset();
+      Array.prototype.forEach.call(form.querySelectorAll('img[id^="preview_"]'), function (img) { img.style.display = 'none'; img.removeAttribute('src'); });
+      try { localStorage.removeItem(STORE_KEY); } catch (e) { /* ignore */ }
+      savedEl.textContent = '';
+      errorEl.style.display = 'none';
+      resultEl.innerHTML = EMPTY_HTML;
+    });
+
+    form.addEventListener('input', saveDraft);
+    form.addEventListener('change', saveDraft);
+
+    // A thumbnail made locally (same approach as the public build page).
     fieldMeta.forEach(function (f) {
       if (f.type !== 'image') return;
       var input = document.getElementById('field_' + f.key);
@@ -5283,6 +5355,16 @@
       errorEl.style.display = 'block';
     }
 
+    // The browser only reports the first invalid field, and it may be inside a
+    // closed section, so open every section that holds an invalid field.
+    form.addEventListener('invalid', function (e) {
+      var d = e.target.closest && e.target.closest('details');
+      if (d) d.open = true;
+    }, true);
+
+    var timer = null;
+    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       errorEl.style.display = 'none';
@@ -5299,15 +5381,19 @@
         }
         values[f.key] = getFieldValue(f.key, f.type);
       });
-      // The optional site password rides in the same payload under a
-      // reserved key the server strips before validating form fields
-      // against this type's actual field list — see
-      // routes/adminTestDeploy.js's PASSWORD_KEY.
+      // Reserved key the server strips before validating the form fields
+      // (see routes/adminTestDeploy.js PASSWORD_KEY).
       values.__sitePassword = document.getElementById('sitePassword').value;
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Deploying…';
-      resultEl.innerHTML = '<p class="admin-help">Running the real generation + deploy pipeline — this can take a little while, especially if this type uses AI…</p>';
+      submitBtn.textContent = 'Deploying...';
+      var started = Date.now();
+      resultEl.innerHTML = '<div class="tdp-working"><span class="tdp-spin"></span><span>Building and deploying your test site. <span id="tdpElapsed">0s</span><br>This can take a minute when the type uses AI.</span></div>';
+      stopTimer();
+      timer = setInterval(function () {
+        var el = document.getElementById('tdpElapsed');
+        if (el) el.textContent = Math.round((Date.now() - started) / 1000) + 's';
+      }, 1000);
 
       var imageKeys = Object.keys(imageFiles);
       var fetchOptions;
@@ -5320,37 +5406,54 @@
         fetchOptions = { method: 'POST', body: JSON.stringify(values) };
       }
 
+      function done() {
+        stopTimer();
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Run test deployment';
+      }
+
       window.adminFetch('/api/admin/test-deploy/' + encodeURIComponent(typeSlug), fetchOptions)
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
         .then(function (result) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Run test deployment';
+          done();
           if (!result.ok) {
-            showError(result.data.error || 'Something went wrong.');
-            resultEl.innerHTML = '<p class="admin-help">Run a test deployment to see the result here.</p>';
+            resultEl.innerHTML = EMPTY_HTML;
+            var msg = result.data.error || 'Something went wrong.';
             if (result.data.missingFields || result.data.invalidFields) {
-              showError('Missing/invalid: ' + [].concat(result.data.missingFields || [], result.data.invalidFields || []).map(escapeHtml).join(', '));
+              msg = 'Missing or invalid: ' + [].concat(result.data.missingFields || [], result.data.invalidFields || []).join(', ');
             }
+            showError(msg);
             return;
           }
           var site = result.data.site;
           var safeUrl = escapeHtml(site.url);
-          var rows = [
-            '<p class="admin-msg admin-msg-success">Deployed &mdash; <a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + safeUrl + '</a></p>',
-            '<p class="admin-help">Slug: <code>' + escapeHtml(site.slug) + '</code>' + (site.hasPassword ? ' &middot; password-gated' : '') + (site.aiUsed ? ' &middot; AI content used' : '') + '</p>',
-            '<p class="admin-help">Email: ' + (result.data.email.status === 'sent' ? 'sent (' + escapeHtml(result.data.email.template) + ' template)' : 'FAILED — ' + escapeHtml(result.data.email.error || '')) + '</p>'
-          ];
-          if (result.data.warning) {
-            rows.push('<p class="admin-msg admin-msg-error">' + escapeHtml(result.data.warning) + '</p>');
-          }
-          resultEl.innerHTML = rows.join('');
+          var emailOk = result.data.email.status === 'sent';
+          var html =
+            '<div class="tdp-ok"><strong>Deployed</strong><a class="tdp-url" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + safeUrl + '</a>' +
+            '<div class="tdp-actions"><a class="admin-btn admin-btn-sm" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">Open site</a>' +
+            '<button type="button" class="admin-btn-outline admin-btn-sm" id="tdpCopy">Copy link</button></div></div>' +
+            '<ul class="tdp-facts">' +
+            '<li><span>Slug</span><span>' + escapeHtml(site.slug) + '</span></li>' +
+            '<li><span>Password gate</span><span>' + (site.hasPassword ? 'On' : 'Off') + '</span></li>' +
+            '<li><span>AI content</span><span>' + (site.aiUsed ? 'Used' : 'Not used') + '</span></li>' +
+            '<li><span>Confirmation email</span><span>' + (emailOk ? 'Sent (' + escapeHtml(result.data.email.template) + ' template)' : 'Failed') + '</span></li>' +
+            '</ul>';
+          if (!emailOk) html += '<div class="tdp-warn">' + escapeHtml(result.data.email.error || 'The confirmation email could not be sent.') + '</div>';
+          if (result.data.warning) html += '<div class="tdp-warn">' + escapeHtml(result.data.warning) + '</div>';
+          resultEl.innerHTML = html;
+          var copy = document.getElementById('tdpCopy');
+          if (copy) copy.addEventListener('click', function () {
+            if (navigator.clipboard) navigator.clipboard.writeText(site.url).then(function () { copy.textContent = 'Copied'; });
+          });
         })
         .catch(function () {
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Run test deployment';
+          done();
+          resultEl.innerHTML = EMPTY_HTML;
           showError('Network error. Please try again.');
         });
     });
+
+    loadDraft();
   }
 
   // ---- reviews moderation page (v1.2.11) ----
