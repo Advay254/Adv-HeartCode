@@ -12,7 +12,7 @@ Set a website type's price to `0` and it becomes free. Nothing is sent to Paysta
 4. The site lasts the days you set (default 7, never above 30), then ClarityHeart deletes it.
 5. A small "Built with HeartCode" badge is added to the site.
 
-Free sites are left out of revenue, sales counts, admin sale alerts, review reminders and the Recovery list.
+Free sites are left out of revenue, sales counts, admin sale alerts and the Recovery list. They still get the one-time review link and the review reminder, because reviews are the point of the free offer.
 
 ### Abuse controls (admin, Sales, Free Deployments)
 
