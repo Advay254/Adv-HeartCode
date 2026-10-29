@@ -88,10 +88,24 @@
                 client-side hint only; routes/apiBuild.js enforces the real
                 mimetype allow-list independently. (EJS comment on purpose: an
                 HTML comment here would ship in every rendered page.) %>
+            <% if (ui.fileDrop) { %>
+            <label class="hc-file-drop" for="field_<%= f.fieldKey %>">
+              <input class="hc-file-native" type="file" accept="image/jpeg,image/png,image/webp" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
+              <span class="hc-file-icon"><%- getIconSvg('camera') %></span>
+              <span class="hc-file-text">
+                <span class="hc-file-title" data-default="Choose a photo">Choose a photo</span>
+                <span class="hc-file-sub">JPEG, PNG or WebP, up to 10MB</span>
+              </span>
+              <span class="hc-file-btn">Browse</span>
+            </label>
+            <img class="<%= ui.imagePreview %>" id="preview_<%= f.fieldKey %>" style="display:none;" alt="">
+            <% if (f.placeholderText) { %><p class="<%= ui.hint %>"><%= f.placeholderText %></p><% } %>
+            <% } else { %>
             <input class="<%= ui.file %>" type="file" accept="image/jpeg,image/png,image/webp" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %>>
             <img class="<%= ui.imagePreview %>" id="preview_<%= f.fieldKey %>" style="display:none;" alt="">
             <% if (f.placeholderText) { %><p class="<%= ui.hint %>"><%= f.placeholderText %></p><% } %>
             <p class="<%= ui.hint %>">JPEG, PNG, or WebP, up to 10MB, resized and compressed automatically.</p>
+            <% } %>
           <% } else { %>
             <input class="<%= ui.input %>" type="<%= f.fieldType %>" name="<%= f.fieldKey %>" id="field_<%= f.fieldKey %>" <%= f.isRequired ? 'required' : '' %> placeholder="<%= f.placeholderText %>">
           <% } %>
