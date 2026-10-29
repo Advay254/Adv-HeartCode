@@ -131,9 +131,16 @@
         preview.style.display = 'none';
         preview.removeAttribute('src');
       }
+      // v1.2.24: the photo picker card shows the chosen file name.
+      var drop = input.closest ? input.closest('.hc-file-drop') : null;
+      var dropTitle = drop ? drop.querySelector('.hc-file-title') : null;
       input.addEventListener('change', function () {
         var token = ++selectionToken;
         var file = input.files && input.files[0];
+        if (drop) {
+          drop.classList.toggle('has-file', Boolean(file));
+          if (dropTitle) dropTitle.textContent = file ? file.name : dropTitle.getAttribute('data-default');
+        }
         if (!file) { hidePreview(); return; }
         if (typeof createImageBitmap !== 'function') { hidePreview(); return; }
         createImageBitmap(file, { resizeWidth: 256, resizeQuality: 'medium' })
