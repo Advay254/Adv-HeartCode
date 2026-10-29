@@ -492,9 +492,58 @@
       errorEl.style.display = 'block';
     }
 
+    var isFree = document.body.getAttribute('data-free') === '1';
+    var BUTTON_TEXT = isFree ? 'Send my free link' : 'Pay Now';
+
     function resetButton() {
       payBtn.disabled = false;
-      payBtn.textContent = 'Pay Now';
+      payBtn.textContent = BUTTON_TEXT;
+    }
+
+    // v1.2.21: promo code. The box only exists for paid types above $2. The server
+    // checks the code again at checkout, so this is only a preview.
+    var couponInput = document.getElementById('couponInput');
+    var couponBtn = document.getElementById('couponBtn');
+    var couponMsg = document.getElementById('couponMsg');
+    var appliedCoupon = '';
+
+    function showCouponMsg(text, ok) {
+      couponMsg.textContent = text;
+      couponMsg.style.display = 'block';
+      couponMsg.style.color = ok ? '#067647' : '#b42318';
+    }
+
+    if (couponBtn && couponInput) {
+      couponInput.addEventListener('input', function () {
+        if (appliedCoupon && couponInput.value.trim().toUpperCase() !== appliedCoupon) {
+          appliedCoupon = '';
+          couponMsg.style.display = 'none';
+        }
+      });
+      couponBtn.addEventListener('click', function () {
+        var code = couponInput.value.trim();
+        if (!code) { showCouponMsg('Enter a promo code.', false); return; }
+        couponBtn.disabled = true;
+        fetch('/build/' + encodeURIComponent(slug) + '/coupon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, clientEmail: draft.client_email })
+        })
+          .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+          .then(function (r) {
+            if (r.ok && r.d.valid) {
+              appliedCoupon = code.toUpperCase();
+              showCouponMsg(r.d.percent + '% off applied. You will pay ' + r.d.afterDisplay + ' instead of ' + r.d.beforeDisplay + '.', true);
+              var price = document.getElementById('priceDisplay');
+              if (price) price.textContent = r.d.afterDisplay;
+            } else {
+              appliedCoupon = '';
+              showCouponMsg((r.d && r.d.error) || 'That code is not valid for this order.', false);
+            }
+          })
+          .catch(function () { showCouponMsg('Network error. Please try again.', false); })
+          .then(function () { couponBtn.disabled = false; });
+      });
     }
 
     var REBUILD_TEXT = 'Your page preview has expired or was made before an update. Please go back and build your page again, it only takes a moment.';
@@ -521,7 +570,7 @@
       }
       errorEl.style.display = 'none';
       payBtn.disabled = true;
-      payBtn.textContent = 'Processing…';
+      payBtn.textContent = isFree ? 'Sending…' : 'Processing…';
 
       var sitePasswordInput = document.getElementById('sitePassword');
       // v1.2.19: only the render id travels to the server, with the email, the
@@ -539,6 +588,7 @@
       if (typeof window.hcGetSessionId === 'function') {
         payload.sessionId = window.hcGetSessionId();
       }
+      if (appliedCoupon) payload.couponCode = appliedCoupon;
 
       fetch('/build/' + encodeURIComponent(slug) + '/checkout', {
         method: 'POST',
@@ -556,6 +606,14 @@
             }
             showError(result.data.error || 'Could not start checkout. Please try again.');
             resetButton();
+            return;
+          }
+          // v1.2.21: a free deployment has no payment page. The link is in their inbox.
+          if (result.data.freeLinkSent) {
+            var sent = document.getElementById('freeSent');
+            sent.textContent = result.data.message;
+            sent.style.display = 'block';
+            payBtn.textContent = 'Link sent. Check your email';
             return;
           }
           // Redirect to Paystack's hosted checkout page.
